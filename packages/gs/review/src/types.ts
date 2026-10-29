@@ -7,8 +7,8 @@ import type {
   RepositoryTarget,
 } from "@slop-lab/gs-repository-service";
 import type {
-  AuthoritativeNativeReviewEnvelope,
-  AuthoritativeNativeReviewIdentity,
+  ReviewEnvelope,
+  ReviewIdentity,
   ReviewAttachment,
   ReviewRequest,
 } from "@slop-lab/gs-review-contracts";
@@ -25,7 +25,7 @@ export type ReviewPreparationInput = {
   readonly request: ReviewRequest;
   readonly target: RepositoryTarget;
   readonly evidence: AuthoritativeGitReviewEvidence;
-  readonly identity: Omit<AuthoritativeNativeReviewIdentity, "inputs">;
+  readonly identity: Omit<ReviewIdentity, "inputs">;
 };
 
 export interface ReviewPreparation {
@@ -37,12 +37,12 @@ export interface ReviewPreparation {
   }>;
   assertCurrent?(input: {
     readonly authority: RepositoryAuthority;
-    readonly review: AuthoritativeNativeReviewIdentity;
+    readonly review: ReviewIdentity;
     readonly attachment?: ReviewAttachment;
   }): Promise<void>;
   accepted?(input: {
     readonly authority: RepositoryAuthority;
-    readonly envelope: AuthoritativeNativeReviewEnvelope;
+    readonly envelope: ReviewEnvelope;
     readonly ownerRequestId: string;
   }): Promise<void>;
 }
@@ -51,23 +51,23 @@ export type ReviewFeatureHooks = {
   readonly beforeFinalVerification?: () => void | Promise<void>;
   readonly beforePublication?: (input: {
     readonly repository: string;
-    readonly envelope: AuthoritativeNativeReviewEnvelope;
+    readonly envelope: ReviewEnvelope;
   }) => void | Promise<void>;
   readonly publish?: (
-    input: { readonly repository: string; readonly envelope: AuthoritativeNativeReviewEnvelope },
-    publish: () => Promise<AuthoritativeNativeReviewEnvelope>,
-  ) => Promise<AuthoritativeNativeReviewEnvelope>;
+    input: { readonly repository: string; readonly envelope: ReviewEnvelope },
+    publish: () => Promise<ReviewEnvelope>,
+  ) => Promise<ReviewEnvelope>;
   readonly promotionReady?: (input: {
     readonly target: RepositoryTarget;
-    readonly envelope: AuthoritativeNativeReviewEnvelope;
+    readonly envelope: ReviewEnvelope;
   }) => Promise<boolean>;
   readonly acceptanceCompleted?: (input: {
     readonly target: RepositoryTarget;
-    readonly envelope: AuthoritativeNativeReviewEnvelope;
+    readonly envelope: ReviewEnvelope;
   }) => Promise<void>;
   readonly acceptanceFailed?: (input: {
     readonly target: RepositoryTarget;
-    readonly envelope: AuthoritativeNativeReviewEnvelope;
+    readonly envelope: ReviewEnvelope;
     readonly cause: unknown;
   }) => Promise<void>;
 };

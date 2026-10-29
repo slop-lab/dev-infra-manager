@@ -1,8 +1,8 @@
 import type { GitExecutableIdentity } from "@slop-lab/gs-repository";
+import { createGitRepositoryReadService } from "@slop-lab/gs-repository-service";
 import type { RepositoryAccess, RepositoryTarget } from "@slop-lab/gs-repository-service";
 import {
   assertAuthoritativeReviewRefs,
-  createGitRepositoryReadService,
   inspectAuthoritativeReviewGit,
   readAuthoritativeCandidateFile,
   readAuthoritativeReviewRefs,

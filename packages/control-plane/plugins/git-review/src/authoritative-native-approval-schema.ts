@@ -6,4 +6,4 @@ export {
   parseAuthoritativeNativeApproval,
   type AuthoritativeNativeApproval,
   type AuthoritativeNativeApprovalIdentity,
-} from "@slop-lab/gs-review-contracts";
+} from "@slop-lab/gs-review-contracts/dim-legacy-codec";

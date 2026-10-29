@@ -4,7 +4,8 @@ import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { codeReviewPolicy } from "../../../../packages/control-plane/plugins/git-review/src/policy.js";
-import { reviewChangeMatchers, reviewChangeMatcherExtension, type ReviewChangeMatcher, type CodeReviewService } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
+import { reviewChangeMatchers, reviewChangeMatcherExtension, reviewPreparationExtension, type ReviewChangeMatcher, type CodeReviewService } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
+import { refUpdatePolicies } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { repositoryPolicyRevision as nativeRepositoryPolicyRevision, type RepositoryPolicy as NativeImportedRootPolicy } from "@slop-lab/gs-repository-contracts";
 import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-git-merge-policy";
 import { basic, fixture, generationId, git, record, reviewer, text, token } from "../git-repositories/optionalFeaturesFixture.js";
@@ -14,6 +15,35 @@ const matcher: ReviewChangeMatcher = { name: "boundary", revision: "1".repeat(64
   return false;
 } };
 const reviewPolicy = { requiredReviewerIds: ["owner"], pathReviewerRules: [], changeReviewerRules: [{ matcher: matcher.name, options: "reviewed", reviewerIds: ["security"] }] };
+
+it("fences DIM repository proofs with live matcher and preparation revisions", async () => {
+  let matcherRevision = "7".repeat(64);
+  let preparationRevision = "8".repeat(64);
+  const selectedMatcher: ReviewChangeMatcher = {
+    name: "revision-check",
+    get revision() { return matcherRevision; },
+    validate() {},
+    async matches() { return false; },
+  };
+  const preparation = reviewPreparationExtension({
+    name: "revision-preparation",
+    get revision() { return preparationRevision; },
+    async prepare() { return { inputs: {} }; },
+  });
+  const selectedPolicy = { requiredReviewerIds: [], pathReviewerRules: [],
+    changeReviewerRules: [{ matcher: selectedMatcher.name, options: {}, reviewerIds: ["owner"] }] };
+  const f = await fixture(true, [reviewChangeMatcherExtension(selectedMatcher), preparation], selectedPolicy);
+  try {
+    const provider = refUpdatePolicies(f.service.context.extensions).find(({ name }) => name === "code-review");
+    if (provider === undefined) throw new Error("code-review ref policy missing");
+    const initial = provider.revision;
+    matcherRevision = "9".repeat(64);
+    expect(provider.revision).not.toBe(initial);
+    const matcherChanged = provider.revision;
+    preparationRevision = "a".repeat(64);
+    expect(provider.revision).not.toBe(matcherChanged);
+  } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
+}, 30_000);
 function policy(review = reviewPolicy): NativeImportedRootPolicy {
   const extensions = { "code-review": review };
   return { schemaVersion: 1, protectedRef: "refs/heads/main", extensions, policyRevision: nativeRepositoryPolicyRevision({ protectedRef: "refs/heads/main", extensions }) };

@@ -13,6 +13,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./dim-legacy-codec": {
+      "source": { "types": "./src/dim-legacy-codec.ts", "default": "./src/dim-legacy-codec.ts" },
+      "types": "./dist/dim-legacy-codec.d.ts",
+      "import": "./dist/dim-legacy-codec.js",
+      "default": "./dist/dim-legacy-codec.js"
     }
   },
   "scripts": {

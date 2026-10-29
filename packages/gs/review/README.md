@@ -6,7 +6,7 @@ The engine composes `@slop-lab/gs-repository-service` authority, read and gate
 ports. It has no DIM runtime, activation token, Project type, control-plane
 extension, credential or HTTP dependency.
 
-`createReviewFeature` freezes matcher/preparation revisions into the selected
+`createReviewFeature` binds live matcher/preparation revisions into the selected
 ref-update provider revision. `ReviewService.create` owns mutation admission;
 `createInTransaction` requires an already-borrowed mutation capability and never
 reacquires a gate. Reads use the distinct borrowed read authority and perform a
@@ -27,7 +27,8 @@ the boundary; the engine itself uses namespace/repository selectors.
 - `createGitRepositoryReadService` supplies the standalone pinned real-Git
   reader; embeddings may supply another implementation of the same port.
 - Review schemas come from `@slop-lab/gs-review-contracts`; immutable stores,
-  compact CI provenance, matcher policy and freshness are exported here.
+  matcher policy and freshness are exported here. Existing compact CI
+  provenance remains available only through `./dim-legacy-provenance`.
 
 The canonical implementations moved from DIM's `git-review` package:
 `authoritative-native-review*`, approval/revocation/decision stores,

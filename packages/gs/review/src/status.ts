@@ -1,11 +1,11 @@
-import type { AuthoritativeNativeDecisions } from "./decision-store.js";
+import type { ReviewDecisions } from "./decision-store.js";
 
 export type NativeHumanReviewStatus = "pending" | "approved" | "revoked" | "stale";
 
 export function nativeHumanReviewStatus(
   requiredReviewerIds: readonly string[],
   staleReasons: readonly string[],
-  decisions: AuthoritativeNativeDecisions,
+  decisions: ReviewDecisions,
 ): NativeHumanReviewStatus {
   if (staleReasons.length > 0) return "stale";
   const activeReviewers = new Set(decisions.activeApprovals.map((approval) => approval.reviewerId));

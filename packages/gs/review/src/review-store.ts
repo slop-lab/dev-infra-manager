@@ -1,9 +1,13 @@
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  parseAuthoritativeNativeReviewEnvelope,
-  type AuthoritativeNativeReviewEnvelope,
+  parseReviewEnvelope,
+  type ReviewEnvelope,
 } from "@slop-lab/gs-review-contracts";
+import {
+  decodeDimLegacyReviewEnvelope,
+  encodeDimLegacyReviewEnvelope,
+} from "@slop-lab/gs-review-contracts/dim-legacy-codec";
 import {
   assertOwnedReviewDirectory,
   ownedReviewDirectory,
@@ -14,39 +18,32 @@ import {
 import { readVersionedReviewRecord } from "./review-record-version.js";
 import { runReviewStoreOperation } from "./review-store-queue.js";
 
-export {
-  assertVerifiedCiReviewSourceCurrent,
-  readVerifiedCiReviewSources,
-  type VerifiedCiReviewSource,
-  type VerifiedCiReviewSummary,
-} from "./verified-review-store.js";
-
 export const maximumRecordBytes = 128 * 1024 * 1024;
 const maximumRecords = 100_000;
 const recordPattern = /^([0-9a-f]{64})\.([0-9a-f]{64})\.json$/;
 
-export async function saveAuthoritativeNativeReviewEnvelope(
+export async function saveReviewEnvelope(
   repository: string,
-  envelope: AuthoritativeNativeReviewEnvelope,
-): Promise<AuthoritativeNativeReviewEnvelope> {
+  envelope: ReviewEnvelope,
+): Promise<ReviewEnvelope> {
   return runReviewStoreOperation(repository, () => saveEnvelope(repository, envelope));
 }
 
 async function saveEnvelope(
   repository: string,
-  envelopeInput: AuthoritativeNativeReviewEnvelope,
-): Promise<AuthoritativeNativeReviewEnvelope> {
-  const envelope = parseAuthoritativeNativeReviewEnvelope(envelopeInput);
+  envelopeInput: ReviewEnvelope,
+): Promise<ReviewEnvelope> {
+  const envelope = parseReviewEnvelope(envelopeInput);
   const paths = storePaths(repository);
   await initializeStore(paths);
   await assertStoreLayout(paths);
   const names = await readRecordNames(paths);
   const name = `${envelope.review.reviewId}.${envelope.envelopeId}.json`;
   if (names.includes(name)) return readEnvelope(paths, name);
-  if (names.length >= maximumRecords) throw new AuthoritativeNativeReviewStoreError("review record capacity is exhausted");
-  const serialized = `${JSON.stringify(envelope)}\n`;
+  if (names.length >= maximumRecords) throw new ReviewStoreError("review record capacity is exhausted");
+  const serialized = `${JSON.stringify(encodeDimLegacyReviewEnvelope(envelope))}\n`;
   if (Buffer.byteLength(serialized, "utf8") > maximumRecordBytes) {
-    throw new AuthoritativeNativeReviewStoreError("review envelope exceeds the storage bound");
+    throw new ReviewStoreError("review envelope exceeds the storage bound");
   }
   try {
     await publishReviewRecord({ path: join(paths.proposals, name), serialized, stagingRoot: paths.staging, faults: {} });
@@ -57,17 +54,17 @@ async function saveEnvelope(
   }
 }
 
-export async function readAuthoritativeNativeReviewEnvelope(
+export async function readReviewEnvelope(
   repository: string,
   reviewId: string,
-): Promise<AuthoritativeNativeReviewEnvelope | undefined> {
+): Promise<ReviewEnvelope | undefined> {
   return runReviewStoreOperation(repository, () => readSelectedEnvelope(repository, reviewId));
 }
 
 async function readSelectedEnvelope(
   repository: string,
   reviewId: string,
-): Promise<AuthoritativeNativeReviewEnvelope | undefined> {
+): Promise<ReviewEnvelope | undefined> {
   if (!/^[0-9a-f]{64}$/.test(reviewId)) return undefined;
   const paths = storePaths(repository);
   try {
@@ -77,7 +74,7 @@ async function readSelectedEnvelope(
       .map(({ name }) => name).sort();
     const envelopes = await Promise.all(names.map((name) => readEnvelope(paths, name)));
     if (envelopes.some(({ review }) => review.reviewId !== reviewId)) {
-      throw new AuthoritativeNativeReviewStoreError("review path conflicts with its identity");
+      throw new ReviewStoreError("review path conflicts with its identity");
     }
     return envelopes.sort((left, right) => right.review.createdAt.localeCompare(left.review.createdAt))[0];
   } catch (error) {
@@ -86,7 +83,7 @@ async function readSelectedEnvelope(
   }
 }
 
-export async function assertAuthoritativeNativeReviewStore(repository: string): Promise<void> {
+export async function assertReviewStore(repository: string): Promise<void> {
   return runReviewStoreOperation(repository, () => assertStore(repository));
 }
 
@@ -102,13 +99,13 @@ async function assertStore(repository: string): Promise<void> {
   await readStore(paths);
 }
 
-export async function readAuthoritativeNativeReviewEnvelopes(
+export async function readReviewEnvelopes(
   repository: string,
-): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
+): Promise<readonly ReviewEnvelope[]> {
   return runReviewStoreOperation(repository, () => readEnvelopes(repository));
 }
 
-async function readEnvelopes(repository: string): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
+async function readEnvelopes(repository: string): Promise<readonly ReviewEnvelope[]> {
   const paths = storePaths(repository);
   try {
     await lstat(paths.root);
@@ -140,7 +137,7 @@ async function assertStoreLayout(paths: StorePaths): Promise<void> {
   const allowed = new Set(["proposals", "staging"]);
   if (!entries.some(({ name }) => name === "proposals") || !entries.some(({ name }) => name === "staging")
     || entries.some((entry) => !entry.isDirectory() || !allowed.has(entry.name))) {
-    throw new AuthoritativeNativeReviewStoreError("review store layout is invalid");
+    throw new ReviewStoreError("review store layout is invalid");
   }
   await assertOwnedReviewDirectory(paths.proposals);
   await assertOwnedReviewDirectory(paths.staging);
@@ -152,12 +149,12 @@ async function assertPrivateStoreDirectory(path: string): Promise<void> {
   const metadata = await lstat(path);
   if (!metadata.isDirectory() || metadata.isSymbolicLink() || metadata.uid !== serviceUid()
     || (metadata.mode & 0o777) !== 0o700) {
-    throw new AuthoritativeNativeReviewStoreError("review directory is not private");
+    throw new ReviewStoreError("review directory is not private");
   }
 }
 
-async function readStore(paths: StorePaths): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
-  const envelopes: AuthoritativeNativeReviewEnvelope[] = [];
+async function readStore(paths: StorePaths): Promise<readonly ReviewEnvelope[]> {
+  const envelopes: ReviewEnvelope[] = [];
   for (const name of await readRecordNames(paths)) envelopes.push(await readEnvelope(paths, name));
   return envelopes;
 }
@@ -167,24 +164,24 @@ async function readRecordNames(paths: StorePaths): Promise<readonly string[]> {
   for (const entry of (await readdir(paths.proposals, { withFileTypes: true }))
     .sort((left, right) => left.name.localeCompare(right.name))) {
     const match = recordPattern.exec(entry.name);
-    if (!entry.isFile() || match === null) throw new AuthoritativeNativeReviewStoreError("review record name is invalid");
+    if (!entry.isFile() || match === null) throw new ReviewStoreError("review record name is invalid");
     const metadata = await lstat(join(paths.proposals, entry.name));
     if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.uid !== serviceUid()
       || (metadata.mode & 0o777) !== 0o600 || metadata.nlink !== 1 || metadata.size > maximumRecordBytes) {
-      throw new AuthoritativeNativeReviewStoreError("review record is not a bounded private file");
+      throw new ReviewStoreError("review record is not a bounded private file");
     }
-    if (names.length >= maximumRecords) throw new AuthoritativeNativeReviewStoreError("review record capacity is exceeded");
+    if (names.length >= maximumRecords) throw new ReviewStoreError("review record capacity is exceeded");
     names.push(entry.name);
   }
   return names;
 }
 
-async function readEnvelope(paths: StorePaths, name: string): Promise<AuthoritativeNativeReviewEnvelope> {
+async function readEnvelope(paths: StorePaths, name: string): Promise<ReviewEnvelope> {
   const match = recordPattern.exec(name);
   const record = await readVersionedReviewRecord(join(paths.proposals, name), maximumRecordBytes);
-  const envelope = parseAuthoritativeNativeReviewEnvelope(record.value);
+  const envelope = parseReviewEnvelope(decodeDimLegacyReviewEnvelope(record.value));
   if (match === null || match[1] !== envelope.review.reviewId || match[2] !== envelope.envelopeId) {
-    throw new AuthoritativeNativeReviewStoreError("review path conflicts with its identity");
+    throw new ReviewStoreError("review path conflicts with its identity");
   }
   return envelope;
 }
@@ -195,10 +192,10 @@ function isCode(error: unknown, code: string): boolean {
 
 function serviceUid(): number {
   const uid = process.getuid?.();
-  if (uid === undefined) throw new AuthoritativeNativeReviewStoreError("native Git review requires a Linux identity");
+  if (uid === undefined) throw new ReviewStoreError("Git review requires a Linux identity");
   return uid;
 }
 
-export class AuthoritativeNativeReviewStoreError extends Error {
-  readonly name = "AuthoritativeNativeReviewStoreError";
+export class ReviewStoreError extends Error {
+  readonly name = "ReviewStoreError";
 }

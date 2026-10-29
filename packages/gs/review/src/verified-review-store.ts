@@ -1,9 +1,10 @@
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  parseAuthoritativeNativeReviewEnvelope,
-  type AuthoritativeNativeReviewEnvelope,
+  parseReviewEnvelope,
+  type ReviewEnvelope,
 } from "@slop-lab/gs-review-contracts";
+import { decodeDimLegacyReviewEnvelope } from "@slop-lab/gs-review-contracts/dim-legacy-codec";
 import {
   inspectReviewRecordVersion,
   readVersionedReviewRecord,
@@ -44,7 +45,7 @@ export type VerifiedCiReviewRecordAttestation = {
   readonly repositoryKey: string;
   readonly path: string;
   readonly recordName: string;
-  readonly envelope: AuthoritativeNativeReviewEnvelope;
+  readonly envelope: ReviewEnvelope;
   readonly record: VersionedReviewRecord;
 };
 
@@ -133,14 +134,14 @@ async function assertSourceCurrent(repositoryKey: string, source: VerifiedCiRevi
 }
 
 type EnvelopeRecord = {
-  readonly envelope: AuthoritativeNativeReviewEnvelope;
+  readonly envelope: ReviewEnvelope;
   readonly record: VersionedReviewRecord;
 };
 
 async function readEnvelopeRecord(path: string, name: string): Promise<EnvelopeRecord> {
   const match = recordPattern.exec(name);
   const record = await readVersionedReviewRecord(path, maximumRecordBytes);
-  const envelope = parseAuthoritativeNativeReviewEnvelope(record.value);
+  const envelope = parseReviewEnvelope(decodeDimLegacyReviewEnvelope(record.value));
   if (match === null || match[1] !== envelope.review.reviewId || match[2] !== envelope.envelopeId) {
     throw new VerifiedCiReviewSourceError("review path conflicts with its identity");
   }

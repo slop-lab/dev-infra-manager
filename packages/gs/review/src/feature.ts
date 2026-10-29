@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { repositoryBranchPolicy } from "@slop-lab/gs-repository-contracts";
 import type {
   BorrowedRepositoryMutationAccess,
   PolicySectionOwner,
@@ -9,26 +8,26 @@ import type {
   RepositoryTargetSelector,
 } from "@slop-lab/gs-repository-service";
 import type {
-  AuthoritativeNativeReviewEnvelope,
+  ReviewEnvelope,
 } from "@slop-lab/gs-review-contracts";
 import { assertReviewChangeMatchers } from "./change-matchers.js";
-import { readAuthoritativeNativeDecisions, type AuthoritativeNativeDecisions } from "./decision-store.js";
+import { readReviewDecisions, type ReviewDecisions } from "./decision-store.js";
 import { reviewStaleReasons } from "./freshness.js";
 import { assertCurrentEpoch, createReviewInTransaction, type ReviewCreationInput } from "./review-engine.js";
 import {
-  readAuthoritativeNativeReviewEnvelope,
-  readAuthoritativeNativeReviewEnvelopes,
+  readReviewEnvelope,
+  readReviewEnvelopes,
 } from "./review-store.js";
 import { nativeHumanReviewStatus, type NativeHumanReviewStatus } from "./status.js";
 import type { ReviewFeatureAttachment, ReviewFeatureOptions } from "./types.js";
 import { ReviewService } from "./review-service.js";
-import { codeReviewPolicySectionOwner } from "./policy.js";
+import { branchRequiresReview, codeReviewPolicySectionOwner } from "./policy.js";
 
 export type ReviewSelection = {
   readonly target: RepositoryTarget;
-  readonly envelope: AuthoritativeNativeReviewEnvelope;
+  readonly envelope: ReviewEnvelope;
   readonly staleReasons: readonly string[];
-  readonly decisions: AuthoritativeNativeDecisions;
+  readonly decisions: ReviewDecisions;
   readonly status: NativeHumanReviewStatus;
 };
 
@@ -45,10 +44,11 @@ export class ReviewFeature {
       throw new ReviewFeatureError("promotion gate requires a stable revision");
     }
     this.#options = options;
+    const feature = this;
     this.refUpdatePolicy = {
       name: "code-review",
-      revision: featureRevision(options),
-      authorize: (input) => this.#authorizeRefUpdate(input),
+      get revision() { return featureRevision(options); },
+      authorize: (input) => feature.#authorizeRefUpdate(input),
     };
   }
 
@@ -60,7 +60,7 @@ export class ReviewFeature {
     access: BorrowedRepositoryMutationAccess,
     request: ReviewCreationInput,
     acceptPreparations = true,
-  ): Promise<AuthoritativeNativeReviewEnvelope> {
+  ): Promise<ReviewEnvelope> {
     return createReviewInTransaction({
       options: this.#options,
       access,
@@ -78,8 +78,8 @@ export class ReviewFeature {
   ): Promise<ReviewSelection> {
     assertCurrentEpoch(this.#options, authority.authorityEpoch);
     let target = await authority.resolve(selector);
-    const envelope = await readAuthoritativeNativeReviewEnvelope(target.repositoryPath, reviewId);
-    if (envelope === undefined || envelope.review.projectId !== selector.namespaceId
+    const envelope = await readReviewEnvelope(target.repositoryPath, reviewId);
+    if (envelope === undefined || envelope.review.namespaceId !== selector.namespaceId
       || envelope.review.repositoryId !== selector.repositoryId) {
       throw new ReviewNotFoundError("review was not found");
     }
@@ -102,7 +102,7 @@ export class ReviewFeature {
       && !await this.#options.hooks.promotionReady({ target, envelope })) {
       staleReasons.push("review-preparation-pending");
     }
-    const decisions = await readAuthoritativeNativeDecisions(target.repositoryPath, reviewId);
+    const decisions = await readReviewDecisions(target.repositoryPath, reviewId);
     await authority.assertCurrent(target);
     assertCurrentEpoch(this.#options, authority.authorityEpoch);
     const uniqueReasons = [...new Set(staleReasons)];
@@ -118,7 +118,7 @@ export class ReviewFeature {
   staleReasons(
     authority: RepositoryAuthority,
     target: RepositoryTarget,
-    envelope: AuthoritativeNativeReviewEnvelope,
+    envelope: ReviewEnvelope,
     principalId?: string,
   ): Promise<readonly string[]> {
     return reviewStaleReasons({
@@ -136,7 +136,7 @@ export class ReviewFeature {
   }
 
   async #authorizeRefUpdate(input: Parameters<RefUpdatePolicy["authorize"]>[0]): Promise<void> {
-    if (!repositoryBranchPolicy(input.policy, input.target.head.protectedRef).review) return;
+    if (!branchRequiresReview(input.policy, input.target.head.protectedRef)) return;
     const authority = input.authority;
     const target = await authority.resolve({
       namespaceId: input.change.namespaceId,
@@ -144,10 +144,10 @@ export class ReviewFeature {
       protectedRef: input.target.head.protectedRef,
     });
     assertTargetProof(input.target, target);
-    const envelopes = await readAuthoritativeNativeReviewEnvelopes(target.repositoryPath);
+    const envelopes = await readReviewEnvelopes(target.repositoryPath);
     for (const envelope of envelopes) {
       const { review } = envelope;
-      if (review.projectId !== input.change.namespaceId || review.repositoryId !== input.change.repositoryId
+      if (review.namespaceId !== input.change.namespaceId || review.repositoryId !== input.change.repositoryId
         || review.proposalRef !== input.change.proposalRef || review.protectedRef !== target.head.protectedRef
         || review.expectedProtectedHead !== input.change.expectedCommit
         || review.candidateCommit !== input.change.candidateCommit

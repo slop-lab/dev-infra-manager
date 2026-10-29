@@ -6,4 +6,4 @@ export {
   parseAuthoritativeNativeRevocation,
   type AuthoritativeNativeRevocation,
   type AuthoritativeNativeRevocationIdentity,
-} from "@slop-lab/gs-review-contracts";
+} from "@slop-lab/gs-review-contracts/dim-legacy-codec";

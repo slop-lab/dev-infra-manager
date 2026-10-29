@@ -1,7 +1,9 @@
 import type {
   AuthoritativeNativeReview,
   AuthoritativeNativeReviewEnvelope,
-} from "@slop-lab/gs-review-contracts";
+} from "@slop-lab/gs-review-contracts/dim-legacy-codec";
+import { encodeDimLegacyReviewEnvelope } from "@slop-lab/gs-review-contracts/dim-legacy-codec";
+import type { ReviewEnvelope } from "@slop-lab/gs-review-contracts";
 import type { ReviewRecordVersion } from "./review-record-version.js";
 import { sameReviewRecordVersion } from "./review-record-version.js";
 
@@ -26,7 +28,7 @@ export type VerifiedCiReviewSourceProof = {
 };
 
 type IssueVerifiedCiReviewSource = VerifiedCiReviewSourceProof & {
-  readonly envelope: AuthoritativeNativeReviewEnvelope;
+  readonly envelope: ReviewEnvelope;
   readonly fingerprint: string;
 };
 
@@ -49,13 +51,14 @@ export function issueVerifiedCiReviewSource(input: IssueVerifiedCiReviewSource):
     }
     return existing;
   }
-  const { changes: _changes, patch: _patch, patchBytes: _patchBytes, ...review } = input.envelope.review;
+  const legacy = encodeDimLegacyReviewEnvelope(input.envelope);
+  const { changes: _changes, patch: _patch, patchBytes: _patchBytes, ...review } = legacy.review;
   const summary = structuredClone({
-    schemaVersion: input.envelope.schemaVersion,
-    envelopeId: input.envelope.envelopeId,
+    schemaVersion: legacy.schemaVersion,
+    envelopeId: legacy.envelopeId,
     review,
-    policyDigest: input.envelope.policyDigest,
-    attachments: input.envelope.attachments,
+    policyDigest: legacy.policyDigest,
+    attachments: legacy.attachments,
   } satisfies VerifiedCiReviewSummary);
   freezeValue(summary);
   const source: VerifiedCiReviewSource = Object.freeze({ summary, version: input.fingerprint });

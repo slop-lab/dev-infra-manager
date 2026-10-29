@@ -1,4 +1,4 @@
-import type { AuthoritativeNativeChangedPath } from "@slop-lab/gs-review-contracts";
+import type { ReviewChangedPath } from "@slop-lab/gs-review-contracts";
 import { jsonFieldMatcher } from "./json-field-matcher.js";
 
 export interface ReviewChangeMatcher {
@@ -7,7 +7,7 @@ export interface ReviewChangeMatcher {
   validate(options: unknown): void;
   matches(input: {
     readonly options: unknown;
-    readonly changes: readonly AuthoritativeNativeChangedPath[];
+    readonly changes: readonly ReviewChangedPath[];
     readonly readBlob: (objectId: string) => Promise<Buffer>;
     readonly readCandidateFile: (path: string) => Promise<Buffer | undefined>;
     readonly readBaseFile?: (path: string) => Promise<Buffer | undefined>;

@@ -6,4 +6,4 @@ export {
   type VerifiedCiReviewSource,
   type VerifiedCiReviewSourceProof,
   type VerifiedCiReviewSummary,
-} from "@slop-lab/gs-review";
+} from "@slop-lab/gs-review/dim-legacy-provenance";

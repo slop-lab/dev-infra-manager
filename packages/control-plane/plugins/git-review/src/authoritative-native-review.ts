@@ -1,18 +1,24 @@
 import type { RepositoryPolicy } from "@slop-lab/gs-repository-contracts";
+import { createGitRepositoryReadService } from "@slop-lab/gs-repository-service";
 import type { RepositoryAccess, RepositoryTarget } from "@slop-lab/gs-repository-service";
 import {
-  createGitRepositoryReadService,
   defaultReviewChangeMatchers,
   reviewRequirementsForChanges as gsReviewRequirementsForChanges,
 } from "@slop-lab/gs-review";
 import type {
   AuthoritativeNativeChangedPath,
   AuthoritativeNativeReviewEnvelope,
-} from "@slop-lab/gs-review-contracts";
+} from "@slop-lab/gs-review-contracts/dim-legacy-codec";
+import {
+  decodeDimLegacyReviewEnvelope,
+  encodeDimLegacyReviewEnvelope,
+} from "@slop-lab/gs-review-contracts/dim-legacy-codec";
+import type { ReviewFeatureHooks } from "@slop-lab/gs-review";
 import { isCandidateRef } from "@slop-lab/gs-repository-contracts";
 import { z } from "zod";
 import { createDetachedGsReviewExecution } from "./gs-review-runtime.js";
 import type { CodeReviewRuntime } from "./plugin-api.js";
+import { CodeReviewPolicyError } from "./policy.js";
 
 const selectorSchema = z.object({
   projectId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
@@ -44,17 +50,41 @@ export async function createAuthoritativeNativeReview(
       namespaceId: selector.projectId,
       repositoryId: selector.repositoryId,
       ...(selector.protectedRef === undefined ? {} : { protectedRef: selector.protectedRef }),
-    }, hooks);
-    return execution.feature.createInTransaction(execution.access, {
+    }, toGsHooks(hooks));
+    return encodeDimLegacyReviewEnvelope(await execution.feature.createInTransaction(execution.access, {
       namespaceId: selector.projectId,
       repositoryId: selector.repositoryId,
       proposalRef: selector.proposalRef,
       ...(selector.protectedRef === undefined ? {} : { protectedRef: selector.protectedRef }),
-    }, false);
+    }, false));
   } catch (cause) {
-    if (cause instanceof AuthoritativeNativeReviewError) throw cause;
+    if (cause instanceof AuthoritativeNativeReviewError || cause instanceof CodeReviewPolicyError) throw cause;
     throw new AuthoritativeNativeReviewError("authoritative native review could not be created", { cause });
   }
+}
+
+function toGsHooks(hooks: AuthoritativeNativeReviewHooks): ReviewFeatureHooks {
+  return {
+    ...(hooks.beforeFinalVerification === undefined ? {} : {
+      beforeFinalVerification: hooks.beforeFinalVerification,
+    }),
+    ...(hooks.beforePublication === undefined ? {} : {
+      beforePublication: ({ repository, envelope }) => hooks.beforePublication?.({
+        repository,
+        envelope: encodeDimLegacyReviewEnvelope(envelope),
+      }) ?? Promise.resolve(),
+    }),
+    ...(hooks.publish === undefined ? {} : {
+      async publish({ repository, envelope }, publish) {
+        const legacy = await hooks.publish?.(
+          { repository, envelope: encodeDimLegacyReviewEnvelope(envelope) },
+          async () => encodeDimLegacyReviewEnvelope(await publish()),
+        );
+        if (legacy === undefined) throw new AuthoritativeNativeReviewError("review publish hook returned no envelope");
+        return decodeDimLegacyReviewEnvelope(legacy);
+      },
+    }),
+  };
 }
 
 export async function reviewRequirementsForChanges(

@@ -2,10 +2,10 @@ import { isDeepStrictEqual } from "node:util";
 import { candidatePrincipalId, repositorySnapshotsSchema } from "@slop-lab/gs-repository-contracts";
 import type { BorrowedRepositoryMutationAccess, RepositoryAccess } from "@slop-lab/gs-repository-service";
 import {
-  createAuthoritativeNativeReviewEnvelope,
+  createReviewEnvelope,
   reviewRequestSchema,
-  type AuthoritativeNativeReviewEnvelope,
-  type AuthoritativeNativeReviewIdentity,
+  type ReviewEnvelope,
+  type ReviewIdentity,
   type ReviewAttachment,
   type ReviewRequest,
 } from "@slop-lab/gs-review-contracts";
@@ -13,7 +13,7 @@ import { codeReviewPolicy } from "./policy.js";
 import { assertReviewInputsCurrent } from "./review-inputs.js";
 import { assertAuthoritativeReviewRefs, inspectAuthoritativeReviewGit } from "./review-git.js";
 import { reviewRequirementsForChanges } from "./requirements.js";
-import { saveAuthoritativeNativeReviewEnvelope } from "./review-store.js";
+import { saveReviewEnvelope } from "./review-store.js";
 import type { ReviewFeatureOptions } from "./types.js";
 
 export type ReviewCreationInput = ReviewRequest & { readonly ownerRequestId?: string };
@@ -23,7 +23,7 @@ export async function createReviewInTransaction(input: {
   readonly access: BorrowedRepositoryMutationAccess;
   readonly request: ReviewCreationInput;
   readonly acceptPreparations: boolean;
-}): Promise<AuthoritativeNativeReviewEnvelope> {
+}): Promise<ReviewEnvelope> {
   const { ownerRequestId, ...requestValue } = input.request;
   const request = reviewRequestSchema.parse(requestValue);
   assertTargetMatchesRequest(input.access, request);
@@ -65,7 +65,7 @@ export async function createReviewInTransaction(input: {
     identity = { ...identity, inputs: mergeSnapshots(identity.inputs, prepared.inputs) };
     if (prepared.attachment !== undefined) attachments.push(prepared.attachment);
   }
-  const envelope = createAuthoritativeNativeReviewEnvelope({
+  const envelope = createReviewEnvelope({
     identity,
     policyDigest: target.policyDigest,
     attachments,
@@ -108,9 +108,9 @@ export async function createReviewInTransaction(input: {
     candidateTree: identity.candidateTree,
     signal,
   });
-  const publish = async (): Promise<AuthoritativeNativeReviewEnvelope> => {
+  const publish = async (): Promise<ReviewEnvelope> => {
     await input.options.hooks?.beforePublication?.({ repository: target.repositoryPath, envelope });
-    return saveAuthoritativeNativeReviewEnvelope(target.repositoryPath, envelope);
+    return saveReviewEnvelope(target.repositoryPath, envelope);
   };
   const published = input.options.hooks?.publish === undefined
     ? await publish()
@@ -138,12 +138,11 @@ function initialIdentity(
   evidence: Awaited<ReturnType<typeof inspectAuthoritativeReviewGit>>,
   requirements: Awaited<ReturnType<typeof reviewRequirementsForChanges>>,
   options: ReviewFeatureOptions,
-): AuthoritativeNativeReviewIdentity {
+): ReviewIdentity {
   const requiredReviewRevision = codeReviewPolicy(target.policy, options.matchers, target.head.protectedRef).requiredReviewRevision;
   return {
-    schemaVersion: 2,
-    serviceId: "native-main",
-    projectId: request.namespaceId,
+    schemaVersion: 1,
+    namespaceId: request.namespaceId,
     repositoryId: request.repositoryId,
     inputs: { [request.repositoryId]: { commit: evidence.candidateCommit, tree: evidence.candidateTree } },
     protectedRef: target.head.protectedRef,
@@ -152,17 +151,17 @@ function initialIdentity(
     policyRevision: target.policy.policyRevision,
     requiredReviewRevision,
     ...(candidatePrincipalId(request.proposalRef) === undefined ? {} : {
-      workspaceId: candidatePrincipalId(request.proposalRef),
+      candidatePrincipalId: candidatePrincipalId(request.proposalRef),
     }),
     requiredReviewerIds: requirements.reviewerIds,
     ...(requirements.evidence.length === 0 ? {} : { changeRuleEvidence: requirements.evidence }),
   };
 }
 
-function mergeSnapshots(left: AuthoritativeNativeReviewIdentity["inputs"], right: Readonly<Record<string, {
+function mergeSnapshots(left: ReviewIdentity["inputs"], right: Readonly<Record<string, {
   readonly commit: string;
   readonly tree: string;
-}>>): AuthoritativeNativeReviewIdentity["inputs"] {
+}>>): ReviewIdentity["inputs"] {
   const combined = { ...left };
   for (const [repositoryId, snapshot] of Object.entries(right)) {
     const previous = combined[repositoryId];

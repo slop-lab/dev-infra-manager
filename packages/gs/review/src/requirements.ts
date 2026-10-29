@@ -1,6 +1,6 @@
 import type { RepositoryAccess, RepositoryReadService } from "@slop-lab/gs-repository-service";
 import type {
-  AuthoritativeNativeChangedPath,
+  ReviewChangedPath,
 } from "@slop-lab/gs-review-contracts";
 import type { RepositoryPolicy } from "@slop-lab/gs-repository-contracts";
 import type { ReviewChangeMatcher } from "./change-matchers.js";
@@ -17,7 +17,7 @@ export async function reviewRequirementsForChanges(input: {
   readonly access: RepositoryAccess;
   readonly matchers: readonly ReviewChangeMatcher[];
   readonly policy: RepositoryPolicy;
-  readonly changes: readonly AuthoritativeNativeChangedPath[];
+  readonly changes: readonly ReviewChangedPath[];
   readonly candidateCommit: string;
   readonly baseCommit?: string;
   readonly protectedRef?: string;
@@ -77,7 +77,7 @@ export async function reviewRequirementsForChanges(input: {
 
 function pathRequiredReviewers(
   reviewed: ReturnType<typeof codeReviewPolicy>,
-  changes: readonly AuthoritativeNativeChangedPath[],
+  changes: readonly ReviewChangedPath[],
 ): readonly string[] {
   const reviewers = new Set(reviewed.requiredReviewerIds);
   for (const rule of reviewed.pathReviewerRules) {

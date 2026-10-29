@@ -66,7 +66,7 @@ it("does not journal or publish acceptance for a reviewer denied before first re
   try {
     // When an unauthorized reviewer is the first to resolve, followed by recovery.
     const denied = await resolve(`Basic ${Buffer.from(`${foreignHumanReviewer.username}:${foreignHumanReviewer.password}`).toString("base64")}`);
-    expect(denied.status).toBe(403);
+    expect(denied.status, await denied.clone().text()).toBe(403);
     await recoverProposalAcceptances({ ...fixture.service.context.runtime,
       reviewPreparations: reviewPreparations(fixture.service.context.extensions),
       reviewChangeMatchers: reviewChangeMatchers(fixture.service.context.extensions)

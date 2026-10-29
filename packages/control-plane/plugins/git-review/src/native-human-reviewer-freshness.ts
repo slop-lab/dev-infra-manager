@@ -1,6 +1,11 @@
 import { isDeepStrictEqual } from "node:util";
 import { assertReviewInputsCurrent, codeReviewPolicy } from "@slop-lab/gs-review";
-import type { AuthoritativeNativeReview, AuthoritativeNativeReviewEnvelope } from "@slop-lab/gs-review-contracts";
+import type { AuthoritativeNativeReview, AuthoritativeNativeReviewEnvelope } from "@slop-lab/gs-review-contracts/dim-legacy-codec";
+import {
+  decodeDimLegacyReviewEnvelope,
+  decodeDimLegacyReviewIdentity,
+  encodeDimLegacyReviewEnvelope,
+} from "@slop-lab/gs-review-contracts/dim-legacy-codec";
 import type { AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { readAuthoritativeNativeReviewRefs } from "./authoritative-native-review-git.js";
 import { createDetachedGsReviewExecution } from "./gs-review-runtime.js";
@@ -22,12 +27,14 @@ export async function nativeHumanReviewStaleReasons(
     const envelope = envelopeInput
       ?? await readAuthoritativeNativeReviewEnvelope(target.repository, review.reviewId);
     if (envelope === undefined) return ["candidate-ref-unavailable"];
+    const neutral = decodeDimLegacyReviewEnvelope(envelope);
     const reasons = [...await execution.feature.staleReasons(
       execution.access.authority,
       execution.access.target,
-      envelope,
+      neutral,
     )];
-    if (execution.access.target.repositoryPath !== target.repository || !isDeepStrictEqual(envelope.review, review)) {
+    if (execution.access.target.repositoryPath !== target.repository
+      || !isDeepStrictEqual(encodeDimLegacyReviewEnvelope(neutral).review, review)) {
       reasons.push("review-identity-changed");
     }
     return [...new Set(reasons)];
@@ -65,7 +72,8 @@ export async function nativeHumanReviewSummaryStaleReasons(
       repositoryId: review.repositoryId,
       protectedRef: review.protectedRef,
     });
-    await assertReviewInputsCurrent({ authority: execution.access.authority, review });
+    const { reviewId: _reviewId, createdAt: _createdAt, ...identity } = review;
+    await assertReviewInputsCurrent({ authority: execution.access.authority, review: decodeDimLegacyReviewIdentity(identity) });
   } catch (error) {
     if (error instanceof Error) reasons.push("repository-inputs-changed");
     else throw error;

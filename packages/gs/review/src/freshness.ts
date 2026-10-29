@@ -6,7 +6,7 @@ import type {
   RepositoryReadService,
   RepositoryTarget,
 } from "@slop-lab/gs-repository-service";
-import type { AuthoritativeNativeReviewEnvelope } from "@slop-lab/gs-review-contracts";
+import type { ReviewEnvelope } from "@slop-lab/gs-review-contracts";
 import type { ReviewChangeMatcher } from "./change-matchers.js";
 import { codeReviewPolicy } from "./policy.js";
 import { assertReviewInputsCurrent } from "./review-inputs.js";
@@ -20,7 +20,7 @@ export async function reviewStaleReasons(input: {
   readonly matchers: readonly ReviewChangeMatcher[];
   readonly preparations: readonly ReviewPreparation[];
   readonly target: RepositoryTarget;
-  readonly envelope: AuthoritativeNativeReviewEnvelope;
+  readonly envelope: ReviewEnvelope;
   readonly principalId: string;
   readonly requirePreparationProviders?: boolean;
 }): Promise<readonly string[]> {
@@ -64,10 +64,10 @@ export async function reviewStaleReasons(input: {
         baseCommit: evidence.expectedProtectedHead,
         protectedRef: review.protectedRef,
       });
-      if (review.projectId !== input.target.selector.namespaceId
+      if (review.namespaceId !== input.target.selector.namespaceId
         || review.repositoryId !== input.target.selector.repositoryId
         || review.protectedRef !== input.target.head.protectedRef
-        || review.workspaceId !== candidatePrincipalId(review.proposalRef)
+        || review.candidatePrincipalId !== candidatePrincipalId(review.proposalRef)
         || review.patch !== evidence.patch || review.patchBytes !== evidence.patchBytes
         || !isDeepStrictEqual(review.changes, evidence.changes)
         || !isDeepStrictEqual(review.requiredReviewerIds, requirements.reviewerIds)
@@ -86,7 +86,7 @@ export async function reviewStaleReasons(input: {
 function policyStaleReasons(
   target: RepositoryTarget,
   matchers: readonly ReviewChangeMatcher[],
-  review: AuthoritativeNativeReviewEnvelope["review"],
+  review: ReviewEnvelope["review"],
 ): string[] {
   const reasons: string[] = [];
   try {

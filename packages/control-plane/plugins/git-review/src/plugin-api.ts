@@ -7,8 +7,8 @@ import type {
 import type {
   AuthoritativeNativeReviewEnvelope,
   AuthoritativeNativeReviewIdentity,
-  ReviewAttachment,
-} from "@slop-lab/gs-review-contracts";
+} from "@slop-lab/gs-review-contracts/dim-legacy-codec";
+import type { ReviewAttachment } from "@slop-lab/gs-review-contracts";
 import type { ReviewChangeMatcher } from "@slop-lab/gs-review";
 import type { inspectAuthoritativeNativeReviewGit } from "./authoritative-native-review-git.js";
 import type { DimGsReviewRuntime } from "./gs-review-runtime.js";

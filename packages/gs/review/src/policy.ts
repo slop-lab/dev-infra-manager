@@ -9,6 +9,11 @@ import type { PolicySectionOwner } from "@slop-lab/gs-repository-service";
 import { assertReviewChangeMatchers, type ReviewChangeMatcher } from "./change-matchers.js";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
+const branchReviewPolicySchema = z.object({ review: z.boolean().default(true) }).passthrough();
+
+export function branchRequiresReview(policy: RepositoryPolicy, protectedRef: string): boolean {
+  return branchReviewPolicySchema.parse(repositoryBranchPolicy(policy, protectedRef)).review;
+}
 const pathRule = z.object({
   pathPrefix: z.string().min(1).max(1024).refine((value) => !value.startsWith("/")
     && !value.includes("\0") && !value.includes("//")
@@ -42,8 +47,8 @@ export function codeReviewPolicy(
   const configured = policy.extensions["code-review"];
   if (configured === undefined) {
     const reviewRequired = protectedRef === undefined
-      ? Object.values(repositoryBranches(policy)).some(({ review }) => review)
-      : repositoryBranchPolicy(policy, protectedRef).review;
+      ? Object.keys(repositoryBranches(policy)).some((ref) => branchRequiresReview(policy, ref))
+      : branchRequiresReview(policy, protectedRef);
     if (!reviewRequired) return emptyPolicy(policy.policyRevision);
     throw new CodeReviewPolicyError("Repository review policy is missing. Configure policy.code-review with reviewers and review-sensitive paths before reviewing this branch");
   }
@@ -68,7 +73,7 @@ export function codeReviewPolicy(
     });
   const requiredReviewRevision = selected.length === 0 ? policy.policyRevision
     : createHash("sha256").update(JSON.stringify({ policyRevision: policy.policyRevision, matchers: selected })).digest("hex");
-  if (protectedRef !== undefined && !repositoryBranchPolicy(policy, protectedRef).review) {
+  if (protectedRef !== undefined && !branchRequiresReview(policy, protectedRef)) {
     return emptyPolicy(requiredReviewRevision);
   }
   return { ...parsed.data, requiredReviewRevision };

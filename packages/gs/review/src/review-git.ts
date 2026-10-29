@@ -2,7 +2,7 @@ import type {
   RepositoryAccess,
   RepositoryReadService,
 } from "@slop-lab/gs-repository-service";
-import type { AuthoritativeNativeChangedPath } from "@slop-lab/gs-review-contracts";
+import type { ReviewChangedPath } from "@slop-lab/gs-review-contracts";
 import { parseChangedPaths } from "./changed-paths.js";
 
 const maximumOutputBytes = 128 * 1024 * 1024;
@@ -11,7 +11,7 @@ export type AuthoritativeGitReviewEvidence = {
   readonly expectedProtectedHead: string;
   readonly candidateCommit: string;
   readonly candidateTree: string;
-  readonly changes: readonly AuthoritativeNativeChangedPath[];
+  readonly changes: readonly ReviewChangedPath[];
   readonly patch: string;
   readonly patchBytes: string;
 };

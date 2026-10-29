@@ -1,11 +1,11 @@
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  createAuthoritativeNativeApproval,
-  parseAuthoritativeNativeApproval,
-  type AuthoritativeNativeApproval,
+  createReviewApproval,
+  parseReviewApproval,
+  type ReviewApproval,
 } from "@slop-lab/gs-review-contracts";
-import { readAuthoritativeNativeReviewEnvelope } from "./review-store.js";
+import { readReviewEnvelope } from "./review-store.js";
 import {
   assertOwnedReviewDirectory,
   ownedReviewDirectory,
@@ -18,16 +18,16 @@ const maximumRecordBytes = 16 * 1024;
 const maximumApprovals = 100_000;
 const recordPattern = /^([0-9a-f]{64})\.json$/;
 
-export type AuthoritativeNativeApprovalRequest = {
+export type ReviewApprovalRequest = {
   readonly repository: string;
   readonly reviewId: string;
   readonly reviewerId: string;
   readonly requestId: string;
 };
 
-export async function saveAuthoritativeNativeApproval(
-  request: AuthoritativeNativeApprovalRequest,
-): Promise<{ readonly approval: AuthoritativeNativeApproval; readonly created: boolean }> {
+export async function saveReviewApproval(
+  request: ReviewApprovalRequest,
+): Promise<{ readonly approval: ReviewApproval; readonly created: boolean }> {
   const paths = storePaths(request.repository);
   await initializeStore(paths);
   const approvals = await readStore(request.repository, paths);
@@ -35,9 +35,9 @@ export async function saveAuthoritativeNativeApproval(
     && approval.reviewerId === request.reviewerId && approval.requestId === request.requestId);
   if (existing !== undefined) return { approval: existing, created: false };
   if (approvals.length >= maximumApprovals) {
-    throw new AuthoritativeNativeApprovalStoreError("authoritative native approval capacity is exhausted");
+    throw new ReviewApprovalStoreError("review approval capacity is exhausted");
   }
-  const approval = createAuthoritativeNativeApproval({
+  const approval = createReviewApproval({
     reviewId: request.reviewId,
     reviewerId: request.reviewerId,
     requestId: request.requestId,
@@ -53,18 +53,18 @@ export async function saveAuthoritativeNativeApproval(
     return { approval, created: true };
   } catch (error) {
     if (!isCode(error, "EEXIST")) throw error;
-    const published = parseAuthoritativeNativeApproval(await readReviewJson(path, maximumRecordBytes, true));
+    const published = parseReviewApproval(await readReviewJson(path, maximumRecordBytes, true));
     if (JSON.stringify(published) !== JSON.stringify(approval)) {
-      throw new AuthoritativeNativeApprovalConflictError("approval identity conflicts with durable evidence");
+      throw new ReviewApprovalConflictError("approval identity conflicts with durable evidence");
     }
     return { approval: published, created: false };
   }
 }
 
-export async function readAuthoritativeNativeApprovals(
+export async function readReviewApprovals(
   repository: string,
   reviewId?: string,
-): Promise<readonly AuthoritativeNativeApproval[]> {
+): Promise<readonly ReviewApproval[]> {
   const paths = storePaths(repository);
   try {
     await lstat(paths.root);
@@ -72,12 +72,12 @@ export async function readAuthoritativeNativeApprovals(
     if (isCode(error, "ENOENT")) return [];
     throw error;
   }
-  await assertAuthoritativeNativeApprovalStore(repository);
+  await assertReviewApprovalStore(repository);
   const approvals = await readStore(repository, paths);
   return reviewId === undefined ? approvals : approvals.filter((approval) => approval.reviewId === reviewId);
 }
 
-export async function assertAuthoritativeNativeApprovalStore(repository: string): Promise<void> {
+export async function assertReviewApprovalStore(repository: string): Promise<void> {
   const paths = storePaths(repository);
   try {
     await lstat(paths.root);
@@ -89,7 +89,7 @@ export async function assertAuthoritativeNativeApprovalStore(repository: string)
   const entries = await readdir(paths.root, { withFileTypes: true });
   if (entries.length !== 2 || entries.some((entry) => !entry.isDirectory()
     || (entry.name !== "records" && entry.name !== "staging"))) {
-    throw new AuthoritativeNativeApprovalStoreError("authoritative native approval store layout is invalid");
+    throw new ReviewApprovalStoreError("review approval store layout is invalid");
   }
   await assertOwnedReviewDirectory(paths.records);
   await assertOwnedReviewDirectory(paths.staging);
@@ -116,31 +116,31 @@ async function assertPrivateDirectory(path: string): Promise<void> {
   const metadata = await lstat(path);
   if (!metadata.isDirectory() || metadata.isSymbolicLink() || metadata.uid !== serviceUid()
     || (metadata.mode & 0o777) !== 0o700) {
-    throw new AuthoritativeNativeApprovalStoreError("authoritative native approval directory is not private");
+    throw new ReviewApprovalStoreError("review approval directory is not private");
   }
 }
 
-async function readStore(repository: string, paths: StorePaths): Promise<readonly AuthoritativeNativeApproval[]> {
-  const approvals: AuthoritativeNativeApproval[] = [];
+async function readStore(repository: string, paths: StorePaths): Promise<readonly ReviewApproval[]> {
+  const approvals: ReviewApproval[] = [];
   const entries = (await readdir(paths.records, { withFileTypes: true }))
     .sort((left, right) => left.name.localeCompare(right.name));
   if (entries.length > maximumApprovals) {
-    throw new AuthoritativeNativeApprovalStoreError("authoritative native approval capacity is exceeded");
+    throw new ReviewApprovalStoreError("review approval capacity is exceeded");
   }
   for (const entry of entries) {
     const match = recordPattern.exec(entry.name);
     if (!entry.isFile() || match === null) {
-      throw new AuthoritativeNativeApprovalStoreError("authoritative native approval record name is invalid");
+      throw new ReviewApprovalStoreError("review approval record name is invalid");
     }
-    const approval = parseAuthoritativeNativeApproval(
+    const approval = parseReviewApproval(
       await readReviewJson(join(paths.records, entry.name), maximumRecordBytes, true),
     );
     if (match[1] !== approval.approvalId) {
-      throw new AuthoritativeNativeApprovalStoreError("authoritative native approval path conflicts with its identity");
+      throw new ReviewApprovalStoreError("review approval path conflicts with its identity");
     }
-    const review = await readAuthoritativeNativeReviewEnvelope(repository, approval.reviewId);
+    const review = await readReviewEnvelope(repository, approval.reviewId);
     if (review === undefined || !review.review.requiredReviewerIds.includes(approval.reviewerId)) {
-      throw new AuthoritativeNativeApprovalStoreError("authoritative native approval has no required stored review");
+      throw new ReviewApprovalStoreError("review approval has no required stored review");
     }
     approvals.push(approval);
   }
@@ -149,7 +149,7 @@ async function readStore(repository: string, paths: StorePaths): Promise<readonl
 
 function serviceUid(): number {
   const uid = process.getuid?.();
-  if (uid === undefined) throw new AuthoritativeNativeApprovalStoreError("native Git approval requires a Linux identity");
+  if (uid === undefined) throw new ReviewApprovalStoreError("Git approval requires a Linux identity");
   return uid;
 }
 
@@ -157,10 +157,10 @@ function isCode(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
 }
 
-export class AuthoritativeNativeApprovalStoreError extends Error {
-  readonly name = "AuthoritativeNativeApprovalStoreError";
+export class ReviewApprovalStoreError extends Error {
+  readonly name = "ReviewApprovalStoreError";
 }
 
-export class AuthoritativeNativeApprovalConflictError extends Error {
-  readonly name = "AuthoritativeNativeApprovalConflictError";
+export class ReviewApprovalConflictError extends Error {
+  readonly name = "ReviewApprovalConflictError";
 }

@@ -1,13 +1,13 @@
-import type { AuthoritativeNativeChangedPath } from "@slop-lab/gs-review-contracts";
+import type { ReviewChangedPath } from "@slop-lab/gs-review-contracts";
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 export async function parseChangedPaths(input: {
   readonly raw: Uint8Array;
   readonly readBlob: (objectId: string) => Promise<Buffer>;
-}): Promise<readonly AuthoritativeNativeChangedPath[]> {
+}): Promise<readonly ReviewChangedPath[]> {
   const fields = splitNul(Buffer.from(input.raw));
-  const changes: AuthoritativeNativeChangedPath[] = [];
+  const changes: ReviewChangedPath[] = [];
   for (let index = 0; index < fields.length;) {
     const metadata = fields[index];
     const firstPath = fields[index + 1];
@@ -40,7 +40,7 @@ export async function parseChangedPaths(input: {
   return changes;
 }
 
-function parseMetadata(value: string): Omit<AuthoritativeNativeChangedPath,
+function parseMetadata(value: string): Omit<ReviewChangedPath,
   "oldPath" | "newPath" | "oldPathBytes" | "newPathBytes" | "oldSymlinkTarget"
   | "newSymlinkTarget" | "oldSymlinkTargetBytes" | "newSymlinkTargetBytes"> {
   const match = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]+) ([0-9a-f]+) ([ADMTRC])([0-9]{1,3})?$/.exec(value);

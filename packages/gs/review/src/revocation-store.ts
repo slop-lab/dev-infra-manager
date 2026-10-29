@@ -1,9 +1,9 @@
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  createAuthoritativeNativeRevocation,
-  parseAuthoritativeNativeRevocation,
-  type AuthoritativeNativeRevocation,
+  createReviewRevocation,
+  parseReviewRevocation,
+  type ReviewRevocation,
 } from "@slop-lab/gs-review-contracts";
 import {
   assertOwnedReviewDirectory,
@@ -24,23 +24,23 @@ export type RevocationRequest = {
   readonly approvalId: string;
 };
 
-export async function saveAuthoritativeNativeRevocation(
+export async function saveReviewRevocation(
   request: RevocationRequest,
-): Promise<{ readonly revocation: AuthoritativeNativeRevocation; readonly created: boolean }> {
+): Promise<{ readonly revocation: ReviewRevocation; readonly created: boolean }> {
   const paths = storePaths(request.repository);
   await initializeStore(paths);
   const revocations = await readStore(paths);
   const existing = revocations.find((candidate) => candidate.approvalId === request.approvalId);
   if (existing !== undefined) {
     if (existing.reviewId !== request.reviewId || existing.reviewerId !== request.reviewerId) {
-      throw new AuthoritativeNativeRevocationStoreError("revocation identity conflicts with durable evidence");
+      throw new ReviewRevocationStoreError("revocation identity conflicts with durable evidence");
     }
     return { revocation: existing, created: false };
   }
   if (revocations.length >= maximumRevocations) {
-    throw new AuthoritativeNativeRevocationStoreError("authoritative native revocation capacity is exhausted");
+    throw new ReviewRevocationStoreError("review revocation capacity is exhausted");
   }
-  const revocation = createAuthoritativeNativeRevocation({
+  const revocation = createReviewRevocation({
     reviewId: request.reviewId,
     reviewerId: request.reviewerId,
     approvalId: request.approvalId,
@@ -56,17 +56,17 @@ export async function saveAuthoritativeNativeRevocation(
     return { revocation, created: true };
   } catch (error) {
     if (!isCode(error, "EEXIST")) throw error;
-    const published = parseAuthoritativeNativeRevocation(await readReviewJson(path, maximumRecordBytes, true));
+    const published = parseReviewRevocation(await readReviewJson(path, maximumRecordBytes, true));
     if (JSON.stringify(published) !== JSON.stringify(revocation)) {
-      throw new AuthoritativeNativeRevocationStoreError("revocation identity conflicts with durable evidence");
+      throw new ReviewRevocationStoreError("revocation identity conflicts with durable evidence");
     }
     return { revocation: published, created: false };
   }
 }
 
-export async function readAuthoritativeNativeRevocations(
+export async function readReviewRevocations(
   repository: string,
-): Promise<readonly AuthoritativeNativeRevocation[]> {
+): Promise<readonly ReviewRevocation[]> {
   const paths = storePaths(repository);
   try {
     await lstat(paths.root);
@@ -74,11 +74,11 @@ export async function readAuthoritativeNativeRevocations(
     if (isCode(error, "ENOENT")) return [];
     throw error;
   }
-  await assertAuthoritativeNativeRevocationStore(repository);
+  await assertReviewRevocationStore(repository);
   return readStore(paths);
 }
 
-export async function assertAuthoritativeNativeRevocationStore(repository: string): Promise<void> {
+export async function assertReviewRevocationStore(repository: string): Promise<void> {
   const paths = storePaths(repository);
   try {
     await lstat(paths.root);
@@ -90,7 +90,7 @@ export async function assertAuthoritativeNativeRevocationStore(repository: strin
   const entries = await readdir(paths.root, { withFileTypes: true });
   if (entries.length !== 2 || entries.some((entry) => !entry.isDirectory()
     || (entry.name !== "records" && entry.name !== "staging"))) {
-    throw new AuthoritativeNativeRevocationStoreError("authoritative native revocation store layout is invalid");
+    throw new ReviewRevocationStoreError("review revocation store layout is invalid");
   }
   await assertOwnedReviewDirectory(paths.records);
   await assertOwnedReviewDirectory(paths.staging);
@@ -117,31 +117,31 @@ async function assertPrivateDirectory(path: string): Promise<void> {
   const metadata = await lstat(path);
   if (!metadata.isDirectory() || metadata.isSymbolicLink() || metadata.uid !== serviceUid()
     || (metadata.mode & 0o777) !== 0o700) {
-    throw new AuthoritativeNativeRevocationStoreError("authoritative native revocation directory is not private");
+    throw new ReviewRevocationStoreError("review revocation directory is not private");
   }
 }
 
-async function readStore(paths: StorePaths): Promise<readonly AuthoritativeNativeRevocation[]> {
-  const revocations: AuthoritativeNativeRevocation[] = [];
+async function readStore(paths: StorePaths): Promise<readonly ReviewRevocation[]> {
+  const revocations: ReviewRevocation[] = [];
   const approvalIds = new Set<string>();
   const entries = (await readdir(paths.records, { withFileTypes: true }))
     .sort((left, right) => left.name.localeCompare(right.name));
   if (entries.length > maximumRevocations) {
-    throw new AuthoritativeNativeRevocationStoreError("authoritative native revocation capacity is exceeded");
+    throw new ReviewRevocationStoreError("review revocation capacity is exceeded");
   }
   for (const entry of entries) {
     const match = recordPattern.exec(entry.name);
     if (!entry.isFile() || match === null) {
-      throw new AuthoritativeNativeRevocationStoreError("authoritative native revocation record name is invalid");
+      throw new ReviewRevocationStoreError("review revocation record name is invalid");
     }
-    const revocation = parseAuthoritativeNativeRevocation(
+    const revocation = parseReviewRevocation(
       await readReviewJson(join(paths.records, entry.name), maximumRecordBytes, true),
     );
     if (match[1] !== revocation.revocationId) {
-      throw new AuthoritativeNativeRevocationStoreError("authoritative native revocation path conflicts with its identity");
+      throw new ReviewRevocationStoreError("review revocation path conflicts with its identity");
     }
     if (approvalIds.has(revocation.approvalId)) {
-      throw new AuthoritativeNativeRevocationStoreError("authoritative native approval revocation is duplicated");
+      throw new ReviewRevocationStoreError("review approval revocation is duplicated");
     }
     approvalIds.add(revocation.approvalId);
     revocations.push(revocation);
@@ -151,7 +151,7 @@ async function readStore(paths: StorePaths): Promise<readonly AuthoritativeNativ
 
 function serviceUid(): number {
   const uid = process.getuid?.();
-  if (uid === undefined) throw new AuthoritativeNativeRevocationStoreError("native Git revocation requires a Linux identity");
+  if (uid === undefined) throw new ReviewRevocationStoreError("Git revocation requires a Linux identity");
   return uid;
 }
 
@@ -159,6 +159,6 @@ function isCode(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
 }
 
-export class AuthoritativeNativeRevocationStoreError extends Error {
-  readonly name = "AuthoritativeNativeRevocationStoreError";
+export class ReviewRevocationStoreError extends Error {
+  readonly name = "ReviewRevocationStoreError";
 }

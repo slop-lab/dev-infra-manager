@@ -1,11 +1,33 @@
 import { expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
 import {
-  createAuthoritativeNativeReviewEnvelope,
+  createReviewEnvelope,
   reviewedCandidate,
   reviewRequestSchema,
 } from "../../../packages/gs/review-contracts/src/index.js";
+import {
+  decodeDimLegacyReviewEnvelope,
+  encodeDimLegacyReviewEnvelope,
+} from "../../../packages/gs/review-contracts/src/dim-legacy-codec.js";
 import { codeReviewPolicySectionOwner } from "../../../packages/gs/review/src/index.js";
 import { mergePolicySectionOwner } from "../../../packages/gs/merge-policy/src/index.js";
+
+it("keeps the root review SDK neutral and publishes DIM persistence only through an explicit codec", async () => {
+  // Given
+  const contracts: Readonly<Record<string, unknown>> = await import("../../../packages/gs/review-contracts/src/index.js");
+  const manifest: unknown = JSON.parse(await readFile(
+    new URL("../../../packages/gs/review-contracts/package.json", import.meta.url), "utf8",
+  ));
+
+  // When
+  const exports = typeof manifest === "object" && manifest !== null ? Reflect.get(manifest, "exports") : undefined;
+
+  // Then
+  expect(Reflect.get(contracts, "reviewSchema")).toBeDefined();
+  expect(Reflect.get(contracts, "createReviewEnvelope")).toBeTypeOf("function");
+  expect(Reflect.get(contracts, "authoritativeNativeReviewSchema")).toBeUndefined();
+  expect(exports).toHaveProperty("./dim-legacy-codec");
+});
 
 it("exposes authorization-enforced owners for review and merge policy sections", () => {
   // Given
@@ -42,11 +64,10 @@ it("keeps the portable review request limited to neutral selectors and an option
 it("projects the existing persisted review bytes into a neutral reviewed candidate", () => {
   // Given
   const snapshot = { commit: "2".repeat(40), tree: "3".repeat(40) };
-  const envelope = createAuthoritativeNativeReviewEnvelope({
+  const envelope = createReviewEnvelope({
     identity: {
-      schemaVersion: 2,
-      serviceId: "native-main",
-      projectId: "tenant",
+      schemaVersion: 1,
+      namespaceId: "tenant",
       repositoryId: "application",
       inputs: { application: snapshot },
       protectedRef: "refs/heads/main",
@@ -68,6 +89,7 @@ it("projects the existing persisted review bytes into a neutral reviewed candida
 
   // When
   const candidate = reviewedCandidate(envelope);
+  const legacy = encodeDimLegacyReviewEnvelope(envelope);
 
   // Then
   expect(candidate).toMatchObject({
@@ -78,4 +100,10 @@ it("projects the existing persisted review bytes into a neutral reviewed candida
     candidateCommit: snapshot.commit,
     candidateTree: snapshot.tree,
   });
+  expect({ reviewId: envelope.review.reviewId, envelopeId: envelope.envelopeId }).toEqual({
+    reviewId: "44c7e64923883d2a1aacf74cd0b5daa4aae73989cbaf3bf70fe6feb8f2f7ba27",
+    envelopeId: "359e90ef1ea4f37f197c8d4de8c9c611954ff7e7de8cdec0445c70008076e1fa",
+  });
+  expect(legacy.review).toMatchObject({ serviceId: "native-main", projectId: "tenant" });
+  expect(decodeDimLegacyReviewEnvelope(legacy)).toEqual(envelope);
 });

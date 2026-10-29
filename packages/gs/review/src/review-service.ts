@@ -3,8 +3,8 @@ import type {
   RepositoryTargetSelector,
 } from "@slop-lab/gs-repository-service";
 import {
-  approveAuthoritativeNativeReview,
-  revokeAuthoritativeNativeApproval,
+  approveReview,
+  revokeReviewApproval,
 } from "./decision-store.js";
 import type { ReviewCreationInput } from "./review-engine.js";
 import type { ReviewFeature, ReviewSelection } from "./feature.js";
@@ -48,7 +48,7 @@ export class ReviewService {
         throw new ReviewAuthorizationError("reviewer is not required for this review");
       }
       if (selected.staleReasons.length > 0) throw new ReviewAuthorizationError("review is stale");
-      return approveAuthoritativeNativeReview({
+      return approveReview({
         repository: selected.target.repositoryPath,
         reviewId: input.reviewId,
         reviewerId: input.reviewerId,
@@ -67,7 +67,7 @@ export class ReviewService {
       if (!selected.envelope.review.requiredReviewerIds.includes(input.reviewerId)) {
         throw new ReviewAuthorizationError("reviewer is not required for this review");
       }
-      return revokeAuthoritativeNativeApproval({
+      return revokeReviewApproval({
         repository: selected.target.repositoryPath,
         reviewId: input.reviewId,
         reviewerId: input.reviewerId,

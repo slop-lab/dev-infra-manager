@@ -12,10 +12,11 @@ import type { RepositoryTarget } from "@slop-lab/gs-repository-service";
 
 export function codeReviewRefUpdatePolicyExtension(
   runtimeFor: (context: RepositoryExtensionContext) => DimGsReviewRuntime,
+  revision: () => string,
 ): ControlPlaneExtension {
   return refUpdatePolicyExtension({
     name: "code-review",
-    revision: createHash("sha256").update("dim-gs-code-review-ref-policy-adapter-v1").digest("hex"),
+    get revision() { return revision(); },
     validate(options) { codeReviewPolicySchema.parse(options); },
     async check({ context, target, change }) {
       const runtime = runtimeFor(context);

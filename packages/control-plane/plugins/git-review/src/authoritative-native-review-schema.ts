@@ -10,4 +10,4 @@ export {
   type AuthoritativeNativeReview,
   type AuthoritativeNativeReviewEnvelope,
   type AuthoritativeNativeReviewIdentity,
-} from "@slop-lab/gs-review-contracts";
+} from "@slop-lab/gs-review-contracts/dim-legacy-codec";

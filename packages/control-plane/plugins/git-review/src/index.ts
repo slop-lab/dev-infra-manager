@@ -1,5 +1,6 @@
 import { codeReviewRefUpdatePolicyExtension } from "./ref-update-policy.js";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import type { ControlPlanePlugin, PreparedControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { repositoryExtension, nativeBasicAuthorized, resolveAuthoritativeNativeRepositoryTarget, exactActivationIsBound, RepositoryAccessError, readNativeProjectRegistrations, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { parseCodeReviewConfig, type CodeReviewConfig } from "./config.js";
@@ -18,12 +19,18 @@ import { captureRawProposalJobs, createRawProposalWorker } from "./raw-proposal-
 import { completeMatchingRawProposalJob } from "./raw-proposal-journal.js";
 import { createDimGsReviewRuntime, type DimGsReviewRuntime } from "./gs-review-runtime.js";
 import { hasPendingProposalAcceptance } from "./proposal-acceptance.js";
+import {
+  decodeDimLegacyReviewEnvelope,
+  encodeDimLegacyReviewEnvelope,
+} from "@slop-lab/gs-review-contracts/dim-legacy-codec";
 
 export * from "./config.js";
 export * from "./policy.js";
 export const controlPlanePlugin: ControlPlanePlugin = { apiVersion: 1, name: "code-review", configure(raw) { return prepareCodeReview(parseCodeReviewConfig(raw)); } };
 export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly review?: AuthoritativeNativeReviewHooks; readonly humanReviewer?: NativeHumanReviewerHooks } = {}): PreparedControlPlanePlugin {
     let attached: RepositoryExtensionContext | undefined;
+    const adapterRevision = createHash("sha256").update("dim-gs-code-review-ref-policy-adapter-v1").digest("hex");
+    let selectedFeature: DimGsReviewRuntime["feature"] | undefined;
     const gsRuntimes = new WeakMap<RepositoryExtensionContext, DimGsReviewRuntime>();
     const gsRuntime = (context: RepositoryExtensionContext): DimGsReviewRuntime => {
       const existing = gsRuntimes.get(context);
@@ -33,37 +40,58 @@ export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly re
           beforeFinalVerification: hooks.review.beforeFinalVerification,
         }),
         async beforePublication(publication) {
-          await hooks.review?.beforePublication?.(publication);
-          await stageProposalAcceptance(publication.repository, context.runtime.expectedGenerationId, publication.envelope);
+          const envelope = encodeDimLegacyReviewEnvelope(publication.envelope);
+          await hooks.review?.beforePublication?.({ repository: publication.repository, envelope });
+          await stageProposalAcceptance(publication.repository, context.runtime.expectedGenerationId, envelope);
         },
-        ...(hooks.review?.publish === undefined ? {} : { publish: hooks.review.publish }),
+        ...(hooks.review?.publish === undefined ? {} : {
+          async publish(publication, publish) {
+            const envelope = await hooks.review?.publish?.(
+              { repository: publication.repository, envelope: encodeDimLegacyReviewEnvelope(publication.envelope) },
+              async () => encodeDimLegacyReviewEnvelope(await publish()),
+            );
+            if (envelope === undefined) throw new Error("DIM review publication hook returned no envelope");
+            return decodeDimLegacyReviewEnvelope(envelope);
+          },
+        }),
         promotionReady: async ({ target, envelope }) =>
-          !await hasPendingProposalAcceptance(target.repositoryPath, context.runtime.expectedGenerationId, envelope),
+          !await hasPendingProposalAcceptance(target.repositoryPath, context.runtime.expectedGenerationId,
+            encodeDimLegacyReviewEnvelope(envelope)),
         async acceptanceFailed({ target, envelope }) {
-          await failProposalAcceptance(target.repositoryPath, context.runtime.expectedGenerationId, envelope);
+          await failProposalAcceptance(target.repositoryPath, context.runtime.expectedGenerationId,
+            encodeDimLegacyReviewEnvelope(envelope));
         },
         async acceptanceCompleted({ target, envelope }) {
-          await completeProposalAcceptance(target.repositoryPath, context.runtime.expectedGenerationId, envelope);
-          await completeMatchingRawProposalJob(target.repositoryPath, context.runtime.expectedGenerationId, envelope);
+          const legacy = encodeDimLegacyReviewEnvelope(envelope);
+          await completeProposalAcceptance(target.repositoryPath, context.runtime.expectedGenerationId, legacy);
+          await completeMatchingRawProposalJob(target.repositoryPath, context.runtime.expectedGenerationId, legacy);
         }
       });
+      if (selectedFeature !== undefined
+        && selectedFeature.refUpdatePolicy.revision !== created.feature.refUpdatePolicy.revision) {
+        throw new Error("GS review feature revisions conflict across DIM repository contexts");
+      }
+      selectedFeature = created.feature;
       gsRuntimes.set(context, created);
       return created;
     };
-    const refUpdatePolicy = codeReviewRefUpdatePolicyExtension(gsRuntime);
+    const refUpdatePolicy = codeReviewRefUpdatePolicyExtension(
+      gsRuntime,
+      () => selectedFeature?.refUpdatePolicy.revision ?? adapterRevision,
+    );
     const createInTransaction = async (context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined; readonly ownerRequestId?: string }) => {
       const runtime = gsRuntime(context);
       return runtime.adapter.withBorrowedMutation({
         namespaceId: input.projectId,
         repositoryId: input.repositoryId,
         ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }),
-      }, (access) => runtime.service.createInTransaction(access, {
+      }, async (access) => encodeDimLegacyReviewEnvelope(await runtime.service.createInTransaction(access, {
         namespaceId: input.projectId,
         repositoryId: input.repositoryId,
         proposalRef: input.proposalRef,
         ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }),
         ...(input.ownerRequestId === undefined ? {} : { ownerRequestId: input.ownerRequestId }),
-      }));
+      })));
     };
     const service = {
       name: "code-review" as const,

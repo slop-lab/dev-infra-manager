@@ -1,36 +1,36 @@
 import type {
-  AuthoritativeNativeApproval,
-  AuthoritativeNativeRevocation,
+  ReviewApproval,
+  ReviewRevocation,
 } from "@slop-lab/gs-review-contracts";
 import {
-  AuthoritativeNativeApprovalConflictError,
-  readAuthoritativeNativeApprovals,
-  saveAuthoritativeNativeApproval,
-  type AuthoritativeNativeApprovalRequest,
+  ReviewApprovalConflictError,
+  readReviewApprovals,
+  saveReviewApproval,
+  type ReviewApprovalRequest,
 } from "./approval-store.js";
 import {
-  readAuthoritativeNativeRevocations,
-  saveAuthoritativeNativeRevocation,
+  readReviewRevocations,
+  saveReviewRevocation,
 } from "./revocation-store.js";
 
-export type AuthoritativeNativeDecisions = {
-  readonly approvals: readonly AuthoritativeNativeApproval[];
-  readonly revocations: readonly AuthoritativeNativeRevocation[];
-  readonly activeApprovals: readonly AuthoritativeNativeApproval[];
+export type ReviewDecisions = {
+  readonly approvals: readonly ReviewApproval[];
+  readonly revocations: readonly ReviewRevocation[];
+  readonly activeApprovals: readonly ReviewApproval[];
 };
 
-export async function readAuthoritativeNativeDecisions(
+export async function readReviewDecisions(
   repository: string,
   reviewId?: string,
-): Promise<AuthoritativeNativeDecisions> {
-  const allApprovals = await readAuthoritativeNativeApprovals(repository);
-  const allRevocations = await readAuthoritativeNativeRevocations(repository);
+): Promise<ReviewDecisions> {
+  const allApprovals = await readReviewApprovals(repository);
+  const allRevocations = await readReviewRevocations(repository);
   const approvalById = new Map(allApprovals.map((approval) => [approval.approvalId, approval]));
   for (const revocation of allRevocations) {
     const approval = approvalById.get(revocation.approvalId);
     if (approval === undefined || approval.reviewId !== revocation.reviewId
       || approval.reviewerId !== revocation.reviewerId) {
-      throw new AuthoritativeNativeDecisionStoreError("authoritative native revocation has no matching approval");
+      throw new ReviewDecisionStoreError("review revocation has no matching approval");
     }
   }
   const revocations = reviewId === undefined
@@ -45,49 +45,49 @@ export async function readAuthoritativeNativeDecisions(
   for (const approval of activeApprovals) {
     const key = `${approval.reviewId}\0${approval.reviewerId}`;
     if (activeReviewers.has(key)) {
-      throw new AuthoritativeNativeDecisionStoreError("authoritative native reviewer approval is duplicated");
+      throw new ReviewDecisionStoreError("reviewer approval is duplicated");
     }
     activeReviewers.add(key);
   }
   return { approvals, revocations, activeApprovals };
 }
 
-export async function approveAuthoritativeNativeReview(
-  request: AuthoritativeNativeApprovalRequest,
-): Promise<{ readonly approval: AuthoritativeNativeApproval; readonly created: boolean }> {
-  const decisions = await readAuthoritativeNativeDecisions(request.repository, request.reviewId);
+export async function approveReview(
+  request: ReviewApprovalRequest,
+): Promise<{ readonly approval: ReviewApproval; readonly created: boolean }> {
+  const decisions = await readReviewDecisions(request.repository, request.reviewId);
   const replay = decisions.approvals.find((approval) => approval.reviewerId === request.reviewerId
     && approval.requestId === request.requestId);
   if (replay !== undefined) return { approval: replay, created: false };
   if (decisions.activeApprovals.some((approval) => approval.reviewerId === request.reviewerId)) {
-    throw new AuthoritativeNativeApprovalConflictError("reviewer already approved this review with another request");
+    throw new ReviewApprovalConflictError("reviewer already approved this review with another request");
   }
-  return saveAuthoritativeNativeApproval(request);
+  return saveReviewApproval(request);
 }
 
-export async function revokeAuthoritativeNativeApproval(request: {
+export async function revokeReviewApproval(request: {
   readonly repository: string;
   readonly reviewId: string;
   readonly reviewerId: string;
   readonly approvalId: string;
-}): Promise<{ readonly revocation: AuthoritativeNativeRevocation; readonly created: boolean }> {
-  const decisions = await readAuthoritativeNativeDecisions(request.repository, request.reviewId);
+}): Promise<{ readonly revocation: ReviewRevocation; readonly created: boolean }> {
+  const decisions = await readReviewDecisions(request.repository, request.reviewId);
   const approval = decisions.approvals.find((candidate) => candidate.approvalId === request.approvalId);
-  if (approval === undefined) throw new AuthoritativeNativeDecisionNotFoundError("approval was not found");
+  if (approval === undefined) throw new ReviewDecisionNotFoundError("approval was not found");
   if (approval.reviewerId !== request.reviewerId) {
-    throw new AuthoritativeNativeDecisionForbiddenError("reviewer cannot revoke another reviewer's approval");
+    throw new ReviewDecisionForbiddenError("reviewer cannot revoke another reviewer's approval");
   }
-  return saveAuthoritativeNativeRevocation(request);
+  return saveReviewRevocation(request);
 }
 
-export class AuthoritativeNativeDecisionStoreError extends Error {
-  readonly name = "AuthoritativeNativeDecisionStoreError";
+export class ReviewDecisionStoreError extends Error {
+  readonly name = "ReviewDecisionStoreError";
 }
 
-export class AuthoritativeNativeDecisionNotFoundError extends Error {
-  readonly name = "AuthoritativeNativeDecisionNotFoundError";
+export class ReviewDecisionNotFoundError extends Error {
+  readonly name = "ReviewDecisionNotFoundError";
 }
 
-export class AuthoritativeNativeDecisionForbiddenError extends Error {
-  readonly name = "AuthoritativeNativeDecisionForbiddenError";
+export class ReviewDecisionForbiddenError extends Error {
+  readonly name = "ReviewDecisionForbiddenError";
 }

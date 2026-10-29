@@ -1,106 +1,98 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-
-const digest = z.string().regex(/^[0-9a-f]{64}$/);
-const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
+import { reviewDigestSchema, reviewIdentifierSchema } from "./model.js";
 
 const approvalIdentitySchema = z.object({
-  reviewId: digest,
-  reviewerId: identifier,
+  reviewId: reviewDigestSchema,
+  reviewerId: reviewIdentifierSchema,
   requestId: z.string().uuid(),
 }).strict();
 
 const approvalRecordIdentitySchema = approvalIdentitySchema.extend({
   schemaVersion: z.literal(1),
-  approvalId: digest,
+  approvalId: reviewDigestSchema,
   approvedAt: z.string().datetime(),
 }).strict();
 
-export const authoritativeNativeApprovalSchema = approvalRecordIdentitySchema.extend({
-  recordDigest: digest,
+export const reviewApprovalSchema = approvalRecordIdentitySchema.extend({
+  recordDigest: reviewDigestSchema,
 }).strict().readonly();
 
 const revocationIdentitySchema = z.object({
-  reviewId: digest,
-  reviewerId: identifier,
-  approvalId: digest,
+  reviewId: reviewDigestSchema,
+  reviewerId: reviewIdentifierSchema,
+  approvalId: reviewDigestSchema,
 }).strict();
 
 const revocationRecordIdentitySchema = revocationIdentitySchema.extend({
   schemaVersion: z.literal(1),
-  revocationId: digest,
+  revocationId: reviewDigestSchema,
   revokedAt: z.string().datetime(),
 }).strict();
 
-export const authoritativeNativeRevocationSchema = revocationRecordIdentitySchema.extend({
-  recordDigest: digest,
+export const reviewRevocationSchema = revocationRecordIdentitySchema.extend({
+  recordDigest: reviewDigestSchema,
 }).strict().readonly();
 
-export type AuthoritativeNativeApprovalIdentity = z.infer<typeof approvalIdentitySchema>;
-export type AuthoritativeNativeApproval = z.infer<typeof authoritativeNativeApprovalSchema>;
-export type AuthoritativeNativeRevocationIdentity = z.infer<typeof revocationIdentitySchema>;
-export type AuthoritativeNativeRevocation = z.infer<typeof authoritativeNativeRevocationSchema>;
+export type ReviewApprovalIdentity = z.infer<typeof approvalIdentitySchema>;
+export type ReviewApproval = z.infer<typeof reviewApprovalSchema>;
+export type ReviewRevocationIdentity = z.infer<typeof revocationIdentitySchema>;
+export type ReviewRevocation = z.infer<typeof reviewRevocationSchema>;
 
-export function authoritativeNativeApprovalId(identity: AuthoritativeNativeApprovalIdentity): string {
+export function reviewApprovalId(identity: ReviewApprovalIdentity): string {
   return domainDigest("dim-native-authoritative-approval-id-v1\0", identity);
 }
 
-export function createAuthoritativeNativeApproval(
-  identityInput: AuthoritativeNativeApprovalIdentity,
-  approvedAt: string,
-): AuthoritativeNativeApproval {
+export function createReviewApproval(identityInput: ReviewApprovalIdentity, approvedAt: string): ReviewApproval {
   const identity = approvalIdentitySchema.parse(identityInput);
   const recordIdentity = approvalRecordIdentitySchema.parse({
     schemaVersion: 1,
     ...identity,
-    approvalId: authoritativeNativeApprovalId(identity),
+    approvalId: reviewApprovalId(identity),
     approvedAt,
   });
-  return authoritativeNativeApprovalSchema.parse({
+  return reviewApprovalSchema.parse({
     ...recordIdentity,
     recordDigest: domainDigest("dim-native-authoritative-approval-record-v1\0", recordIdentity),
   });
 }
 
-export function parseAuthoritativeNativeApproval(input: unknown): AuthoritativeNativeApproval {
-  const approval = authoritativeNativeApprovalSchema.parse(input);
+export function parseReviewApproval(input: unknown): ReviewApproval {
+  const approval = reviewApprovalSchema.parse(input);
   const { recordDigest, ...recordIdentity } = approval;
   const { schemaVersion: _schemaVersion, approvalId, approvedAt: _approvedAt, ...identity } = recordIdentity;
-  if (authoritativeNativeApprovalId(identity) !== approvalId
+  if (reviewApprovalId(identity) !== approvalId
     || domainDigest("dim-native-authoritative-approval-record-v1\0", recordIdentity) !== recordDigest) {
-    throw new AuthoritativeNativeApprovalSchemaError("authoritative native approval digest is invalid");
+    throw new ReviewApprovalSchemaError("review approval digest is invalid");
   }
   return approval;
 }
 
-export function authoritativeNativeRevocationId(identity: AuthoritativeNativeRevocationIdentity): string {
+export function reviewRevocationId(identity: ReviewRevocationIdentity): string {
   return domainDigest("dim-native-authoritative-revocation-id-v1\0", identity);
 }
 
-export function createAuthoritativeNativeRevocation(
-  identityInput: AuthoritativeNativeRevocationIdentity,
-  revokedAt: string,
-): AuthoritativeNativeRevocation {
+export function createReviewRevocation(identityInput: ReviewRevocationIdentity, revokedAt: string): ReviewRevocation {
   const identity = revocationIdentitySchema.parse(identityInput);
   const recordIdentity = revocationRecordIdentitySchema.parse({
     schemaVersion: 1,
     ...identity,
-    revocationId: authoritativeNativeRevocationId(identity),
+    revocationId: reviewRevocationId(identity),
     revokedAt,
   });
-  return authoritativeNativeRevocationSchema.parse({
+  return reviewRevocationSchema.parse({
     ...recordIdentity,
     recordDigest: domainDigest("dim-native-authoritative-revocation-record-v1\0", recordIdentity),
   });
 }
 
-export function parseAuthoritativeNativeRevocation(input: unknown): AuthoritativeNativeRevocation {
-  const revocation = authoritativeNativeRevocationSchema.parse(input);
+export function parseReviewRevocation(input: unknown): ReviewRevocation {
+  const revocation = reviewRevocationSchema.parse(input);
   const { recordDigest, ...recordIdentity } = revocation;
   const { schemaVersion: _schemaVersion, revocationId, revokedAt: _revokedAt, ...identity } = recordIdentity;
-  if (authoritativeNativeRevocationId(identity) !== revocationId
+  if (reviewRevocationId(identity) !== revocationId
     || domainDigest("dim-native-authoritative-revocation-record-v1\0", recordIdentity) !== recordDigest) {
-    throw new AuthoritativeNativeRevocationSchemaError("authoritative native revocation digest is invalid");
+    throw new ReviewRevocationSchemaError("review revocation digest is invalid");
   }
   return revocation;
 }
@@ -109,10 +101,9 @@ function domainDigest(domain: string, value: unknown): string {
   return createHash("sha256").update(domain).update(JSON.stringify(value)).digest("hex");
 }
 
-export class AuthoritativeNativeApprovalSchemaError extends Error {
-  readonly name = "AuthoritativeNativeApprovalSchemaError";
+export class ReviewApprovalSchemaError extends Error {
+  readonly name = "ReviewApprovalSchemaError";
 }
-
-export class AuthoritativeNativeRevocationSchemaError extends Error {
-  readonly name = "AuthoritativeNativeRevocationSchemaError";
+export class ReviewRevocationSchemaError extends Error {
+  readonly name = "ReviewRevocationSchemaError";
 }

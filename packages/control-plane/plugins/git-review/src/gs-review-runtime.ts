@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createGitRepositoryReadService } from "@slop-lab/gs-repository-service";
 import type {
   BorrowedRepositoryMutationAccess,
   BorrowedRepositoryMutationAuthority,
@@ -7,7 +8,6 @@ import type {
   RepositoryTargetSelector,
 } from "@slop-lab/gs-repository-service";
 import {
-  createGitRepositoryReadService,
   createReviewFeature,
   type ReviewFeature,
   type ReviewFeatureHooks,
@@ -28,6 +28,11 @@ import {
 } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { reviewChangeMatchers } from "./change-matchers.js";
 import type { CodeReviewRuntime, ReviewPreparation } from "./plugin-api.js";
+import {
+  encodeDimLegacyReviewEnvelope,
+  encodeDimLegacyReviewIdentity,
+  encodeDimLegacyReviewIdentityWithoutInputs,
+} from "@slop-lab/gs-review-contracts/dim-legacy-codec";
 
 export type DimGsReviewRuntime = {
   readonly adapter: GsRepositoryServiceAdapter;
@@ -87,8 +92,8 @@ export async function createDetachedGsReviewExecution(
 export function toGsPreparations(runtime: CodeReviewRuntime): readonly GsReviewPreparation[] {
   return (runtime.reviewPreparations ?? []).map((preparation) => ({
     name: preparation.name,
-    revision: preparation.revision ?? createHash("sha256")
-      .update("dim-review-preparation-adapter-v1\0").update(preparation.name).digest("hex"),
+    get revision() { return preparation.revision ?? createHash("sha256")
+      .update("dim-review-preparation-adapter-v1\0").update(preparation.name).digest("hex"); },
     async prepare(input) {
       const target = await resolveAuthoritativeNativeRepositoryTarget(
         { ...runtime, authoritativeTargetProofs: new Map() },
@@ -108,14 +113,14 @@ export function toGsPreparations(runtime: CodeReviewRuntime): readonly GsReviewP
         },
         target,
         evidence: input.evidence,
-        identity: input.identity,
+        identity: encodeDimLegacyReviewIdentityWithoutInputs(input.identity),
       });
     },
     ...(preparation.assertCurrent === undefined ? {} : {
       assertCurrent: (input: Parameters<NonNullable<GsReviewPreparation["assertCurrent"]>>[0]) =>
         preparation.assertCurrent?.({
           runtime,
-          review: input.review,
+          review: encodeDimLegacyReviewIdentity(input.review),
           ...(input.attachment === undefined ? {} : { attachment: input.attachment }),
         }) ?? Promise.resolve(),
     }),
@@ -123,7 +128,7 @@ export function toGsPreparations(runtime: CodeReviewRuntime): readonly GsReviewP
       accepted: (input: Parameters<NonNullable<GsReviewPreparation["accepted"]>>[0]) =>
         preparation.accepted?.({
           runtime,
-          envelope: input.envelope,
+          envelope: encodeDimLegacyReviewEnvelope(input.envelope),
           ownerRequestId: input.ownerRequestId,
         }) ?? Promise.resolve(),
     }),
