@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Operation } from "@slop-lab/dim-contracts-operations";
 import { nativeGitProjectSchema } from "./operator.js";
-import { nativeImportedRootPolicySchema, nativeRepositoryBranchPolicySchema } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicySchema as nativeImportedRootPolicySchema, repositoryBranchPolicySchema as nativeRepositoryBranchPolicySchema } from "@slop-lab/gs-repository-contracts";
 const id = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const publicUrl = z.string().min(1).max(2048).refine((value) => {
   try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash && url.pathname !== "/" && url.hostname !== "localhost" && !url.hostname.endsWith(".localhost"); } catch { return false; }

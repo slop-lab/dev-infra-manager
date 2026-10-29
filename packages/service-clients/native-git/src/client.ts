@@ -1,165 +1,153 @@
-import { repositoryFeatureOperations, repositoryFeatureRequest } from "./repository-features.js";
-import { randomUUID } from "node:crypto";
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
+import {
+  GitServiceClient,
+  commentPullRequestInputSchema,
+  createPullRequestInputSchema,
+  createGitServiceClient,
+  diffInputSchema,
+  reviewSelectionSchema,
+  updatePullRequestInputSchema,
+  type GitClientCapability,
+  type PromotionReceipt,
+  type PullRequestWorkflowInput,
+} from "@slop-lab/gs-client";
 import { z } from "zod";
-export type NativeConfig = {
-  baseUrl: string; generationId: string; reviewerId: string; username: string; password: string;
-  promoter?: { hostId: string; username: string; password: string };
-};
 import { reviewDto, type ReviewDto } from "./dto.js";
-import { reviewCiStatusSchema } from "@slop-lab/dim-contracts-ci/review-status";
+import { NativeGitClientError, NativeGitHttpError, NativeGitJsonTransport } from "./native-transport.js";
 
-const MAX_NATIVE_RESPONSE_BYTES = 8 * 1024 * 1024;
+export type NativeConfig = {
+  readonly baseUrl: string;
+  readonly generationId: string;
+  readonly reviewerId: string;
+  readonly username: string;
+  readonly password: string;
+  readonly promoter?: { readonly hostId: string; readonly username: string; readonly password: string };
+};
+
 const identitySchema = z.object({
-  schemaVersion: z.literal(1), serviceId: z.literal("native-main"), role: z.literal("human-reviewer"),
-  reviewerId: z.string(), generationId: z.string().regex(/^[0-9a-f]{64}$/), features: z.array(z.string().max(128)).max(64).optional()
+  schemaVersion: z.literal(1),
+  serviceId: z.literal("native-main"),
+  role: z.literal("human-reviewer"),
+  reviewerId: z.string(),
+  generationId: z.string().regex(/^[0-9a-f]{64}$/),
+  features: z.array(z.string().max(128)).max(64).optional(),
 }).strict();
-export const preparedBranchMergeSchema = z.object({ schemaVersion: z.literal(1), outcome: z.enum(["proposed", "unchanged", "conflict"]),
-  sourceRef: z.string().startsWith("refs/heads/"), targetRef: z.string().startsWith("refs/heads/"),
-  sourceCommit: z.string().regex(/^[a-f0-9]{40,64}$/), expectedProtectedHead: z.string().regex(/^[a-f0-9]{40,64}$/),
-  proposalRef: z.string().startsWith("refs/heads/proposals/").optional(), candidateCommit: z.string().regex(/^[a-f0-9]{40,64}$/).optional(), reviewId: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
-
-type NativeRequest = { readonly method: "GET" | "POST" | "PATCH"; readonly path: string; readonly body?: unknown };
+const featureCapabilities = new Map<string, GitClientCapability>([
+  ["git-diff", "git-diff"],
+  ["git-blame", "git-blame"],
+  ["git-ci", "git-ci"],
+  ["git-discussions", "git-discussions"],
+  ["git-pull-requests", "git-pull-requests"],
+]);
 
 export class NativeGitClient {
-  private generationId: string | undefined;
+  private readonly transport: NativeGitJsonTransport;
+  private portable: GitServiceClient | undefined;
   private availableFeatures: readonly string[] = [];
-  get features(): readonly string[] { return this.availableFeatures; }
-  constructor(private readonly config: NativeConfig) {}
+
+  constructor(private readonly config: NativeConfig) {
+    this.transport = new NativeGitJsonTransport({
+      baseUrl: config.baseUrl,
+      reviewer: { username: config.username, password: config.password },
+      ...(config.promoter === undefined ? {} : { promoter: { username: config.promoter.username, password: config.promoter.password } }),
+    });
+  }
+
+  get features(): readonly string[] {
+    return this.availableFeatures;
+  }
 
   async attest(): Promise<void> {
-    const identity = identitySchema.parse(await this.request({ method: "GET", path: "/v1/human-reviewer-identity" }));
-    if (identity.reviewerId !== this.config.reviewerId || identity.generationId !== this.config.generationId) throw new NativeGitClientError("native Git human reviewer identity or control-plane generation does not match connection");
-    this.generationId = identity.generationId;
-    this.availableFeatures = identity.features ?? [];
+    const identity = identitySchema.parse(await this.transport.requestIdentity("/v1/human-reviewer-identity"));
+    if (identity.reviewerId !== this.config.reviewerId || identity.generationId !== this.config.generationId) {
+      throw new NativeGitClientError("native Git human reviewer identity or control-plane generation does not match connection");
+    }
     if (this.config.promoter !== undefined) {
       const promoter = z.object({ schemaVersion: z.literal(1), serviceId: z.literal("native-main"), role: z.literal("host-promoter"), hostId: z.string(), generationId: z.string() }).strict()
-        .parse(await this.request({ method: "GET", path: "/v1/host-promoter-identity" }, this.config.promoter));
-      if (promoter.generationId !== identity.generationId || promoter.hostId !== this.config.promoter.hostId) throw new NativeGitClientError("promoter identity or generation conflicts");
+        .parse(await this.transport.requestIdentity("/v1/host-promoter-identity", "promoter"));
+      if (promoter.generationId !== identity.generationId || promoter.hostId !== this.config.promoter.hostId) {
+        throw new NativeGitClientError("promoter identity or generation conflicts");
+      }
+    }
+    this.transport.setGeneration(identity.generationId);
+    this.availableFeatures = identity.features ?? [];
+    const capabilities: GitClientCapability[] = ["git-review"];
+    for (const feature of this.availableFeatures) {
+      const capability = featureCapabilities.get(feature);
+      if (capability !== undefined) capabilities.push(capability);
+    }
+    if (this.config.promoter !== undefined) capabilities.push("git-merge");
+    this.portable = createGitServiceClient({ transport: this.transport, capabilities });
+  }
+
+  async invokeRepositoryFeature(name: string, input: Record<string, unknown>): Promise<unknown> {
+    const client = this.client();
+    const portable = projectInput(input);
+    switch (name) {
+      case "diff.read": return client.readDiff(diffInputSchema.parse(portable));
+      case "blame.line": return client.blameLine(z.object({ namespaceId: z.string(), repositoryId: z.string(), commit: z.string(), path: z.string(), line: z.number() }).parse(portable));
+      case "ci.status": return client.readCiStatus(reviewSelectionSchema.parse(portable));
+      case "pull-requests.list": return client.listPullRequests(portable);
+      case "pull-requests.create": return client.createPullRequest(createPullRequestInputSchema.parse(portable));
+      case "pull-requests.detail": return client.readPullRequest(portable, z.string().parse(input.pullRequestId));
+      case "pull-requests.update": return client.updatePullRequest(updatePullRequestInputSchema.parse(portable));
+      case "pull-requests.refresh": return client.refreshPullRequest(z.object({ namespaceId: z.string(), repositoryId: z.string(), pullRequestId: z.string(), expectedVersion: z.number() }).parse(portable));
+      case "pull-requests.comment": return client.commentPullRequest(commentPullRequestInputSchema.parse(portable));
+      case "pull-requests.review": return client.preparePullRequestReview(z.object({ namespaceId: z.string(), repositoryId: z.string(), pullRequestId: z.string(), expectedVersion: z.number() }).parse(portable));
+      default: throw new NativeGitClientError("Unknown Git repository operation");
     }
   }
 
-  async invokeRepositoryFeature(name: string, input: unknown): Promise<unknown> {
-    const operation = repositoryFeatureOperations.find(operation => operation.name === name);
-    if (!operation) throw new NativeGitClientError("Unknown Git repository operation");
-    const parsed = z.record(z.string(), z.unknown()).parse(operation.parseInput(input));
-    return operation.parseOutput(await this.request(repositoryFeatureRequest(name, parsed)));
+  async listReviews(projectId: string, repositoryId: string): Promise<unknown> {
+    return this.client().listReviews({ namespaceId: projectId, repositoryId });
   }
 
-  async listReviews(projectId: string, repositoryId: string) {
-    return z.array(z.object({ reviewId: z.string().regex(/^[0-9a-f]{64}$/), proposalRef: z.string().max(1024), protectedRef: z.string().max(1024),
-      candidateCommit: z.string().regex(/^[0-9a-f]{40,64}$/), createdAt: z.string().datetime(), status: z.string().max(64) }).strict()).max(100)
-      .parse(await this.request({ method: "GET", path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews` }));
+  async prepareMerge(projectId: string, repositoryId: string, input: { readonly sourceRef: string; readonly targetRef: string }): Promise<unknown> {
+    return this.client().prepareMerge({ namespaceId: projectId, repositoryId, ...input });
   }
-  async prepareMerge(projectId: string, repositoryId: string, input: { sourceRef: string; targetRef: string }) {
-    if (!this.config.promoter) throw new NativeGitHttpError(403);
-    return preparedBranchMergeSchema.parse(await this.request({ method: "POST", path: `/v1/projects/${projectId}/repositories/${repositoryId}/merges`, body: { schemaVersion: 1, sourceRef: input.sourceRef, targetRef: input.targetRef } }, this.config.promoter));
-  }
-  async promote(projectId: string, repositoryId: string, reviewId: string) {
-    if (!this.config.promoter) throw new NativeGitHttpError(403);
-    return z.object({ schemaVersion: z.literal(1), outcome: z.enum(["promoted", "already-current"]), reviewId: z.string(),
-      protectedRef: z.string(), expectedProtectedHead: z.string(), candidateCommit: z.string(), candidateTree: z.string() }).strip()
-      .parse(await this.request({ method: "POST", path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}/promotions`, body: { schemaVersion: 1 } }, this.config.promoter));
+
+  async promote(projectId: string, repositoryId: string, reviewId: string): Promise<PromotionReceipt> {
+    return this.client().promote({ namespaceId: projectId, repositoryId, reviewId });
   }
 
   async getReview(projectId: string, repositoryId: string, reviewId: string): Promise<ReviewDto> {
-    const review = this.decodeReview(await this.request({
-      method: "GET",
-      path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}`
-    }));
-    const common = { schemaVersion: 1 as const, reviewId, generationId: this.config.generationId,
-      candidateCommit: review.candidateCommit, expectedProtectedHead: review.expectedProtectedHead };
-    if (!this.features.includes("git-ci")) {
-      return { ...review, ci: reviewCiStatusSchema.parse({ ...common, state: "not-configured", policy: "absent", requiredJobs: [] }) };
-    }
-    try {
-      const ci = reviewCiStatusSchema.parse(await this.request({ method: "GET",
-        path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}/ci` }));
-      if (ci.reviewId !== reviewId || ci.generationId !== this.config.generationId || ci.candidateCommit !== review.candidateCommit
-        || ci.expectedProtectedHead !== review.expectedProtectedHead) throw new NativeGitClientError("DIM CI evidence does not match the selected review");
-      return { ...review, ci };
-    } catch (error) {
-      if (!(error instanceof Error)) throw error;
-      return { ...review, ci: reviewCiStatusSchema.parse({ ...common, state: "unavailable", policy: "unknown", requiredJobs: [], reason: "inspection-unavailable" }) };
-    }
+    return portableReview(await this.client().getReview({ namespaceId: projectId, repositoryId, reviewId }));
   }
 
-  async resolveReview(projectId: string, repositoryId: string, body: { proposalRef: string; protectedRef?: string | undefined }): Promise<ReviewDto> {
-    const result = z.object({ review: z.object({ reviewId: z.string().regex(/^[0-9a-f]{64}$/) }) }).parse(await this.request({
-      method: "POST", path: `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/resolve`,
-      body: { schemaVersion: 1, proposalRef: body.proposalRef, ...(body.protectedRef === undefined ? {} : { protectedRef: body.protectedRef }) }
-    }));
-    return this.getReview(projectId, repositoryId, result.review.reviewId);
+  async resolveReview(projectId: string, repositoryId: string, input: { readonly proposalRef: string; readonly protectedRef?: string }): Promise<ReviewDto> {
+    return portableReview(await this.client().resolveReview({ namespaceId: projectId, repositoryId, ...input }));
   }
 
   async approveReview(projectId: string, repositoryId: string, reviewId: string): Promise<ReviewDto> {
-    const path = `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}`;
-    await this.request({ method: "POST", path: `${path}/approvals`, body: { requestId: randomUUID() } });
-    return this.getReview(projectId, repositoryId, reviewId);
+    return portableReview(await this.client().approveReview({ namespaceId: projectId, repositoryId }, reviewId));
   }
 
-  async revokeApproval(
-    projectId: string,
-    repositoryId: string,
-    reviewId: string,
-    approvalId: string
-  ): Promise<ReviewDto> {
-    const path = `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}`;
-    await this.request({ method: "POST", path: `${path}/revocations`, body: { approvalId } });
-    return this.getReview(projectId, repositoryId, reviewId);
+  async revokeApproval(projectId: string, repositoryId: string, reviewId: string, approvalId: string): Promise<ReviewDto> {
+    return portableReview(await this.client().revokeReview({ namespaceId: projectId, repositoryId }, reviewId, approvalId));
   }
 
-  private decodeReview(input: unknown): ReviewDto {
-    try { return reviewDto(input); }
-    catch (cause) { throw new NativeGitClientError("native Git returned invalid review evidence", { cause }); }
+  async invokePullRequestWorkflow(name: "pull-requests.approve" | "pull-requests.revoke" | "pull-requests.merge", input: Omit<PullRequestWorkflowInput, "namespaceId"> & { readonly projectId: string }): Promise<unknown> {
+    const client = this.client();
+    const { projectId, ...selection } = input;
+    const portableInput = { ...selection, namespaceId: projectId };
+    if (name === "pull-requests.approve") return portableReview(await client.approvePullRequest(portableInput));
+    if (name === "pull-requests.revoke") return portableReview(await client.revokePullRequest(portableInput, this.config.reviewerId));
+    const merged = await client.mergePullRequest(portableInput);
+    return { ...merged, review: portableReview(merged.review) };
   }
 
-  private async request(input: NativeRequest, credential = { username: this.config.username, password: this.config.password }): Promise<unknown> {
-    const url = new URL(input.path, this.config.baseUrl);
-    const body = input.body === undefined ? undefined : Buffer.from(JSON.stringify(input.body), "utf8");
-    const response = await new Promise<{ readonly status: number; readonly bytes: Buffer }>((resolve, reject) => {
-      const requester = url.protocol === "https:" ? httpsRequest : httpRequest;
-      const outgoing = requester(url, {
-        method: input.method,
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString("base64")}`,
-          Accept: "application/json",
-          ...(this.generationId === undefined ? {} : { "X-Dim-Generation-Id": this.generationId }),
-          ...(body === undefined ? {} : { "Content-Type": "application/json", "Content-Length": String(body.length) })
-        },
-        signal: AbortSignal.timeout(input.path.endsWith("-identity") ? 5_000 : 90_000)
-      }, (incoming) => {
-        const chunks: Buffer[] = [];
-        let size = 0;
-        incoming.on("data", (chunk: Buffer) => {
-          size += chunk.length;
-          if (size > MAX_NATIVE_RESPONSE_BYTES) outgoing.destroy(new NativeGitClientError("native Git response exceeded limit"));
-          else chunks.push(chunk);
-        });
-        incoming.on("end", () => resolve({ status: incoming.statusCode ?? 503, bytes: Buffer.concat(chunks) }));
-      });
-      outgoing.on("error", (cause) => reject(new NativeGitClientError("native Git is unavailable", { cause })));
-      outgoing.once("response", (incoming) => incoming.once("error", (cause) => reject(new NativeGitClientError("native Git response failed", { cause }))));
-      outgoing.end(body);
-    });
-    if (response.status < 200 || response.status >= 300) throw new NativeGitHttpError(response.status);
-    try {
-      const value: unknown = JSON.parse(response.bytes.toString("utf8"));
-      return value;
-    } catch (error) {
-      throw new NativeGitClientError("native Git returned invalid JSON", { cause: error });
-    }
+  private client(): GitServiceClient {
+    if (this.portable === undefined) throw new NativeGitClientError("native Git client identity has not been attested");
+    return this.portable;
   }
 }
 
-export class NativeGitHttpError extends Error {
-  readonly name = "NativeGitHttpError";
-  constructor(readonly status: number) {
-    super("native Git request failed");
-  }
+function projectInput(input: Record<string, unknown>): Record<string, unknown> & { readonly namespaceId: string; readonly repositoryId: string } {
+  const { projectId, repositoryId, ...rest } = input;
+  return { ...rest, namespaceId: z.string().parse(projectId), repositoryId: z.string().parse(repositoryId) };
 }
 
-export class NativeGitClientError extends Error {
-  readonly name = "NativeGitClientError";
+function portableReview(review: { readonly namespaceId: string } & Record<string, unknown>): ReviewDto {
+  return reviewDto({ ...review, projectId: review.namespaceId });
 }
+
+export { NativeGitClientError, NativeGitHttpError } from "./native-transport.js";

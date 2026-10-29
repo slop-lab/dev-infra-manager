@@ -4,7 +4,25 @@
 by host plugins, Web plugins or trusted services. It does not register a plugin
 or deploy the remote service.
 
-`@slop-lab/dim-service-client-native-git` owns review evidence decoding, role attestation, bounded Git HTTP calls, sync results and shared CLI/Web operations. It consumes neutral operation/Git/CI contracts and portable diff/PR/discussion/blame models, without a host, Web runtime or control-plane implementation.
+`@slop-lab/dim-service-client-native-git` is the DIM adapter around
+`@slop-lab/gs-client`. GS owns namespace-scoped review evidence decoding,
+capability-aware requests, immutable pull request decisions, Git CI views and
+sync result semantics. This package retains private role files, identity and
+generation attestation, bounded authenticated HTTP, Project-to-namespace wire
+mapping and shared DIM CLI/Web `Operation` presentation.
+
+## Extraction map
+
+| Portable GS owner | Remaining DIM adapter |
+| --- | --- |
+| `gs/client/src/transport.ts`: semantic request variants, namespace selectors and response limits | `native-transport.ts`: `/v1/projects/...` paths, Basic credentials, generation header, deadlines and byte enforcement |
+| `gs/client/src/schemas.ts`: safe review/CI/promotion/sync DTOs | `dto.ts`: private `projectId` wire mapping to/from public `namespaceId` |
+| `gs/client/src/client.ts`: capability-aware diff, blame, PR, review, CI, merge and sync calls | `client.ts`: reviewer/promoter identity attestation and advertised-feature mapping |
+| `gs/client/src/workflow.ts`: exact PR revision approval, revocation and promotion workflow | `operator.ts` and `repository-features.ts`: DIM `Operation` descriptions, access labels, Project catalog fencing and setup guidance |
+| `gs/client` sync request/result semantics | `sync.ts`: mode-0600 role file, host/generation checks and admission HTTP credential |
+
+The former DIM-only `pull-request-workflow.ts` was removed rather than retained
+as a forwarding alias.
 
 `createNativeGitOperator({ reviewerConnection, promoterConnection?, syncConnection?, projects, selectedService? })` loads private role files, attests the reviewer and optional promoter/sync roles and returns `{ operations, invoke }`. Each invocation validates its input and output and reads the dynamic project catalog before accessing a repository. `projects.list` returns `{ reviewerId, projects: [{ projectId, name, repositoryIds }] }`; all review/sync operations require explicit `projectId` and `repositoryId`. Optional roles remove unavailable mutation operations from the catalog.
 
@@ -26,6 +44,8 @@ remains read-only and callers may impose a shorter discovery deadline.
 
 Repository features expose `diff.read`, `blame.line`, PR conversation operations
 and `ci.status` only when their installed service advertises that capability.
+Revision-anchored PR comments require the PR, discussions and immutable diff
+capabilities together.
 The shared client composes `pull-requests.approve`, `pull-requests.revoke` and
 `pull-requests.merge` from exact PR-version/revision evidence and existing
 decision/promotion APIs. It never records an approval during merge. Missing
