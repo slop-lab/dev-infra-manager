@@ -9,7 +9,7 @@ or an installed plugin.
 | Package | Ownership |
 | --- | --- |
 | `@slop-lab/gs-repository-contracts` | Portable repository selectors, policy declarations/digests, snapshots and candidate refs |
-| `@slop-lab/gs-ci-contracts` | Portable CI workflow, repository input, descriptor, event and review-status schemas |
+| `@slop-lab/gs-ci-contracts` | Portable CI workflow, repository input, check event, evidence-provider and review-status schemas |
 | `@slop-lab/gs-ci` | Standalone CI planning, required execution evidence and durable event outbox |
 | `@slop-lab/gs-repository` | Git executable/storage integrity, smart-HTTP transport, repository-scoped grants and protected-ref ordering |
 | `@slop-lab/gs-repository-service` | Independent durable repository catalog, policy, branch baseline, journal and live-owner authority |

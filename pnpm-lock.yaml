@@ -348,6 +348,9 @@ importers:
       '@slop-lab/gs-repository-service':
         specifier: workspace:0.10.0
         version: link:../../../gs/repository-service
+      '@slop-lab/gs-review-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/review-contracts
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -782,9 +785,6 @@ importers:
       '@slop-lab/gs-blame':
         specifier: workspace:0.10.0
         version: link:../blame
-      '@slop-lab/gs-ci-contracts':
-        specifier: workspace:0.10.0
-        version: link:../ci-contracts
       '@slop-lab/gs-diff':
         specifier: workspace:0.10.0
         version: link:../diff
@@ -1502,6 +1502,9 @@ importers:
       '@slop-lab/gs-repository-contracts':
         specifier: workspace:0.10.0
         version: link:../../gs/repository-contracts
+      '@slop-lab/gs-review-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../gs/review-contracts
       zod:
         specifier: 4.6.6
         version: 4.6.6

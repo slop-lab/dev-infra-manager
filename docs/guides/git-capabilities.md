@@ -14,14 +14,17 @@ ref never grants another repository, host credential or protected-ref authority.
 | `@slop-lab/gs-pull-requests` | PR lifecycle, immutable revisions and versioned PR transitions | Repository access, review approval and Git ref changes |
 | `@slop-lab/gs-blame` | Bounded line-porcelain parsing and attribution models | Git execution, repository visibility and filesystem reads |
 | `@slop-lab/gs-react-diff`, `@slop-lab/gs-react-pull-requests` | Controlled presentation and caller-supplied actions | DIM clients, credentials, account roles and policy decisions |
-| Git repositories control-plane plugin | Registration/import, repository-scoped Git transport, exact owned-ref proofs and protected-ref CAS | Human approval, workflow compilation and worker execution |
-| Git diff, discussions, PR and blame control-plane plugins | Authenticated repository adapters, durable PR history/pins and bounded Git reads | Portable model ownership and implicit grants |
-| Git review control-plane plugin | Exact candidate evidence, trusted reviewer requirements, approvals and revocations | Promotion authority and CI execution |
-| Git merge-policy control-plane plugin | Current approval/quality checks and protected promotion | Creating human approvals or treating conversation state as permission |
-| Git-CI and CI-workflows control-plane plugins | Explicit repository CI policy, candidate planning and current execution evidence | Worker images/resources chosen by candidates |
+| `@slop-lab/gs-repository`, `@slop-lab/gs-repository-service` | Git transport/integrity, durable catalog/policy, scoped reads, protected-ref CAS and exact promotion journal recovery | DIM activation, Projects, workspaces and credentials |
+| GS diff/blame/PR/discussions services | Authorized immutable Git reads, durable PR records/pins and explicit revision-comment composition | DIM HTTP/account registration or implicit review grants |
+| `@slop-lab/gs-review`, `@slop-lab/gs-merge-policy` | Neutral candidate evidence, reviewer decisions, quality authorization and durable protected promotion | DIM raw proposal acquisition and operator transport |
+| `@slop-lab/gs-ci`, `@slop-lab/gs-ci-contracts` | Portable provider-selected checks, immutable plans/evidence and durable delivery outbox | Execution profiles, images, placement, scheduler leases and worker credentials |
+| Git repositories control-plane plugin | DIM registration/import, activation, workspace grants, exact owned-ref proofs and format-12 journal adapter | Duplicating GS Git/CAS implementations |
+| Git diff, discussions, PR and blame control-plane plugins | Authenticated HTTP/Project adapters and owner activation for GS services | Durable PR algorithm ownership or implicit grants |
+| Git review and merge-policy control-plane plugins | DIM role credentials, activation, raw proposal capture, legacy wire codecs and GS authority adapters | Duplicating review/merge algorithms |
+| Git-CI and CI-workflows control-plane plugins | DIM compiler registration, legacy execution/event codecs and scheduler/worker adapters | Worker images/resources chosen by candidates |
 | Execution scheduler / host worker plugins | Trusted capacity enrollment, leases, execution, cleanup and result publication | Repository policy changes and protected promotion |
-| Git-sync control-plane plugin | Trusted upstream fetch, merge proposals and mapped publication | Force publication or bypassing protected promotion |
-| Native Git service client | Private role attestation, bounded calls, public DTOs and exact-PR decision choreography | A server, workspace lifecycle or independent promotion authority |
+| `@slop-lab/gs-sync` / DIM Git-sync plugin | GS fetch/propose/publish algorithms / DIM credential, host configuration and HTTP mapping | Force publication or bypassing protected promotion |
+| `@slop-lab/gs-client` / Native Git service client | GS semantic requests and exact-PR choreography / DIM private role attestation, bounded HTTP, wire mapping and presentation DTOs | A server, workspace lifecycle or independent promotion authority |
 | Native Git host / Web plugins | Selected-host CLI, repository selection, browser state and explicit operator actions | Generic host-core Git semantics or secrets in guests/browser results |
 
 Git review tracing remains a separate optional integration. Its neutral engine
@@ -29,7 +32,7 @@ owns read tracking and dependency comparison; language runtimes own isolated
 execution, and host/control-plane plugins register those runtimes. It is not a
 dependency of ordinary repository transport, diff rendering or PR discussions.
 
-The portable packages live under `packages/git-tools`; DIM runtime adapters live
+The portable packages live under `packages/gs`; DIM runtime adapters live
 under their explicit host, control-plane and Web plugin directories. Source
 library manifests are intentionally private: their build writes independently
 publishable manifests into `dist`. That is not an internal-only model contract.

@@ -55,6 +55,14 @@ or cancel its intents. Policy replacement uses expected policy/head identity.
 Targets bind incarnation, authority epoch, principal, policy digest, protected
 head and selected provider revision.
 
+Repository branch metadata does not enable or default a review feature. The
+review owner interprets its branch declarations; DIM retains its strict
+operator policy-file format and review defaults. Neutral review models use
+namespace/principal identities. Explicit legacy storage/wire codecs preserve
+the old serialized identities without exporting them from the primary SDK.
+CI workflow jobs select named providers, while execution profiles, images,
+resource limits and legacy execution descriptors remain DIM-owned contracts.
+
 Read gates issue revocable borrowed read authority. Mutation/exclusive gates
 add promotion without reacquiring their already-held serialization boundary.
 Selected ref-update providers receive read authority only. Exact finalized
@@ -62,6 +70,20 @@ lookup matches the complete accepted action identity and returns its durable
 intent and receipt. Merge recovery can finish a missing authorization receipt
 after CAS, but never guesses acceptance from the current Git head or reruns
 an unapplied authorization.
+
+Old DIM merge authorizations lacking the additive recovery proof are reconciled
+only against exact finalized format-12 transitions and durable import ownership.
+DIM provider revisions include the underlying GS matcher, preparation and
+quality-provider revisions, not merely a fixed adapter label.
+
+The standalone authority validates complete state, foreign keys, metadata and
+exact managed branch sets at startup. Live SQLite `data_version` checks reject
+external writes. Indexed repository-scoped warm queries and incremental owned
+transaction checks avoid rescanning unrelated transition history. A disposable
+10,000-unrelated-transition measurement showed 50 exact receipt lookups at
+5.1 ms versus 6.0 ms without that history; promotion was 106.8 ms versus
+89.1 ms. These are single shared-host runs, not statistical SLO evidence;
+startup deliberately retains full validation (211.3 ms versus 22.2 ms).
 
 DIM keeps its format-12 journal and existing digest domains through explicit
 translation. Existing receive-hook bytes, review/evidence identities and P1

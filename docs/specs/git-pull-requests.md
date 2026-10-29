@@ -6,7 +6,7 @@ closing a request or posting a comment never grants approval or writes a ref.
 
 ## Portable packages
 
-`packages/git-tools` contains six packages usable without DIM:
+`packages/gs` contains these model/presentation packages usable without DIM:
 
 | Package | Owns |
 | --- | --- |
@@ -24,15 +24,22 @@ Applications own loading, permissions and mutation outcomes. DOM mount helpers
 permit use in a shell that does not use React. Optional external CSS preserves
 strict content security policies. Package READMEs document the component APIs.
 
-## DIM service composition
+## Service ownership and DIM composition
+
+`@slop-lab/gs-repository-service` owns scoped repository read/mutation authority
+and the generic Git reader. `@slop-lab/gs-pull-request-service` owns durable PR
+records, exact revision pins and lifecycle algorithms; review is an optional
+typed `ReviewRequest` capability. `@slop-lab/gs-diff-service` and
+`@slop-lab/gs-blame-service` work without PR or review. Discussions explicitly
+compose PR plus diff through `@slop-lab/gs-discussions-service`.
 
 The managed deployment installs these separately composable control-plane
 plugins:
 
-- `git-diff` reads structured changes between authorized immutable commits.
-- `git-pull-requests` stores conversations and revisions.
-- `git-discussions` enables general and line-comment mutations.
-- `git-blame` reads the original author of an exact file line.
+- `git-diff` authenticates and maps immutable comparison requests to GS.
+- `git-pull-requests` maps principals/routes and owner activation to GS PR state.
+- `git-discussions` authenticates general and line-comment requests.
+- `git-blame` authenticates exact file-line attribution requests.
 
 The repository SDK owns scoped access and immutable Git reads. Its access
 provider is supplied by Git review in the current composition: a configured
@@ -57,20 +64,23 @@ comment additionally binds path, base/head side and line number. The server
 accepts only lines present in that revision's structured diff. Older comments
 remain visible and are marked outdated, never silently moved to new code.
 
-PR writes share the repository mutation queue and require `expectedVersion`.
-The service stores synced records with atomic replacement. Creation of an
+GS PR writes share the repository mutation gate and require `expectedVersion`.
+The GS PR service stores synced records with atomic replacement. Creation of an
 identical open source/target request returns that request; conflicting metadata
 requires reading and editing it. A response lost after another write requires
 authoritative reconciliation before retrying. Listings return the latest 100
 requests; older requests can be read by exact ID.
 
-Review records retain the persisted `proposalRef` field as the candidate source
-ref, not as a requirement to use a proposal namespace. `workspaceId` is present
-and verified only for canonical legacy workspace proposals; ordinary source
+Neutral GS review contracts use namespace/principal identities. Explicit legacy
+storage/wire codecs retain the persisted `proposalRef` field as the candidate
+source ref, not as a requirement to use a proposal namespace. Legacy `workspaceId`
+is present and verified only for canonical workspace proposals; ordinary source
 refs carry no invented workspace provenance. Existing stored review, CI envelope
 and ref-transition identities retain their versions and digest domains.
 
-Preparing review evidence requires the live refs to match the revision. The
+Preparing review evidence resolves the PR's exact stored target branch and
+requires the live refs and returned provider evidence to match the entire
+pinned namespace/repository/source/target commit and tree identity. The
 Web adapter approves that exact evidence through the existing review API.
 Promotion still requires separate promoter authority, current review and all
 protected-ref policies. A new source push invalidates old evidence. After
@@ -79,8 +89,9 @@ revision source commit. It cannot infer merge from a title or conversation state
 Annotated-tag promotion verifies the raw source ref object atomically as well
 as the approved peeled commit; moving a source during compare-and-swap fails.
 
-CLI and Web share exact-version/revision decision choreography in the Native Git
-service client. Preparation, human approval/revocation and operator merge remain
+CLI and Web share portable exact-version/revision choreography in `gs-client`
+through the DIM Native Git HTTP/identity adapter. Preparation, human
+approval/revocation and operator merge remain
 distinct actions. Operator merge can prepare evidence for a zero-human-policy
 change but never records approval; protected promotion still validates current
 human decisions and required DIM execution evidence with separate credentials.
@@ -91,8 +102,10 @@ refresh returns an accepted receipt with refresh pending, not a failed merge.
 
 ## Retained Git objects
 
-PR history pins commits in `refs/dim/extensions/git-pull-requests/`. The owning
-extension durably records each exact ref and commit before creating it. Startup
+PR history retains `refs/dim/extensions/git-pull-requests/` as its persisted ref
+namespace. The GS PR service durably records each exact ref and commit before
+creating it. DIM owner activation repairs missing known pins before business
+readiness; empty/unprepared registrations need no PR repair. Startup
 and live repository proofs validate that ownership; unknown names or wrong
 commits fail closed. Missing pins after interruption are repaired. Owner
 validation includes all records, even those outside the latest-100 listing.
