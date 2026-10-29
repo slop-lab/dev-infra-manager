@@ -50,11 +50,9 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
 }
 
 function managedControllerCommand(args: readonly string[], entrypoint: string, pidPath: string): boolean {
-  const script = args.indexOf(entrypoint);
-  if (script < 1 || args.slice(1, script).some((arg) => !arg.startsWith("-"))) return false;
-  const marker = args.indexOf("--pid-file", script + 3);
-  return args[script + 1] === "controller" && args[script + 2] === "serve"
-    && marker > script + 2 && args[marker + 1] === pidPath;
+  if (args[1] !== entrypoint) return false;
+  const marker = args.indexOf("--pid-file", 4);
+  return args[2] === "controller" && args[3] === "serve" && marker > 3 && args[marker + 1] === pidPath;
 }
 
 function systemdExecArguments(unit: string): string[] | undefined {
