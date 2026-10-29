@@ -22,9 +22,9 @@ failures group as follows; repeated assertions are not independent defects.
 | Source-CI disposable root | `missing source CI tools require a disposable root container` | non-opt-in cases in `sourceCiPreflight.test.ts` | Debian root job with service-autostart denial | Covered by the complete gate; both opt-in real-container cases also pass separately |
 | Nested diagnostic mode | executable mode mismatch | `nativeWorkspaceNestedDockerDiagnostic.test.ts` | source copied with reviewed executable modes | Passes in the exact source gate |
 | Native Git owner image | copied removed `core/packages/native-git/...` path | opt-in `storageOwnership.test.ts` | pinned Node image and current monorepo path | Fixed to copy the owning `git-repositories` source; 6/6 pass |
-| Pinned mise smoke drift | expected mandatory mirror, old help/footer, old controller/CLI paths | `mise-install-smoke.bash` | pinned mise v2026.8.4 in its disposable container | Updated to current optional-provider, selected-host help, independent CLI, and managed-controller contracts; smoke passes |
+| Pinned mise smoke drift | expected mandatory mirror, old help/footer, old controller/CLI paths and reconnect accounting without a post-update baseline | `mise-install-smoke.bash` | pinned mise v2026.8.4 in its disposable container | Updated to current optional-provider, selected-host help, independent CLI, and managed-controller contracts; an incomplete client must reconnect after the controller PID changes; smoke passes |
 | Managed controller update | active probe used ordinary state/runtime roots and accepted controller-shaped processes or units below the install tree | real mise host update with a running managed controller | managed state root, `/dim/managed` runtime identity, private unit metadata and exact installed host entrypoint | Fixed PID and pre-PID systemd probes with focused tests; active update restarts and reconnects while lookalike processes and units are rejected |
-| Guest service removal race | `ESRCH: no such process` after live identity validation, with possible orphaned child | parallel `workspaceGuestClient.test.ts` cleanup | supervisor exits between identity check and signal | Bind removal to the captured boot/start identities and terminate the recorded child after supervisor exit; deterministic regression and complete source gates pass |
+| Guest service removal race | `ESRCH: no such process` after live identity validation, possible orphaned child, or owner metadata replaced while opening | parallel guest service cleanup | supervisor exits between identity check and signal, or atomically republishes its owner record | Retry owner publication, recheck captured boot/start identities immediately before same-user workspace signals, and terminate the recorded child after supervisor exit; deterministic regressions and complete source gates pass |
 
 The final source-gate logs supersede the earlier aggregate failure result; no
 assertion, permission guard or test selection was weakened.
@@ -32,13 +32,13 @@ assertion, permission guard or test selection was weakened.
 ## Complete source gate
 
 The repository's exact isolated gate was run at executable-source commit
-`4cf4488165397e1e43cb0a9c6c42ffae0f3acf4b` using
+`89df3a74e8677d9ef159f959eec8464f36541c56` using
 the checked-in wrapper and pinned Debian Bookworm images:
 
 ```sh
-DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-final-4cf-node24 \
+DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-final-89df-node24 \
   DIM_SOURCE_NODE_MAJOR=24 bash scripts/checks/source-gate-container.bash
-DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-final-4cf-node26 \
+DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-final-89df-node26 \
   DIM_SOURCE_NODE_MAJOR=26 bash scripts/checks/source-gate-container.bash
 ```
 
@@ -46,7 +46,7 @@ Both lanes completed all eight stages: prerequisites, strict checks, package
 build, ordinary tests, executable examples, privileged service fixtures,
 package packs and production dependency audit. Each lane reported:
 
-- unit: 2,024 passed, 5 skipped;
+- unit: 2,026 passed, 5 skipped;
 - CLI: 87 passed;
 - host commands: 12 passed;
 - scenarios: 536 passed, 19 skipped;
