@@ -15,6 +15,7 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
   const directory = state === defaultState ? runtime
     : path.join(runtime, createHash("sha256").update(state).digest("hex").slice(0, 16));
   const pidPath = path.join(directory, "controller.pid");
+  const entrypoint = path.join(path.resolve(runtimeDirectory), "node_modules/.bin/dim-host");
   try {
     const pid = Number((await readFile(pidPath, "utf8")).trim());
     if (Number.isSafeInteger(pid) && pid > 1) {
@@ -22,12 +23,8 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
         stat(`/proc/${pid}`), readFile(`/proc/${pid}/cmdline`, "utf8"), readFile(`/proc/${pid}/stat`, "utf8")
       ]);
       const args = command.split("\0");
-      const controller = args.indexOf("controller");
-      const marker = args.indexOf("--pid-file");
       const processState = snapshot.slice(snapshot.lastIndexOf(")") + 2).split(" ")[0];
-      if (metadata.uid === uid && processState !== "Z" && controller > 0 && args[controller + 1] === "serve"
-        && marker > controller && args[marker + 1] === pidPath
-        && args[controller - 1] === path.join(path.resolve(runtimeDirectory), "node_modules/.bin/dim-host")) return true;
+      if (metadata.uid === uid && processState !== "Z" && managedControllerCommand(args, entrypoint, pidPath)) return true;
     }
   } catch (error) {
     if (!missingProcess(error)) throw error;
@@ -40,11 +37,8 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
   try {
     const metadata = await lstat(unit);
     const args = systemdExecArguments(await readFile(unit, "utf8"));
-    const controller = args?.indexOf("controller") ?? -1;
-    const marker = args?.indexOf("--pid-file") ?? -1;
-    if (!metadata.isFile() || metadata.uid !== uid || (metadata.mode & 0o022) !== 0 || controller < 1
-      || args?.[controller - 1] !== path.join(path.resolve(runtimeDirectory), "node_modules/.bin/dim-host")
-      || args[controller + 1] !== "serve" || marker <= controller || args[marker + 1] !== pidPath) return false;
+    if (!metadata.isFile() || metadata.uid !== uid || (metadata.mode & 0o022) !== 0
+      || !args || !managedControllerCommand(args, entrypoint, pidPath)) return false;
   } catch (error) {
     if (missingProcess(error)) return false;
     throw error;
@@ -53,6 +47,14 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
     execFile("systemctl", ["--user", "is-active", "--quiet", "dim-controller.service"],
       { env, timeout: 5_000 }, (error) => resolve(error === null));
   });
+}
+
+function managedControllerCommand(args: readonly string[], entrypoint: string, pidPath: string): boolean {
+  const script = args.indexOf(entrypoint);
+  if (script < 1 || args.slice(1, script).some((arg) => !arg.startsWith("-"))) return false;
+  const marker = args.indexOf("--pid-file", script + 3);
+  return args[script + 1] === "controller" && args[script + 2] === "serve"
+    && marker > script + 2 && args[marker + 1] === pidPath;
 }
 
 function systemdExecArguments(unit: string): string[] | undefined {
