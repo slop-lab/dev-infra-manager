@@ -2,7 +2,8 @@
 
 An optional read-only repository extension. `POST /v1/projects/:projectId/repositories/:repositoryId/diff`
 accepts `{baseCommit, headCommit}` with complete immutable commit IDs and returns an
-`@slop-lab/gs-diff` snapshot. The portable model and React renderer have no DIM dependency.
+`@slop-lab/gs-diff` snapshot. `@slop-lab/gs-diff-service` owns the real-Git read
+algorithm and live pre/post principal checks; this package is the DIM HTTP/auth adapter.
 
 The repository access provider authenticates the caller, checks generation, current
 activation and project/repository policy membership. The same checks run before and
