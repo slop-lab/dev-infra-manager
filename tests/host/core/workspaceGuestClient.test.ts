@@ -133,27 +133,36 @@ it("parallel service resumes retain one kernel guard across stale metadata recov
   } finally { await run("service", "remove", "worker").catch(() => {}); await rm(home, { recursive: true, force: true }); }
 });
 
-it("service removal accepts a supervisor that exits between identity validation and signaling", async () => {
+it("service removal terminates the recorded child after its supervisor exits", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "dim-guest-service-remove-race-"));
   const env = { ...process.env, HOME: home };
   const run = (...args: string[]) => execute(process.execPath, [client, ...args], { cwd: home, env });
+  let supervisor = 0, child = 0;
+  const processIsLive = async (pid: number) => {
+    try {
+      const snapshot = await readFile(`/proc/${pid}/stat`, "utf8");
+      return snapshot.slice(snapshot.lastIndexOf(")") + 2).split(" ")[0] !== "Z";
+    }
+    catch (error) {
+      if (error instanceof Error && "code" in error && (error.code === "ESRCH" || error.code === "ENOENT")) return false;
+      throw error;
+    }
+  };
   try {
     await run("service", "register", "--name", "worker", "--", process.execPath, "-e", "setInterval(()=>{},1000)");
     await run("service", "resume");
-    const preload = path.join(home, "exit-before-signal.cjs");
-    await writeFile(preload, `
-const originalKill = process.kill;
-process.kill = function(pid, signal) {
-  if (signal === 'SIGTERM') {
-    originalKill(pid, signal);
-    const error = new Error('no such process'); error.code = 'ESRCH'; throw error;
-  }
-  return originalKill(pid, signal);
-};
-`);
-    await execute(process.execPath, ["--require", preload, client, "service", "remove", "worker"], { cwd: home, env });
+    ({ pid: supervisor, child } = JSON.parse(await readFile(path.join(home, ".local/state/dim/services/worker.lock/owner.json"), "utf8")));
+    process.kill(supervisor, "SIGKILL");
+    await expect.poll(() => processIsLive(supervisor)).toBe(false);
+    expect(await processIsLive(child)).toBe(true);
+    await run("service", "remove", "worker");
+    await expect.poll(() => processIsLive(child)).toBe(false);
     expect(JSON.parse((await run("service", "list")).stdout)).toEqual([]);
-  } finally { await run("service", "remove", "worker").catch(() => {}); await rm(home, { recursive: true, force: true }); }
+  } finally {
+    if (supervisor && await processIsLive(supervisor)) process.kill(supervisor, "SIGKILL");
+    if (child && await processIsLive(child)) process.kill(child, "SIGKILL");
+    await run("service", "remove", "worker").catch(() => {}); await rm(home, { recursive: true, force: true });
+  }
 });
 
 it("service resume tolerates owner publication between opening metadata and checking its inode", async () => {

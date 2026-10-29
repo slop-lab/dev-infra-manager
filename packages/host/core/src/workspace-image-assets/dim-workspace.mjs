@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// allow: SIZE_OK — this dependency-free guest asset is delivered as one executable file.
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
@@ -247,6 +248,13 @@ function signalProcess(pid, signal) {
   try { process.kill(pid, signal); return true; }
   catch (error) { if (error instanceof Error && "code" in error && error.code === "ESRCH") return false; throw error; }
 }
+/** @param {number} pid @param {string} ticks */
+async function stopOwnedProcess(pid, ticks) {
+  if (!ticks || ticks !== await processIdentity(pid) || !signalProcess(pid, "SIGTERM")) return;
+  const deadline = Date.now() + 3000;
+  while (ticks === await processIdentity(pid) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 30));
+  if (ticks === await processIdentity(pid)) signalProcess(pid, "SIGKILL");
+}
 /** @param {string} name */
 async function serviceOwner(name) {
   try {
@@ -271,14 +279,16 @@ async function serviceAlive(name) {
 /** @param {string} name */
 async function stopService(name) {
   const owner = await serviceOwner(name);
-  if (!owner || !await serviceAlive(name)) return;
-  if (!signalProcess(owner.pid, "SIGTERM")) return;
+  if (!owner || owner.boot !== (await readFile("/proc/sys/kernel/random/boot_id", "utf8")).trim()) return;
+  if (owner.ticks !== await processIdentity(owner.pid) || !signalProcess(owner.pid, "SIGTERM")) {
+    await stopOwnedProcess(owner.child, owner.childTicks); return;
+  }
   const deadline = Date.now() + 3000;
-  while (await serviceAlive(name) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 30));
-  if (await serviceAlive(name)) {
+  while (owner.ticks === await processIdentity(owner.pid) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 30));
+  if (owner.ticks === await processIdentity(owner.pid)) {
     if (owner.childTicks === await processIdentity(owner.child)) signalProcess(owner.child, "SIGKILL");
     if (owner.ticks === await processIdentity(owner.pid)) signalProcess(owner.pid, "SIGKILL");
-  }
+  } else await stopOwnedProcess(owner.child, owner.childTicks);
 }
 /** @param {string} name */
 async function superviseService(name) {
