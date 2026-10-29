@@ -88,7 +88,7 @@ export function appendPolicyUpdate(
     readonly policy: RepositoryPolicy;
   },
 ): void {
-  const prior = readPolicyUpdates(database, input.selector).at(-1);
+  const prior = readLatestPolicyUpdate(database, input.selector);
   const policyJson = JSON.stringify(input.policy);
   database.prepare("INSERT INTO repository_policy_update VALUES(?,?,?,?,?,?,?,?)").run(
     input.selector.namespaceId,
@@ -133,6 +133,12 @@ export function readBaselines(database: DatabaseSync, selector?: RepositorySelec
   return rows.map((row) => baselineRowSchema.parse(row));
 }
 
+export function readBaseline(database: DatabaseSync, selector: RepositorySelector, protectedRef: string): BranchBaseline | undefined {
+  const row = database.prepare("SELECT * FROM repository_branch_baseline WHERE namespace_id=? AND repository_id=? AND protected_ref=?")
+    .get(selector.namespaceId, selector.repositoryId, protectedRef);
+  return row === undefined ? undefined : baselineRowSchema.parse(row);
+}
+
 export function readPolicyUpdates(database: DatabaseSync, selector?: RepositorySelector): readonly PolicyUpdate[] {
   const rows = selector === undefined
     ? database.prepare("SELECT * FROM repository_policy_update ORDER BY namespace_id,repository_id,revision").all()
@@ -145,10 +151,18 @@ export function readPolicyUpdates(database: DatabaseSync, selector?: RepositoryS
   });
 }
 
+export function readLatestPolicyUpdate(database: DatabaseSync, selector: RepositorySelector): PolicyUpdate | undefined {
+  const row = database.prepare("SELECT * FROM repository_policy_update WHERE namespace_id=? AND repository_id=? ORDER BY revision DESC LIMIT 1")
+    .get(selector.namespaceId, selector.repositoryId);
+  if (row === undefined) return undefined;
+  const parsed = policyUpdateRowSchema.parse(row);
+  return { ...parsed, policy: parseStoredPolicy(parsed.policy_json, parsed.policy_digest) };
+}
+
 export function effectivePolicy(database: DatabaseSync, selector: RepositorySelector): EffectivePolicy {
   const catalog = catalogEntry(database, selector);
   if (catalog === undefined) throw new RepositoryStateError("repository is not registered");
-  const update = readPolicyUpdates(database, selector).at(-1);
+  const update = readLatestPolicyUpdate(database, selector);
   if (update !== undefined) return { policy: update.policy, policyDigest: update.policy_digest };
   return {
     policy: parseStoredPolicy(catalog.initial_policy_json, catalog.initial_policy_digest),

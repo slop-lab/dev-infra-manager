@@ -12,6 +12,7 @@ import {
 } from "@slop-lab/gs-repository";
 import type { RepositorySelector } from "@slop-lab/gs-repository-contracts";
 import { catalogEntry, effectivePolicy } from "./catalog.js";
+import type { RepositoryStateIntegrityBoundary } from "./integrity-boundary.js";
 import { immutableRepositoryPolicy, repositoryPolicyDigest } from "./model.js";
 import type { RepositoryTarget, RepositoryTargetSelector } from "./ports.js";
 import { RepositoryStateError } from "./state.js";
@@ -26,6 +27,7 @@ export class RepositoryTargetOwner {
   readonly #epoch: string;
   readonly #expectedRefPolicyRevision: string;
   readonly #currentRefPolicyRevision: () => string;
+  readonly #integrity: RepositoryStateIntegrityBoundary;
 
   constructor(options: {
     readonly runtime: GitRepositoryRuntime;
@@ -34,6 +36,7 @@ export class RepositoryTargetOwner {
     readonly epoch: string;
     readonly expectedRefPolicyRevision: string;
     readonly currentRefPolicyRevision: () => string;
+    readonly integrity: RepositoryStateIntegrityBoundary;
   }) {
     this.#runtime = options.runtime;
     this.#gitIdentity = options.gitIdentity;
@@ -41,9 +44,11 @@ export class RepositoryTargetOwner {
     this.#epoch = options.epoch;
     this.#expectedRefPolicyRevision = options.expectedRefPolicyRevision;
     this.#currentRefPolicyRevision = options.currentRefPolicyRevision;
+    this.#integrity = options.integrity;
   }
 
   async resolve(selector: RepositoryTargetSelector): Promise<RepositoryTarget> {
+    this.#integrity.assertUnchanged();
     const catalog = catalogEntry(this.#database, selector);
     if (catalog === undefined) throw new RepositoryStateError("repository is not registered");
     this.#assertRefPolicyRevision();
@@ -63,6 +68,7 @@ export class RepositoryTargetOwner {
     };
     await assertRegisteredRepository(this.#runtime, target.selector);
     await this.assertGitHead(target.selector, head.protectedRef, head.commit, head.tree);
+    this.#integrity.assertUnchanged();
     return target;
   }
 
@@ -99,6 +105,7 @@ export class RepositoryTargetOwner {
   }
 
   async locateForRecovery(intent: ProtectedRefIntent): Promise<string> {
+    this.#integrity.assertUnchanged();
     const catalog = catalogEntry(this.#database, intent);
     const policy = effectivePolicy(this.#database, intent);
     if (catalog === undefined || catalog.incarnation_id !== intent.incarnationId
@@ -106,15 +113,18 @@ export class RepositoryTargetOwner {
       throw new RepositoryStateError("pending repository transition authority is stale");
     }
     await assertRegisteredRepository(this.#runtime, intent);
+    this.#integrity.assertUnchanged();
     return this.repositoryPath(intent);
   }
 
   async assertGitHead(selector: RepositorySelector, ref: string, commit: string, tree: string): Promise<void> {
+    this.#integrity.assertUnchanged();
     await assertGitExecutableIdentity(this.#runtime.gitExecutable, this.#gitIdentity);
     const repositoryPath = this.repositoryPath(selector);
     const actualCommit = await this.git(repositoryPath, ref);
     const actualTree = await this.git(repositoryPath, `${commit}^{tree}`);
     if (actualCommit !== commit || actualTree !== tree) throw new RepositoryStateError("repository Git head conflicts with durable authority");
+    this.#integrity.assertUnchanged();
   }
 
   private repositoryPath(selector: RepositorySelector): string {

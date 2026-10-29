@@ -1,17 +1,19 @@
 import type { DatabaseSync } from "node:sqlite";
 import { assertGitExecutableIdentity, compareAndSwapProtectedRef, parseProtectedRefFinalizedQuery, recoverProtectedRefChanges, type GitExecutableIdentity, type GitRepositoryRuntime, type ProtectedRefChange, type ProtectedRefFinalized, type ProtectedRefFinalizedQuery, type ProtectedRefPorts, type ProtectedRefReceipt } from "@slop-lab/gs-repository";
-import { repositoryBranches, type Namespace, type RepositorySelector } from "@slop-lab/gs-repository-contracts";
+import { type Namespace, type RepositorySelector } from "@slop-lab/gs-repository-contracts";
 import { RepositoryAdmission } from "./admission.js";
-import { appendPolicyUpdate, catalogEntry, effectivePolicy, insertRegistration, listCatalog, listRepositorySelectors, readBaselines } from "./catalog.js";
+import { catalogEntry, effectivePolicy, listCatalog, listRepositorySelectors } from "./catalog.js";
+import { RepositoryCatalogOwner } from "./catalog-owner.js";
 import { BorrowedRepositoryMutationAuthorityHandle, BorrowedRepositoryReadAuthorityHandle, type BorrowedReadOperations } from "./borrowed-authority.js";
 import { createJournalPort } from "./journal.js";
-import { newAuthorityEpoch, registerRepositorySchema, replacePolicySchema, type RegisterRepositoryInput, type ReplaceRepositoryPolicyInput } from "./model.js";
+import { RepositoryStateIntegrityBoundary } from "./integrity-boundary.js";
+import { newAuthorityEpoch, type RegisterRepositoryInput, type ReplaceRepositoryPolicyInput } from "./model.js";
 import { acquireStateOwner, type StateOwner } from "./owner.js";
-import { assertPolicyCapabilities, assertStoredPolicyCapabilities } from "./policy-capabilities.js";
+import { assertStoredPolicyCapabilities } from "./policy-capabilities.js";
 import { authorizeRefUpdatePolicies, selectedRefUpdatePolicyRevision } from "./ref-update-policy.js";
 import type { RefUpdatePolicy, BorrowedRepositoryMutationAccess, BorrowedRepositoryMutationAuthority, BorrowedRepositoryReadAccess, PolicySectionOwner, RepositoryAuthority, RepositoryAvailability, RepositoryExclusiveGate, RepositoryMutationGate, RepositoryReadGate, RepositoryTarget, RepositoryTargetSelector } from "./ports.js";
-import { initializeAuthorityEpoch, openStateDatabase, RepositoryStateError, transaction } from "./state.js";
-import { assertDurableState, currentHead, hasPending } from "./state-validation.js";
+import { initializeAuthorityEpoch, openStateDatabase, RepositoryStateError } from "./state.js";
+import { assertDurableState, hasPending } from "./state-validation.js";
 import { RepositoryTargetOwner } from "./target-owner.js";
 
 export type RepositoryAuthorityOptions = {
@@ -29,11 +31,13 @@ export async function openRepositoryAuthority(options: RepositoryAuthorityOption
   let database: DatabaseSync | undefined;
   try {
     database = await openStateDatabase(options.statePath, owner.createState);
+    const integrity = new RepositoryStateIntegrityBoundary(database);
     assertDurableState(database);
     assertStoredPolicyCapabilities(database, options.policySectionOwners ?? [], options.refUpdatePolicies);
     const epoch = newAuthorityEpoch();
     initializeAuthorityEpoch(database, epoch, refPolicyRevision);
-    const authority = new DurableRepositoryAuthority(options, { owner, database, epoch, refPolicyRevision });
+    integrity.assertUnchanged();
+    const authority = new DurableRepositoryAuthority(options, { owner, database, epoch, refPolicyRevision, integrity });
     await authority.recover();
     return authority;
   } catch (error) {
@@ -50,21 +54,21 @@ export class DurableRepositoryAuthority implements RepositoryAuthority, Reposito
   readonly #ports: ProtectedRefPorts;
   readonly #borrowedPorts: ProtectedRefPorts;
   readonly #targets: RepositoryTargetOwner;
+  readonly #catalogOwner: RepositoryCatalogOwner;
   readonly #admission = new RepositoryAdmission();
-  readonly #refUpdatePolicies: readonly RefUpdatePolicy[];
-  readonly #policySectionOwners: readonly PolicySectionOwner[];
+  readonly #integrity: RepositoryStateIntegrityBoundary;
 
   constructor(options: RepositoryAuthorityOptions, resources: {
     readonly owner: StateOwner;
     readonly database: DatabaseSync;
     readonly epoch: string;
     readonly refPolicyRevision: string;
+    readonly integrity: RepositoryStateIntegrityBoundary;
   }) {
     this.#owner = resources.owner;
     this.#database = resources.database;
     this.authorityEpoch = resources.epoch;
-    this.#refUpdatePolicies = options.refUpdatePolicies;
-    this.#policySectionOwners = options.policySectionOwners ?? [];
+    this.#integrity = resources.integrity;
     this.#targets = new RepositoryTargetOwner({
       runtime: options.runtime,
       gitIdentity: options.gitIdentity,
@@ -72,11 +76,14 @@ export class DurableRepositoryAuthority implements RepositoryAuthority, Reposito
       epoch: resources.epoch,
       expectedRefPolicyRevision: resources.refPolicyRevision,
       currentRefPolicyRevision: () => selectedRefUpdatePolicyRevision(options.refUpdatePolicies),
+      integrity: resources.integrity,
     });
+    this.#catalogOwner = new RepositoryCatalogOwner({ database: resources.database, integrity: resources.integrity,
+      targets: this.#targets, providers: options.refUpdatePolicies, sectionOwners: options.policySectionOwners ?? [] });
     const ports: Omit<ProtectedRefPorts, "serialization"> = {
       runtime: options.runtime,
       gitIdentity: options.gitIdentity,
-      journal: createJournalPort(resources.database),
+      journal: createJournalPort(resources.database, resources.integrity),
       targets: {
         resolve: (change) => this.#targets.resolveCore({
           namespaceId: change.namespaceId,
@@ -107,55 +114,11 @@ export class DurableRepositoryAuthority implements RepositoryAuthority, Reposito
   }
 
   async registerRepository(input: RegisterRepositoryInput): Promise<RepositoryTarget> {
-    const registration = registerRepositorySchema.parse(input);
-    return this.#withExclusive(async () => {
-      assertPolicyCapabilities(registration.policy, this.#policySectionOwners, this.#refUpdatePolicies);
-      if (catalogEntry(this.#database, registration.selector) !== undefined) throw new RepositoryStateError("repository is already registered");
-      const declared = repositoryBranches(registration.policy);
-      const refs = new Set(registration.branches.map((branch) => branch.protectedRef));
-      if (refs.size !== registration.branches.length || refs.size !== Object.keys(declared).length
-        || Object.keys(declared).some((ref) => !refs.has(ref))) {
-        throw new RepositoryStateError("registered branch baselines must exactly match repository policy");
-      }
-      for (const branch of registration.branches) {
-        await this.#targets.assertGitHead(registration.selector, branch.protectedRef, branch.commit, branch.tree);
-      }
-      transaction(this.#database, () => {
-        insertRegistration(this.#database, registration);
-        assertDurableState(this.#database);
-      });
-      return this.#targets.resolve(registration.selector);
-    });
+    return this.#withExclusive(() => this.#catalogOwner.register(input));
   }
 
   async replacePolicy(input: ReplaceRepositoryPolicyInput): Promise<RepositoryTarget> {
-    const replacement = replacePolicySchema.parse(input);
-    return this.#withExclusive(async () => {
-      assertPolicyCapabilities(replacement.policy, this.#policySectionOwners, this.#refUpdatePolicies);
-      assertDurableState(this.#database);
-      if (hasPending(this.#database, replacement.selector)) throw new RepositoryStateError("repository transition recovery is pending");
-      const current = effectivePolicy(this.#database, replacement.selector);
-      const head = currentHead(this.#database, { ...replacement.selector, protectedRef: current.policy.protectedRef });
-      const baselines = readBaselines(this.#database, replacement.selector);
-      const branches = repositoryBranches(replacement.policy);
-      if (current.policyDigest !== replacement.expectedPolicyDigest || head.commit !== replacement.expectedProtectedHead
-        || replacement.policy.protectedRef !== current.policy.protectedRef
-        || Object.keys(branches).length !== baselines.length
-        || Object.keys(branches).some((ref) => !baselines.some((baseline) => baseline.protected_ref === ref))) {
-        throw new RepositoryStateError("repository policy compare-and-swap conflicts");
-      }
-      transaction(this.#database, () => {
-        appendPolicyUpdate(this.#database, {
-          selector: replacement.selector,
-          headSequence: head.sequence,
-          headCommit: head.commit,
-          previousPolicyDigest: current.policyDigest,
-          policy: replacement.policy,
-        });
-        assertDurableState(this.#database);
-      });
-      return this.#targets.resolve(replacement.selector);
-    });
+    return this.#withExclusive(() => this.#catalogOwner.replacePolicy(input));
   }
 
   promote(change: ProtectedRefChange): Promise<ProtectedRefReceipt> {
@@ -222,11 +185,21 @@ export class DurableRepositoryAuthority implements RepositoryAuthority, Reposito
   }
 
   #withExclusive<Result>(operation: () => Promise<Result>): Promise<Result> {
-    return this.#admission.runExclusive(operation);
+    return this.#admission.runExclusive(async () => {
+      this.#integrity.assertUnchanged();
+      const result = await operation();
+      this.#integrity.assertUnchanged();
+      return result;
+    });
   }
 
   #withRead<Result>(operation: () => Promise<Result>): Promise<Result> {
-    return this.#admission.runRead(operation);
+    return this.#admission.runRead(async () => {
+      this.#integrity.assertUnchanged();
+      const result = await operation();
+      this.#integrity.assertUnchanged();
+      return result;
+    });
   }
 
   #borrowedReadOperations(): BorrowedReadOperations {

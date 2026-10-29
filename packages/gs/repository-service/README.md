@@ -10,6 +10,23 @@ transaction before validating or recovering state. A second live process cannot
 recover or cancel the first owner's pending intent. Startup fails closed for
 missing or corrupt previously owned storage.
 
+Startup is the complete integrity boundary: schema/version and singleton
+metadata, `foreign_key_check`, every catalog/baseline/policy chain, repository
+sequence, branch predecessor, authority epoch and journal digest are validated.
+Managed branch sets in every policy update must exactly equal the durable
+baseline set; subsets and supersets both fail. Transition JSON/digest domains are
+unchanged, while redundant protected-ref and authorization columns plus scoped
+indexes make current-head and receipt reads selective.
+
+After startup the live authority records SQLite `data_version`. Warm operations
+check that fence before and after admitted work; any commit from another SQLite
+connection fails closed as an external state change. Because the validated owner
+connection is the only accepted writer and uses foreign keys plus durable
+transactions, normal resolve/promotion/receipt paths use repository-scoped latest
+row queries and incremental intent validation rather than rescanning global
+history. There is no TTL or unchecked persisted cache; restart always performs
+the full validation again.
+
 Registration records an immutable repository incarnation, owner principal,
 trusted branch baselines and initial policy. Every process start creates a new
 authority epoch. Promotion durably appends an exact incarnation/epoch/policy

@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 
-const STATE_VERSION = 1;
+const STATE_VERSION = 2;
 const schemaNames = [
   "authority_epoch",
   "repository_branch_baseline",
@@ -103,12 +103,17 @@ function initializeState(database: DatabaseSync): void {
       namespace_id TEXT NOT NULL,
       repository_id TEXT NOT NULL,
       sequence INTEGER NOT NULL CHECK(sequence>0),
+      protected_ref TEXT NOT NULL,
+      authorization_id TEXT NOT NULL,
       transition_id TEXT NOT NULL UNIQUE,
       record_json TEXT NOT NULL,
       finalized INTEGER NOT NULL CHECK(finalized IN(0,1)),
       PRIMARY KEY(namespace_id,repository_id,sequence),
       FOREIGN KEY(namespace_id,repository_id) REFERENCES repository_catalog(namespace_id,repository_id)
     ) STRICT;
+    CREATE INDEX repository_ref_transition_branch ON repository_ref_transition(namespace_id,repository_id,protected_ref,finalized,sequence DESC);
+    CREATE INDEX repository_ref_transition_authorization ON repository_ref_transition(namespace_id,repository_id,authorization_id,protected_ref,finalized,sequence);
+    CREATE INDEX repository_ref_transition_pending ON repository_ref_transition(finalized,namespace_id,repository_id,sequence);
     INSERT INTO service_metadata VALUES(1,'${"0".repeat(64)}');
     PRAGMA user_version=${STATE_VERSION};
     COMMIT;
