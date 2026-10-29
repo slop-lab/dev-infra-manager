@@ -1,0 +1,27 @@
+{
+  "name": "@slop-lab/gs-diff-service",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Independent immutable Git diff service",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": { "types": "./src/index.ts", "default": "./src/index.ts" },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": { "build": "node ../build-package.ts", "check": "tsc -p tsconfig.json --noEmit" },
+  "dependencies": {
+    "@slop-lab/gs-diff": "workspace:0.10.0",
+    "@slop-lab/gs-repository-contracts": "workspace:0.10.0",
+    "@slop-lab/gs-repository-service": "workspace:0.10.0"
+  },
+  "devDependencies": { "@types/node": "24.13.3", "typescript": "5.8.3" },
+  "engines": { "node": "^24.0.0 || ^26.0.0" },
+  "publishConfig": { "access": "public" }
+}
