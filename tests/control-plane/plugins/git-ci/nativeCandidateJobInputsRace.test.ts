@@ -1,12 +1,12 @@
 import { assertGitVersion } from "../../../../packages/control-plane/plugins/git-repositories/src/repository.js";
-import { readNativeCandidateJobInputsFromGit } from "../../../../packages/control-plane/plugins/git-ci/src/native-candidate-job-inputs.js";
+import { readNativeCandidateJobInputsFromGit } from "../../../../packages/gs/ci/src/candidate-job-inputs.js";
 import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CandidateExecutionError,
-} from "@slop-lab/dim-contracts-ci/descriptor";
+} from "@slop-lab/gs-ci-contracts";
 import { git, gitExecutable } from "../../../support/gitCommands.js";
 import {
   nativeCandidateJobInputsFixture,

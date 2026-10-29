@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { createAuthoritativeNativeReviewDeliveryProjection, createAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-ci/src/plan-schema.js";
+import { createAuthoritativeNativeReviewDeliveryProjection, createAuthoritativeNativeReviewEnvelope } from "../../../../packages/gs/ci/src/plan-schema.js";
 import { projectionDigestInput } from "./projectionDigestFixture.js";
 
 it("retains the approved ff4 review, CI envelope and event digest domains", () => {

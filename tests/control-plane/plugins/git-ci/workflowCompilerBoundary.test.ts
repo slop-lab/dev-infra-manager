@@ -1,9 +1,9 @@
-import { readNativeCandidateJobInputsFromGit } from "../../../../packages/control-plane/plugins/git-ci/src/native-candidate-job-inputs.js";
+import { readNativeCandidateJobInputsFromGit } from "../../../../packages/gs/ci/src/candidate-job-inputs.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
-import type { WorkflowCompiler } from "../../../../packages/contracts/ci/src/workflow-plugin-api.js";
+import { CandidateExecutionError } from "@slop-lab/gs-ci-contracts";
+import type { WorkflowCompiler } from "../../../../packages/gs/ci-contracts/src/index.js";
 import { nativeCandidateJobInputsFixture, type NativeCandidateJobInputsFixture } from "./nativeCandidateJobInputsHarness.js";
 
 const fixtures: NativeCandidateJobInputsFixture[] = [];

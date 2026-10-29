@@ -1,9 +1,9 @@
 import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
+import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
 import { readPendingAuthoritativeNativeDeliveries, recordExplicitAuthoritativeNativeDeliveryIntent,
-  supersedeAuthoritativeNativeDelivery } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js";
+  supersedeAuthoritativeNativeDelivery } from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "./nativeBundleReviewFixture.js";
 import { cleanupFinalizeFixtures, closeFinalizeService, generationId, rootRepository } from "../git-repositories/nativeRootImportFinalizeFixture.js";
 

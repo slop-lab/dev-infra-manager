@@ -1,4 +1,4 @@
-import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
+import { CandidateExecutionError } from "@slop-lab/gs-ci-contracts";
 import { candidateArgv } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
 import { createHash } from "node:crypto";
 import { chmod, readdir, writeFile } from "node:fs/promises";

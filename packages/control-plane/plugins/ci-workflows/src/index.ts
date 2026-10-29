@@ -1,8 +1,12 @@
+import { createHash } from "node:crypto";
 import { workflowCompilerExtension, DEFAULT_WORKFLOW_COMPILER } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";
 import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { isScalar, parseDocument, visit } from "yaml";
 import { z } from "zod";
 export const candidateArgv = ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"] as const;
+export const dimWorkflowCompilerRevision = createHash("sha256")
+  .update("dim-ci-workflow-compiler-v1\0.dim/ci/runner.yml\0strict-yaml-v1")
+  .digest("hex");
 
 export class WorkflowSyntaxError extends Error {}
 
@@ -26,6 +30,7 @@ export type WorkflowJob = {
 
 export const dimWorkflowCompiler = {
   configurationPath: ".dim/ci/runner.yml",
+  revision: dimWorkflowCompilerRevision,
   compile(bytes: Buffer): readonly WorkflowJob[] {
     const parsed = configSchema.safeParse(parseStrictYaml(bytes));
     if (!parsed.success) throw new WorkflowSyntaxError("workflow must define jobs with a script and optional runtime", {

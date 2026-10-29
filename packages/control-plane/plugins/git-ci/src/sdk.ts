@@ -1,18 +1,17 @@
-export { readAuthoritativeNativeReviewEnvelope as readGitCiEnvelope, readAuthoritativeNativeReviewEnvelopes as readGitCiEnvelopes } from "./plan-store.js";
-export { gitCiPlanSchema, gitCiEnvelope, saveGitCiPlan } from "./plan-store.js";
-export { readVerifiedGitCiDeliveryProjection } from "./plan-store.js";
-export type { VerifiedGitCiDeliveryProjection } from "./plan-store.js";
-export { createAuthoritativeNativeReviewEnvelope as createGitCiEnvelope, parseAuthoritativeNativeReviewEnvelope as parseGitCiEnvelope } from "./plan-schema.js";
-export type { AuthoritativeNativeReviewEnvelope as GitCiEnvelope, AuthoritativeNativePlanning as GitCiPlanning } from "./plan-schema.js";
-export { gitCiPolicySchema, gitCiPolicy, parseGitCiPolicy, requiredJobsRevision } from "./policy.js";
+export { readAuthoritativeNativeReviewEnvelope as readGitCiEnvelope, readAuthoritativeNativeReviewEnvelopes as readGitCiEnvelopes,
+  gitCiPlanSchema, gitCiEnvelope, saveGitCiPlan, readVerifiedGitCiDeliveryProjection,
+  createAuthoritativeNativeReviewEnvelope as createGitCiEnvelope,
+  parseAuthoritativeNativeReviewEnvelope as parseGitCiEnvelope,
+  gitCiPolicySchema, gitCiPolicy, parseGitCiPolicy, requiredJobsRevision,
+  readNativeCandidateJobInputsFromGit } from "@slop-lab/gs-ci";
+export type { VerifiedGitCiDeliveryProjection, AuthoritativeNativeReviewEnvelope as GitCiEnvelope,
+  AuthoritativeNativePlanning as GitCiPlanning, CiDeliveryPublicationFaults } from "@slop-lab/gs-ci";
 export { gitCiConfigSchema } from "./config.js";
 export { gitCiPreparation } from "./preparation.js";
 export type { GitCiRuntime } from "./runtime.js";
-export { readNativeCandidateJobInputsFromGit } from "./native-candidate-job-inputs.js";
 export { loadAuthoritativeNativeCandidateJobInputs } from "./authoritative-native-candidate-job-inputs.js";
 
 export { prepareGitCi } from "./index.js";
 export type { GitCiOptions } from "./index.js";
-export type { CiDeliveryPublicationFaults } from "./delivery-publication.js";
 
-export { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
+export { CandidateExecutionError } from "@slop-lab/gs-ci-contracts";

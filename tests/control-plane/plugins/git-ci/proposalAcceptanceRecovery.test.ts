@@ -3,8 +3,8 @@ import { afterEach, expect, it } from "vitest";
 import { reviewPreparations, reviewChangeMatchers, createAuthoritativeNativeReview, readAuthoritativeNativeReviewEnvelopes } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { proposalAcceptanceState, stageProposalAcceptance } from "../../../../packages/control-plane/plugins/git-review/src/proposal-acceptance.js";
 import { readRawProposalJobs } from "../../../../packages/control-plane/plugins/git-review/src/raw-proposal-journal.js";
-import { readPendingAuthoritativeNativeDeliveries } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
+import { readPendingAuthoritativeNativeDeliveries } from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
+import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
 import { addCandidateCommit, nativeBundleReviewFixture, reviewProposalRef } from "./nativeBundleReviewFixture.js";
 import { activateFinalizeServiceForGeneration, activationTokenB, cleanupFinalizeFixtures, closeFinalizeService,
   generationB, generationId, hostPromoterAuthorization, humanReviewerAuthorization, rootRepository, runGit, activationToken,

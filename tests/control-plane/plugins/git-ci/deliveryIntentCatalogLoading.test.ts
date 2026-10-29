@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import * as reconciliation from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-reconciliation.js";
-import type { DeliveryIntentCatalogState } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-retained.js";
+import * as reconciliation from "../../../../packages/gs/ci/src/delivery-intent-catalog-reconciliation.js";
+import type { DeliveryIntentCatalogState } from "../../../../packages/gs/ci/src/delivery-intent-catalog-retained.js";
 
 it("counts an in-flight directory load before another repository can claim the last catalog slot", async () => {
   const root = await mkdtemp(join(tmpdir(), "dim-intent-catalog-loading-"));

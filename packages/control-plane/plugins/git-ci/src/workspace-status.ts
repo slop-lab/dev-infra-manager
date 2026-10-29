@@ -1,7 +1,7 @@
-import type { ReviewCiJob, ReviewCiStatus } from "@slop-lab/dim-contracts-ci/review-status";
+import type { ReviewCiJob, ReviewCiStatus } from "@slop-lab/gs-ci-contracts";
 import type { AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { currentExecutionEvidence, ExecutionConflictError } from "./execution-evidence.js";
-import { readAuthoritativeNativeReviewEnvelope } from "./plan-store.js";
+import { readAuthoritativeNativeReviewEnvelope } from "@slop-lab/gs-ci";
 import { readReviewCiStatus } from "./review-status-http.js";
 import type { GitCiRuntime } from "./runtime.js";
 

@@ -3,14 +3,14 @@ import { copyFile, open, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFil
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
+import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
 import {
   readSelectableDeliveryIntents,
   recordExplicitAuthoritativeNativeDeliveryIntent
-} from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-intent-store.js";
-import { deliveryIntentKey, deliveryIntentSchema } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-record.js";
-import { readPendingAuthoritativeNativeDeliveries } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js";
-import * as planStore from "../../../../packages/control-plane/plugins/git-ci/src/plan-store.js";
+} from "../../../../packages/gs/ci/src/authoritative-native-delivery-intent-store.js";
+import { deliveryIntentKey, deliveryIntentSchema } from "../../../../packages/gs/ci/src/delivery-intent-record.js";
+import { readPendingAuthoritativeNativeDeliveries } from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
+import * as planStore from "../../../../packages/gs/ci/src/plan-store.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "./nativeBundleReviewFixture.js";
 import {
   cleanupFinalizeFixtures,
@@ -19,7 +19,7 @@ import {
   rootRepository
 } from "../git-repositories/nativeRootImportFinalizeFixture.js";
 import { authoritativePolicy } from "../git-repositories/authoritativeNativeCandidateFixture.js";
-import { DeliveryIntentCatalogCapacity } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-capacity.js";
+import { DeliveryIntentCatalogCapacity } from "../../../../packages/gs/ci/src/delivery-intent-catalog-capacity.js";
 
 const binding = authoritativeNativeDeliveryBinding("ci", "http://execution:8080/v1/jobs");
 const roots: string[] = [];

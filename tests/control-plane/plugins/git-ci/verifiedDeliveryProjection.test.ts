@@ -13,7 +13,7 @@ import {
   readVerifiedGitCiDeliveryProjection,
   saveGitCiPlan,
   type GitCiPlan
-} from "../../../../packages/control-plane/plugins/git-ci/src/plan-store.js";
+} from "../../../../packages/gs/ci/src/plan-store.js";
 import {
   cleanupFinalizeFixtures,
   closeFinalizeService,

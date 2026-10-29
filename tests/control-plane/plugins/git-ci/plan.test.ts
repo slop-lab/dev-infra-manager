@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-schema.js";
 import { saveAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-store.js";
-import { gitCiEnvelope, saveGitCiPlan, type GitCiPlan } from "../../../../packages/control-plane/plugins/git-ci/src/plan-store.js";
-import { gitCiPolicy, parseGitCiPolicy, requiredJobsRevision } from "../../../../packages/control-plane/plugins/git-ci/src/policy.js";
+import { gitCiEnvelope, saveGitCiPlan, type GitCiPlan } from "../../../../packages/gs/ci/src/plan-store.js";
+import { gitCiPolicy, parseGitCiPolicy, requiredJobsRevision } from "../../../../packages/gs/ci/src/policy.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });

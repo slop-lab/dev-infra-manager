@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "description": "Git candidate planning, scoped execution inputs and CI evidence",
+  "description": "DIM adapters for GS CI planning, execution transport and evidence",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -41,6 +41,10 @@
     "build": "node ../../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts"
   },
   "dependencies": {
+    "@slop-lab/gs-ci": "workspace:0.10.0",
+    "@slop-lab/gs-ci-contracts": "workspace:0.10.0",
+    "@slop-lab/gs-repository-contracts": "workspace:0.10.0",
+    "@slop-lab/gs-repository-service": "workspace:0.10.0",
     "zod": "4.6.6",
     "@slop-lab/dim-contracts-ci": "workspace:0.10.0",
     "@slop-lab/dim-contracts-git": "workspace:0.10.0",

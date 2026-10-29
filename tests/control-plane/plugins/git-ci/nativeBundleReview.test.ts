@@ -16,7 +16,7 @@ import {
   waitForPublishedReview
 } from "./nativeBundleReviewFixture.js";
 import { authoritativePolicy } from "../git-repositories/authoritativeNativeCandidateFixture.js";
-import { createAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-ci/src/plan-schema.js";
+import { createAuthoritativeNativeReviewEnvelope } from "../../../../packages/gs/ci/src/plan-schema.js";
 
 afterEach(cleanupFinalizeFixtures);
 

@@ -1,11 +1,18 @@
 # Git CI integration
 
-`@slop-lab/dim-control-plane-plugin-git-ci` connects reviewed Git candidates to
-an independently deployed CI coordinator. It owns workflow planning, immutable
-multi-repository execution inputs, candidate read leases, execution grants,
-result evidence and durable CI event delivery. It does not own Git repository
-registration, human approvals, protected-ref compare-and-swap, worker runtimes
-or general-purpose outgoing webhooks.
+`@slop-lab/dim-control-plane-plugin-git-ci` adapts `@slop-lab/gs-ci` to DIM's
+control-plane registration and independently deployed execution coordinator.
+GS owns workflow planning, immutable multi-repository execution inputs,
+required-job evidence semantics, plan storage and the durable CI outbox. This
+package retains DIM Project/generation mapping, `.dim` compiler selection,
+candidate read HTTP leases, execution grant/profile codecs, credentials and
+scheduler transport. It does not own Git repository registration, human
+approvals, protected-ref compare-and-swap or worker runtimes.
+
+The DIM adapter registers a `git-ci` ref-update provider and maps its check to
+the GS provider with the repository adapter's borrowed-read authority. Thus a
+policy declaring `git-ci` cannot load without its authorization provider, and
+final promotion rechecks GS evidence without reacquiring the DIM mutation lane.
 
 Install it as a control-plane plugin alongside `git-repositories`, `code-review`
 and a workflow compiler such as `ci-workflows`. Add `merge-policy` when protected

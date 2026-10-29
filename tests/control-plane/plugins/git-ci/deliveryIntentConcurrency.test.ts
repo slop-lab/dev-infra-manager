@@ -2,13 +2,13 @@ import { randomUUID } from "node:crypto";
 import { link, open, rename, unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
+import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
 import {
   readPendingAuthoritativeNativeDeliveries,
   recordExplicitAuthoritativeNativeDeliveryIntent,
   supersedeAuthoritativeNativeDelivery
-} from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js";
-import * as recordStorage from "../../../../packages/control-plane/plugins/git-review/src/review-record-storage.js";
+} from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
+import * as recordStorage from "../../../../packages/gs/review/src/review-record-storage.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "./nativeBundleReviewFixture.js";
 import {
   cleanupFinalizeFixtures,

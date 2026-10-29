@@ -2,16 +2,16 @@ import { randomUUID } from "node:crypto";
 import { open, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
+import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
 import {
   auditAuthoritativeNativeDeliveryOutbox,
   readPendingAuthoritativeNativeDeliveries,
   recordExplicitAuthoritativeNativeDeliveryIntent
-} from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js";
-import * as intentStore from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-intent-store.js";
-import type { DeliveryIntent } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-intent-store.js";
-import { deliveryIntentKey, deliveryIntentSchema } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-record.js";
-import * as planStore from "../../../../packages/control-plane/plugins/git-ci/src/plan-store.js";
+} from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
+import * as intentStore from "../../../../packages/gs/ci/src/authoritative-native-delivery-intent-store.js";
+import type { DeliveryIntent } from "../../../../packages/gs/ci/src/authoritative-native-delivery-intent-store.js";
+import { deliveryIntentKey, deliveryIntentSchema } from "../../../../packages/gs/ci/src/delivery-intent-record.js";
+import * as planStore from "../../../../packages/gs/ci/src/plan-store.js";
 import {
   addCandidateCommit,
   nativeBundleReviewFixture,

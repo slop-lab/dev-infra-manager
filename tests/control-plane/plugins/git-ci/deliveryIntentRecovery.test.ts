@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import { link, mkdir, open, readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { acknowledgeAuthoritativeNativeDelivery, readPendingAuthoritativeNativeDeliveries, recordExplicitAuthoritativeNativeDeliveryIntent } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
+import { acknowledgeAuthoritativeNativeDelivery, readPendingAuthoritativeNativeDeliveries, recordExplicitAuthoritativeNativeDeliveryIntent } from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
+import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "./nativeBundleReviewFixture.js";
 import { cleanupFinalizeFixtures, closeFinalizeService, generationId, rootRepository } from "../git-repositories/nativeRootImportFinalizeFixture.js";
-import type { DeliveryIntent } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-intent-store.js";
+import type { DeliveryIntent } from "../../../../packages/gs/ci/src/authoritative-native-delivery-intent-store.js";
 
 afterEach(cleanupFinalizeFixtures);
 it("recovers published marker and intent hardlinks independently after a disposable service shutdown", async () => {

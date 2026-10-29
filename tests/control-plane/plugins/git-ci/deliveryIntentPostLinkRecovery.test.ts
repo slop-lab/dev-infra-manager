@@ -3,14 +3,14 @@ import { link, mkdtemp, open, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import * as storage from "../../../../packages/control-plane/plugins/git-review/src/review-record-storage.js";
-import { initializeDeliveryIntentStore, readSelectableDeliveryIntents } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-intent-store.js";
-import { publishCatalogDeliveryIntentAdditions } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-publication.js";
-import { readCatalogDeliveryIntents, reserveCatalogDeliveryIntentAdditions } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog.js";
-import { deliveryIntentKey, deliveryIntentSchema } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-record.js";
+import * as storage from "../../../../packages/gs/review/src/review-record-storage.js";
+import { initializeDeliveryIntentStore, readSelectableDeliveryIntents } from "../../../../packages/gs/ci/src/authoritative-native-delivery-intent-store.js";
+import { publishCatalogDeliveryIntentAdditions } from "../../../../packages/gs/ci/src/delivery-intent-catalog-publication.js";
+import { readCatalogDeliveryIntents, reserveCatalogDeliveryIntentAdditions } from "../../../../packages/gs/ci/src/delivery-intent-catalog.js";
+import { deliveryIntentKey, deliveryIntentSchema } from "../../../../packages/gs/ci/src/delivery-intent-record.js";
 
-vi.mock("../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-capacity.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-capacity.js")>();
+vi.mock("../../../../packages/gs/ci/src/delivery-intent-catalog-capacity.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../../packages/gs/ci/src/delivery-intent-catalog-capacity.js")>();
   return { ...actual, DeliveryIntentCatalogCapacity: class extends actual.DeliveryIntentCatalogCapacity {
     constructor() { super(1, 4096); }
   } };

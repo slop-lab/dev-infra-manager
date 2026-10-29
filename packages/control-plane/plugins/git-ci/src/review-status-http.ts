@@ -1,11 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { reviewCiStatusSchema, type ReviewCiJob, type ReviewCiStatus } from "@slop-lab/dim-contracts-ci/review-status";
+import { reviewCiStatusSchema, type ReviewCiJob, type ReviewCiStatus } from "@slop-lab/gs-ci-contracts";
 import { assertAuthoritativeNativeReviewRefs, readAuthoritativeNativeReviewEnvelope } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { repositoryAccessProvider, RepositoryAccessError, readNativeProjectRootCurrentHeadFromDatabase,
   sendJson, type RepositoryExtensionContext } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { currentExecutionEvidence, ExecutionConflictError } from "./execution-evidence.js";
-import { readAuthoritativeNativeReviewEnvelope as readCiEnvelope } from "./plan-store.js";
-import { gitCiPolicy } from "./policy.js";
+import { gitCiPolicy, readAuthoritativeNativeReviewEnvelope as readCiEnvelope } from "@slop-lab/gs-ci";
 import type { GitCiRuntime } from "./runtime.js";
 import type { AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 

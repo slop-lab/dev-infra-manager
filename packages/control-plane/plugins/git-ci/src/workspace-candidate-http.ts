@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
-import { isNativeGitOrdinaryCandidateRef } from "@slop-lab/dim-contracts-git";
+import { isOrdinaryCandidateRef as isNativeGitOrdinaryCandidateRef } from "@slop-lab/gs-repository-contracts";
 import {
   assertAuthoritativeNativeRepositoryTargetCurrent,
   readBoundedJson,

@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { deliveryIntentKey, deliveryIntentSchema } from "../../../packages/control-plane/plugins/git-ci/src/delivery-intent-record.js";
-import type { AuthoritativeNativeDeliveryBinding } from "../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
-import type { AuthoritativeNativeReviewEnvelope } from "../../../packages/control-plane/plugins/git-ci/src/plan-schema.js";
+import { deliveryIntentKey, deliveryIntentSchema } from "../../../packages/gs/ci/src/delivery-intent-record.js";
+import type { AuthoritativeNativeDeliveryBinding } from "../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
+import type { AuthoritativeNativeReviewEnvelope } from "../../../packages/gs/ci/src/plan-schema.js";
 import { verifyRetainedHistoryIntents, type RetainedIntentHistoryDescriptor } from "./native-history-intent-verification.js";
 
 export async function seedRetainedHistoryIntents(input: {

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CoalescedAsyncOperations } from "../../../../packages/control-plane/plugins/git-ci/src/coalesced-async-operations.js";
-import { PlanPathAttestations } from "../../../../packages/control-plane/plugins/git-ci/src/plan-path-attestations.js";
-import { BoundedProjectionCache } from "../../../../packages/control-plane/plugins/git-ci/src/plan-projection-cache.js";
+import { CoalescedAsyncOperations } from "../../../../packages/gs/ci/src/coalesced-async-operations.js";
+import { PlanPathAttestations } from "../../../../packages/gs/ci/src/plan-path-attestations.js";
+import { BoundedProjectionCache } from "../../../../packages/gs/ci/src/plan-projection-cache.js";
 import {
   GitCiPlanFileVersionError,
   type GitCiPlanFileVersion
-} from "../../../../packages/control-plane/plugins/git-ci/src/plan-file-version.js";
+} from "../../../../packages/gs/ci/src/plan-file-version.js";
 
 describe("Git CI plan cache domains", () => {
   it("keeps projection entries within entry and encoded-byte limits", () => {

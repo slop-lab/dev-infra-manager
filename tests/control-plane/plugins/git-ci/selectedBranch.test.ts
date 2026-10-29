@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { dimWorkflowCompiler } from "@slop-lab/dim-control-plane-plugin-ci-workflows";
-import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision } from "@slop-lab/gs-repository-contracts";
 import { type CodeReviewService } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { loadAuthoritativeNativeCandidateJobInputs } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-candidate-job-inputs.js";

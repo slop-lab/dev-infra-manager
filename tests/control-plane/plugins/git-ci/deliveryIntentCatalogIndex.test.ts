@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
-import { addCatalogEntry, selectableIntentCursor, type CatalogBucket } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-index.js";
-import { deliveryIntentSchema } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-record.js";
+import { addCatalogEntry, selectableIntentCursor, type CatalogBucket } from "../../../../packages/gs/ci/src/delivery-intent-catalog-index.js";
+import { deliveryIntentSchema } from "../../../../packages/gs/ci/src/delivery-intent-record.js";
 
 it("restores future backoff after the wall clock moves behind a previously due retry", () => {
   const intent = deliveryIntentSchema.parse({ schemaVersion: 1, state: "superseded",

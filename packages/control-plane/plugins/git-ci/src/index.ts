@@ -1,24 +1,24 @@
 import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
-import type { CiDeliveryPublicationFaults } from "./delivery-publication.js";
+import { authoritativeNativeDeliveryBinding, gitCiEnvelope, parseGitCiPolicy,
+  readVerifiedGitCiDeliveryProjection, recordExplicitAuthoritativeNativeDeliveryIntent,
+  type CiDeliveryPublicationFaults } from "@slop-lab/gs-ci";
 import type { ControlPlanePlugin, PreparedControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
 import { readNativeProjectRegistrations, repositoryExtension, repositoryExtensionKind,
   resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { readVerifiedCiReviewSources, reviewPreparationExtension,
   reviewPreparations } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
-import { requireWorkflowCompiler, WORKFLOW_COMPILER_EXTENSION, type WorkflowCompiler } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";
+import { requireWorkflowCompiler, WORKFLOW_COMPILER_EXTENSION } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";
+import type { WorkflowCompiler } from "@slop-lab/gs-ci-contracts";
 import { gitCiConfigSchema } from "./config.js";
 import { gitCiPreparation } from "./preparation.js";
-import { parseGitCiPolicy } from "./policy.js";
 import { createExecutionHttpService } from "./execution-http.js";
 import { createAuthoritativeNativeEventDispatcher } from "./authoritative-native-event-dispatcher.js";
-import { assertGitCiPromotable, type GitCiQualityInput } from "./quality.js";
+import { assertGitCiPromotable, gitCiQualityRevision, type GitCiQualityInput } from "./quality.js";
+import { gitCiRefUpdatePolicyExtension } from "./ref-update-policy.js";
 import type { GitCiRuntime } from "./runtime.js";
 import { handleReviewCiStatus } from "./review-status-http.js";
 import { handleWorkspaceCandidateCi } from "./workspace-candidate-http.js";
-import { authoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
-import { recordExplicitAuthoritativeNativeDeliveryIntent } from "./authoritative-native-delivery-store.js";
-import { gitCiEnvelope, readVerifiedGitCiDeliveryProjection } from "./plan-store.js";
 import { join } from "node:path";
 
 export type GitCiOptions = {
@@ -40,8 +40,10 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
       const planned = await gitCiEnvelope(target.repository, envelope);
       if (planned !== undefined) await recordExplicitAuthoritativeNativeDeliveryIntent(target.repository, planned,
         runtime.expectedGenerationId, binding, ownerRequestId);
-    });
+    }, config.compiler);
+    const refUpdatePolicy = gitCiRefUpdatePolicyExtension(config.compiler);
     const feature = repositoryExtension({ name: "git-ci", policyName: "git-ci",
+      requiresRefUpdatePolicies: ["git-ci"],
       credentials: [config.grantIssuer, config.candidateReader, config.resultReporter, config.webhook],
       async attach(context) {
         compiler = requireWorkflowCompiler(context.extensions, config.compiler);
@@ -76,8 +78,8 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
         };
       }
     });
-    return { extensions: [feature, { kind: "dim.git-repositories.feature", name: "git-ci", value: { version: 1 } }, reviewPreparationExtension(preparation), {
-      kind: "dim.merge-policy.quality-guard", name: "git-ci", value: { name: "git-ci",
+    return { extensions: [refUpdatePolicy, feature, { kind: "dim.git-repositories.feature", name: "git-ci", value: { version: 1 } }, reviewPreparationExtension(preparation), {
+      kind: "dim.merge-policy.quality-guard", name: "git-ci", value: { name: "git-ci", revision: gitCiQualityRevision,
         async check(input: GitCiQualityInput) {
           if (!runtime) throw new Error("Git CI repository attachment is unavailable");
           return assertGitCiPromotable(runtime, input);

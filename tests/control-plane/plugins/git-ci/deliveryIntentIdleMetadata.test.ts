@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
-import * as intentRecords from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-record.js";
-import { readPendingAuthoritativeNativeDeliveries } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js";
+import * as intentRecords from "../../../../packages/gs/ci/src/delivery-intent-record.js";
+import { readPendingAuthoritativeNativeDeliveries } from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
 
 it("keeps unchanged idle polling from modifying directory versions and rescanning retained metadata", async () => {
   const repository = await mkdtemp(join(tmpdir(), "dim-intent-idle-metadata-"));

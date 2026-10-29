@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 import { cp, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
+import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
 import {
   acknowledgeAuthoritativeNativeDelivery,
   readPendingAuthoritativeNativeDeliveries,
   supersedeAuthoritativeNativeDelivery
-} from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js";
+} from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
 import { nativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";
 import {
   cleanupFinalizeFixtures,

@@ -28,8 +28,8 @@ export type NativeHistoryCorpusDescriptor = z.infer<typeof descriptorSchema>;
 
 type ReviewSchemaModule = typeof import("../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-schema.js");
 type ReviewStoreModule = typeof import("../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-store.js");
-type PlanStoreModule = typeof import("../../../packages/control-plane/plugins/git-ci/src/plan-store.js");
-type GitCiPlan = import("../../../packages/control-plane/plugins/git-ci/src/plan-store.js").GitCiPlan;
+type PlanStoreModule = typeof import("../../../packages/gs/ci/src/plan-store.js");
+type GitCiPlan = import("../../../packages/gs/ci/src/plan-store.js").GitCiPlan;
 
 export async function prepareNativeHistoryCorpus(
   sourceTree: string,
@@ -57,7 +57,7 @@ async function populateNativeHistoryCorpus(
   const reviewStore: ReviewStoreModule = await sourceImport(sourceTree,
     "packages/control-plane/plugins/git-review/src/authoritative-native-review-store.ts");
   const planStore: PlanStoreModule = await sourceImport(sourceTree,
-    "packages/control-plane/plugins/git-ci/src/plan-store.ts");
+    "packages/gs/ci/src/plan-store.ts");
   const fingerprint = createHash("sha256").update("dim-native-history-corpus-v1\0");
   let activeReviewId = "";
   for (const [index, payloadBytes] of reviewPayloadBytes().entries()) {

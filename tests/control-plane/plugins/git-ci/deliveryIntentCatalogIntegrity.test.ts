@@ -3,26 +3,26 @@ import { mkdir, mkdtemp, readFile, readdir, rename, rm, unlink, writeFile } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
+import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
 import {
   readSelectableDeliveryIntents,
   readVerifiedDeliveryIntents,
   recordExplicitAuthoritativeNativeDeliveryIntent,
   supersedeCurrentDeliveryIntent,
   withCurrentDeliveryIntent
-} from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-intent-store.js";
-import { DeliveryIntentCatalogCapacity } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-capacity.js";
+} from "../../../../packages/gs/ci/src/authoritative-native-delivery-intent-store.js";
+import { DeliveryIntentCatalogCapacity } from "../../../../packages/gs/ci/src/delivery-intent-catalog-capacity.js";
 import {
   initializeCatalogDeliveryIntents,
   readCatalogDeliveryIntents,
   reserveCatalogDeliveryIntentAdditions
-} from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog.js";
-import { publishCatalogDeliveryIntentAdditions } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-publication.js";
+} from "../../../../packages/gs/ci/src/delivery-intent-catalog.js";
+import { publishCatalogDeliveryIntentAdditions } from "../../../../packages/gs/ci/src/delivery-intent-catalog-publication.js";
 import {
   deliveryIntentKey,
   deliveryIntentSchema,
   type DeliveryIntent
-} from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-record.js";
+} from "../../../../packages/gs/ci/src/delivery-intent-record.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "./nativeBundleReviewFixture.js";
 import {
   cleanupFinalizeFixtures,

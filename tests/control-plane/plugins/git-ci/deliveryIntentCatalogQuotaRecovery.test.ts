@@ -8,20 +8,20 @@ import {
   readCatalogDeliveryIntents,
   reserveCatalogDeliveryIntentAdditions,
   reserveCatalogDeliveryIntentReplacement
-} from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog.js";
+} from "../../../../packages/gs/ci/src/delivery-intent-catalog.js";
 import {
   publishCatalogDeliveryIntentAdditions,
   replaceCatalogDeliveryIntent
-} from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-publication.js";
-import { readSelectableDeliveryIntents } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-intent-store.js";
+} from "../../../../packages/gs/ci/src/delivery-intent-catalog-publication.js";
+import { readSelectableDeliveryIntents } from "../../../../packages/gs/ci/src/authoritative-native-delivery-intent-store.js";
 import {
   deliveryIntentKey,
   deliveryIntentSchema,
   type DeliveryIntent
-} from "../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-record.js";
+} from "../../../../packages/gs/ci/src/delivery-intent-record.js";
 
-vi.mock("../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-capacity.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-capacity.js")>();
+vi.mock("../../../../packages/gs/ci/src/delivery-intent-catalog-capacity.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../../packages/gs/ci/src/delivery-intent-catalog-capacity.js")>();
   return { ...actual, DeliveryIntentCatalogCapacity: class extends actual.DeliveryIntentCatalogCapacity {
     constructor() { super(3, 3_020); }
   } };

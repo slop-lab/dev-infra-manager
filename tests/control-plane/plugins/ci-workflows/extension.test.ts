@@ -5,5 +5,6 @@ it("publishes an installed language capability without making it a core control-
   const prepared = await controlPlanePlugin.configure({});
   expect(prepared.extensions?.map(({ kind, name }) => ({ kind, name }))).toEqual([{ kind: WORKFLOW_COMPILER_EXTENSION, name: "dim" }]);
   expect(requireWorkflowCompiler(prepared.extensions ?? [])).toBe(dimWorkflowCompiler);
+  expect(dimWorkflowCompiler.revision).toMatch(/^[0-9a-f]{64}$/);
   expect(() => requireWorkflowCompiler([])).toThrow(/unavailable/);
 });

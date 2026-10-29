@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { reviewCiJobSchema, reviewCiStatusSchema, type ReviewCiJob, type ReviewCiStatus } from "@slop-lab/dim-contracts-ci/review-status";
+import { reviewCiJobSchema, reviewCiStatusSchema, type ReviewCiJob, type ReviewCiStatus } from "@slop-lab/gs-ci-contracts";
 import type { CommandResult } from "../web-lifecycle/process.js";
 
 type Receipt = { readonly requestId: string; readonly reviewId: string; readonly candidateRef: string; readonly candidateCommit: string;

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { deliveryIntentKey, deliveryIntentSchema } from "../../../packages/control-plane/plugins/git-ci/src/delivery-intent-record.js";
+import { deliveryIntentKey, deliveryIntentSchema } from "../../../packages/gs/ci/src/delivery-intent-record.js";
 import { readPrivateCorpusRecord } from "./native-history-corpus-verification.js";
 
 export type RetainedIntentHistoryDescriptor = {

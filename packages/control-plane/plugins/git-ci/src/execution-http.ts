@@ -1,5 +1,5 @@
 import type { GitCiRuntime } from "./runtime.js";
-import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
+import { CandidateExecutionError } from "@slop-lab/gs-ci-contracts";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";

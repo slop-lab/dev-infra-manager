@@ -1,8 +1,8 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
-import { recordExplicitAuthoritativeNativeDeliveryIntent } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js";
+import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
+import { recordExplicitAuthoritativeNativeDeliveryIntent } from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "./nativeBundleReviewFixture.js";
 import {
   cleanupFinalizeFixtures,
@@ -10,10 +10,10 @@ import {
   generationId,
   rootRepository
 } from "../git-repositories/nativeRootImportFinalizeFixture.js";
-import type { AuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-ci/src/plan-schema.js";
+import type { AuthoritativeNativeReviewEnvelope } from "../../../../packages/gs/ci/src/plan-schema.js";
 
-vi.mock("../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-capacity.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../../packages/control-plane/plugins/git-ci/src/delivery-intent-catalog-capacity.js")>();
+vi.mock("../../../../packages/gs/ci/src/delivery-intent-catalog-capacity.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../../packages/gs/ci/src/delivery-intent-catalog-capacity.js")>();
   return { ...actual, DeliveryIntentCatalogCapacity: class extends actual.DeliveryIntentCatalogCapacity {
     constructor() { super(2, 1024 * 1024); }
   } };

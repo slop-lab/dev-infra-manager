@@ -1,4 +1,4 @@
-import type { createAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-ci/src/plan-schema.js";
+import type { createAuthoritativeNativeReviewEnvelope } from "../../../../packages/gs/ci/src/plan-schema.js";
 
 const primary = { commit: "2".repeat(40), tree: "3".repeat(40) };
 const job = { executionKind: "ordinary-sysbox", jobName: "source", evidenceClass: "candidate-controlled" } as const;

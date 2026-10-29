@@ -8,12 +8,12 @@ import {
   saveAuthoritativeNativeReviewEnvelope,
   type VerifiedCiReviewSource
 } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
-import * as planFiles from "../../../../packages/control-plane/plugins/git-ci/src/plan-file-version.js";
+import * as planFiles from "../../../../packages/gs/ci/src/plan-file-version.js";
 import {
   readVerifiedGitCiDeliveryProjection,
   saveGitCiPlan,
   type GitCiPlan
-} from "../../../../packages/control-plane/plugins/git-ci/src/plan-store.js";
+} from "../../../../packages/gs/ci/src/plan-store.js";
 
 const roots: string[] = [];
 

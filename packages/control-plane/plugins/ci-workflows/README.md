@@ -20,7 +20,9 @@ resource limits, mounts and credentials belong to trusted host policy.
 The optional Git CI integration selects the installed compiler extension named `dim`
 (the exported implementation is `dimWorkflowCompiler`). Repository storage and human reviews do not load a compiler by
 themselves. Another `WorkflowCompiler` may use a different configuration path
-or language. Git CI validates immutable candidate objects and job inputs; workers
+or language. The compiler exports a stable revision that the GS review
+preparation provider validates and binds into its selected provider revision.
+Git CI validates immutable candidate objects and job inputs; workers
 verify the resulting blob identities without interpreting workflow syntax.
 
 `repositories` optionally requests a finite subset of the Project's repositories.

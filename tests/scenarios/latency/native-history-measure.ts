@@ -10,11 +10,11 @@ import { percentileSummary } from "./native-history-metrics.js";
 import type { NativeHistoryCorpusDescriptor } from "./native-history-corpus.js";
 import { seedRetainedHistoryIntents } from "./native-history-intents.js";
 import { verifyRetainedHistoryIntents, type RetainedIntentHistoryDescriptor } from "./native-history-intent-verification.js";
-import { deliveryIntentKey } from "../../../packages/control-plane/plugins/git-ci/src/delivery-intent-record.js";
+import { deliveryIntentKey } from "../../../packages/gs/ci/src/delivery-intent-record.js";
 
-type DeliveryStoreModule = typeof import("../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js");
-type BindingModule = typeof import("../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js");
-type PlanStoreModule = typeof import("../../../packages/control-plane/plugins/git-ci/src/plan-store.js");
+type DeliveryStoreModule = typeof import("../../../packages/gs/ci/src/authoritative-native-delivery-store.js");
+type BindingModule = typeof import("../../../packages/gs/ci/src/authoritative-native-delivery-binding.js");
+type PlanStoreModule = typeof import("../../../packages/gs/ci/src/plan-store.js");
 type FixtureModule = typeof import("../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js");
 
 type MeasurementInput = {
@@ -43,11 +43,11 @@ export async function measureNativeHistory(input: MeasurementInput): Promise<obj
   const sourceTree = resolve(input.sourceTree);
   const counter = await installBodyReadCounter();
   const deliveryStore: DeliveryStoreModule = await sourceImport(sourceTree,
-    "packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.ts");
+    "packages/gs/ci/src/authoritative-native-delivery-store.ts");
   const bindingApi: BindingModule = await sourceImport(sourceTree,
-    "packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.ts");
+    "packages/gs/ci/src/authoritative-native-delivery-binding.ts");
   const planStore: PlanStoreModule = await sourceImport(sourceTree,
-    "packages/control-plane/plugins/git-ci/src/plan-store.ts");
+    "packages/gs/ci/src/plan-store.ts");
   const fixture: FixtureModule = await sourceImport(sourceTree,
     "tests/control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.ts");
   const binding = bindingApi.authoritativeNativeDeliveryBinding("ci", "http://execution:8080/v1/jobs");

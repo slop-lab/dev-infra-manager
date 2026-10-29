@@ -1,10 +1,9 @@
 import type { GitCiRuntime } from "./runtime.js";
 import { loadAuthoritativeNativeCandidateJobInputs } from "./authoritative-native-candidate-job-inputs.js";
-import type { NativeCandidateJobInputs } from "./native-candidate-job-inputs.js";
-import { readAuthoritativeNativeReviewEnvelope } from "./plan-store.js";
+import { readAuthoritativeNativeReviewEnvelope, type NativeCandidateJobInputs } from "@slop-lab/gs-ci";
 
 import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import { CandidateExecutionError } from "@slop-lab/dim-contracts-ci/descriptor";
+import { CandidateExecutionError } from "@slop-lab/gs-ci-contracts";
 import { nativeHumanReviewStaleReasons } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 
 type Target = Awaited<ReturnType<typeof resolveAuthoritativeNativeRepositoryTarget>>;
