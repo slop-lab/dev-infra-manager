@@ -27,7 +27,8 @@ async function fixture() {
 async function runningFixture() {
   const result = await fixture();
   const { runtime, pidPath } = result;
-  const script = path.join(runtime, "controller.mjs");
+  const script = path.join(runtime, "node_modules/.bin/dim-host");
+  await mkdir(path.dirname(script), { recursive: true });
   await writeFile(script, 'import { writeFileSync } from "node:fs"; writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid)); console.log("ready"); setInterval(() => {}, 1000);');
   const child: ChildProcess = spawn(process.execPath, [script, "controller", "serve", "--pid-file", pidPath], {
     stdio: ["ignore", "pipe", "inherit"]
@@ -93,6 +94,22 @@ describe("existing managed controller activation", () => {
   it("does not mistake a recycled PID marker for a managed controller", async () => {
     const { runtime, pidPath, env } = await fixture();
     await writeFile(pidPath, String(process.pid));
+    expect(await managedControllerIsActive(runtime, env)).toBe(false);
+  });
+
+  it("rejects a lookalike controller process under the installation directory", async () => {
+    const { runtime, pidPath, env } = await fixture();
+    const script = path.join(runtime, "lookalike.mjs");
+    await writeFile(script, 'import { writeFileSync } from "node:fs"; writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid)); console.log("ready"); setInterval(() => {}, 1000);');
+    const child = spawn(process.execPath, [script, "controller", "serve", "--pid-file", pidPath], {
+      stdio: ["ignore", "pipe", "inherit"]
+    });
+    cleanup.push(async () => {
+      if (child.exitCode === null && child.signalCode === null) {
+        const exited = once(child, "exit"); child.kill(); await exited;
+      }
+    });
+    await once(child.stdout!, "data");
     expect(await managedControllerIsActive(runtime, env)).toBe(false);
   });
 

@@ -27,7 +27,7 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
       const processState = snapshot.slice(snapshot.lastIndexOf(")") + 2).split(" ")[0];
       if (metadata.uid === uid && processState !== "Z" && controller > 0 && args[controller + 1] === "serve"
         && marker > controller && args[marker + 1] === pidPath
-        && args.some((arg) => arg.startsWith(`${path.resolve(runtimeDirectory)}${path.sep}`))) return true;
+        && args[controller - 1] === path.join(path.resolve(runtimeDirectory), "node_modules/.bin/dim-host")) return true;
     }
   } catch (error) {
     if (!missingProcess(error)) throw error;
