@@ -172,7 +172,7 @@ async function buildTestImage(): Promise<string> {
   if (image === undefined) throw new Error("DIM_NATIVE_GIT_TEST_IMAGE is required");
   const context = await mkdtemp(join(tmpdir(), "dim-native-git-owner-image-"));
   roots.push(context);
-  await copyFile(join(workspace, "core", "packages", "native-git", "src", "storage-owner.ts"), join(context, "storage-owner.ts"));
+  await copyFile(join(workspace, "packages", "control-plane", "plugins", "git-repositories", "src", "storage-owner.ts"), join(context, "storage-owner.ts"));
   await writeFile(join(context, "Dockerfile"), "ARG BASE_IMAGE\nFROM ${BASE_IMAGE}\nCOPY storage-owner.ts /app/storage-owner.ts\n");
   const testImage = `dim-native-git-owner-test:${randomUUID()}`;
   images.push(testImage);
