@@ -31,13 +31,14 @@ assertion, permission guard or test selection was weakened.
 
 ## Complete source gate
 
-The repository's exact isolated gate was run from the follow-up source using
+The repository's exact isolated gate was run at executable-source commit
+`e5b66162038bc289177a1fef9629729c05b899a0` using
 the checked-in wrapper and pinned Debian Bookworm images:
 
 ```sh
-DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-followup-node24 \
+DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-final-e5b-node24 \
   DIM_SOURCE_NODE_MAJOR=24 bash scripts/checks/source-gate-container.bash
-DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-followup-node26 \
+DIM_CHECK_LOG_DIR=/mnt/dim-tmp/opencode/opencode/validation-final-e5b-node26 \
   DIM_SOURCE_NODE_MAJOR=26 bash scripts/checks/source-gate-container.bash
 ```
 
@@ -45,7 +46,7 @@ Both lanes completed all eight stages: prerequisites, strict checks, package
 build, ordinary tests, executable examples, privileged service fixtures,
 package packs and production dependency audit. Each lane reported:
 
-- unit: 2,021 passed, 5 skipped;
+- unit: 2,022 passed, 5 skipped;
 - CLI: 87 passed;
 - host commands: 12 passed;
 - scenarios: 536 passed, 19 skipped;
