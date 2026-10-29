@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from "node:util";
-import { createHash } from "node:crypto";
 import type { WorkflowCompiler } from "@slop-lab/gs-ci-contracts";
 import {
   createGitCiPreparation,
+  gitCiPreparationRevision,
   type CandidateReaderProvider,
 } from "@slop-lab/gs-ci";
 import type {
@@ -56,7 +56,10 @@ export function gitCiPreparation(
   };
   return {
     name: "git-ci",
-    revision: createHash("sha256").update("dim-gs-ci-preparation-adapter-v2\0").update(providerName).digest("hex"),
+    get revision() {
+      const workflow = selectedCompiler();
+      return gitCiPreparationRevision({ name: providerName, revision: workflow.revision });
+    },
     async prepare(input) {
       if (!Object.hasOwn(input.target.imported.policy.extensions, "git-ci")) {
         return { inputs: {

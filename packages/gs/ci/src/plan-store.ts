@@ -8,6 +8,7 @@ import { assertVerifiedCiReviewSourceCurrent,
   type VerifiedCiReviewSource } from "@slop-lab/gs-review/dim-legacy-provenance";
 import type { Review } from "@slop-lab/gs-review-contracts";
 import type { AuthoritativeNativeReview } from "@slop-lab/gs-review-contracts/dim-legacy-codec";
+import { workflowProviderSchema, type WorkflowProviderIdentity } from "@slop-lab/gs-ci-contracts";
 import { gitCiPlanningSchema, authoritativeNativeRequiredJobSchema, createAuthoritativeNativeReviewEnvelope,
   createAuthoritativeNativeReviewDeliveryProjection, type AuthoritativeNativeReviewDeliveryProjection,
   type AuthoritativeNativeReviewEnvelope } from "./plan-schema.js";
@@ -58,6 +59,34 @@ export async function saveGitCiPlan(repository: string, input: GitCiPlan): Promi
   }
   return { kind: "git-ci", id: digest, digest };
 }
+
+export function bindGitCiPlanAttachment(
+  stored: ReviewAttachment,
+  providerInput: WorkflowProviderIdentity,
+): ReviewAttachment {
+  const provider = workflowProviderSchema.parse(providerInput);
+  if (stored.kind !== "git-ci" || stored.id !== stored.digest || !/^[0-9a-f]{64}$/.test(stored.id)) {
+    throw new GitCiPlanProviderError("stored Git CI plan attachment is invalid");
+  }
+  return {
+    kind: "git-ci",
+    id: stored.id,
+    digest: createHash("sha256").update("gs-ci-plan-provider-v1\0").update(JSON.stringify({
+      planId: stored.id,
+      provider,
+    })).digest("hex"),
+  };
+}
+
+export function assertGitCiPlanAttachmentProvider(
+  attachment: ReviewAttachment,
+  provider: WorkflowProviderIdentity,
+): void {
+  const expected = bindGitCiPlanAttachment({ kind: "git-ci", id: attachment.id, digest: attachment.id }, provider);
+  if (attachment.kind !== expected.kind || attachment.digest !== expected.digest) {
+    throw new GitCiPlanProviderError("Git CI plan workflow provider revision is stale");
+  }
+}
 export async function readVerifiedGitCiDeliveryProjection(
   repository: string,
   source: VerifiedCiReviewSource
@@ -67,7 +96,7 @@ export async function readVerifiedGitCiDeliveryProjection(
   if (attachments.length === 0) return undefined;
   if (attachments.length !== 1) throw new Error("review has conflicting Git CI attachments");
   const attachment = attachments[0];
-  if (attachment === undefined || !/^[0-9a-f]{64}$/.test(attachment.id) || attachment.digest !== attachment.id) {
+  if (attachment === undefined || !/^[0-9a-f]{64}$/.test(attachment.id)) {
     throw new Error("Git CI attachment identity is invalid");
   }
   const root = resolve(repository, "dim-git-ci-plans");
@@ -112,10 +141,10 @@ export async function gitCiEnvelope(repository: string, envelope: ReviewEnvelope
   if (!attachments.length) return;
   if (attachments.length !== 1) throw new Error("review has conflicting Git CI attachments");
   const attachment = attachments[0]!;
-  if (!/^[0-9a-f]{64}$/.test(attachment.id) || attachment.digest !== attachment.id) throw new Error("Git CI attachment identity is invalid");
+  if (!/^[0-9a-f]{64}$/.test(attachment.id)) throw new Error("Git CI attachment identity is invalid");
   const plan = gitCiPlanSchema.parse(await readReviewJson(join(repository, "dim-git-ci-plans", `${attachment.id}.json`), 8 * 1024 * 1024, true));
   const review = envelope.review;
-  if (planDigest(plan) !== attachment.digest || plan.policyDigest !== envelope.policyDigest || plan.projectId !== review.namespaceId
+  if (planDigest(plan) !== attachment.id || plan.policyDigest !== envelope.policyDigest || plan.projectId !== review.namespaceId
     || plan.repositoryId !== review.repositoryId || plan.expectedProtectedHead !== review.expectedProtectedHead
     || plan.candidateCommit !== review.candidateCommit || plan.candidateTree !== review.candidateTree) throw new Error("Git CI plan does not match its reviewed snapshot");
   const { reviewId: _id, createdAt, ...identity } = review;
@@ -134,12 +163,16 @@ export const assertAuthoritativeNativeReviewStore = assertReviewStore;
 
 function assertPlanMatchesSource(plan: GitCiPlan, attachment: ReviewAttachment, source: VerifiedCiReviewSource): void {
   const review = source.summary.review;
-  if (planDigest(plan) !== attachment.digest || plan.policyDigest !== source.summary.policyDigest
+  if (planDigest(plan) !== attachment.id || plan.policyDigest !== source.summary.policyDigest
     || plan.projectId !== review.projectId || plan.repositoryId !== review.repositoryId
     || plan.expectedProtectedHead !== review.expectedProtectedHead
     || plan.candidateCommit !== review.candidateCommit || plan.candidateTree !== review.candidateTree) {
     throw new Error("Git CI plan does not match its reviewed snapshot");
   }
+}
+
+export class GitCiPlanProviderError extends Error {
+  readonly name = "GitCiPlanProviderError";
 }
 
 function neutralReviewSummary(review: Omit<AuthoritativeNativeReview, "changes" | "patch" | "patchBytes">):

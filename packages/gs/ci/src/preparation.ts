@@ -5,12 +5,13 @@ import {
   executionInputsSchema,
   workflowProviderSchema,
   type WorkflowCompiler,
+  type WorkflowProviderIdentity,
 } from "@slop-lab/gs-ci-contracts";
 import type { ReviewPreparation } from "@slop-lab/gs-review";
 import { loadCandidateJobInputs, type CandidateReaderProvider } from "./candidate-planning.js";
 import { assertExecutionInputsCurrent, captureExecutionInputs } from "./execution-inputs.js";
 import { gitCiPolicy } from "./policy.js";
-import { saveGitCiPlan } from "./plan-store.js";
+import { assertGitCiPlanAttachmentProvider, bindGitCiPlanAttachment, saveGitCiPlan } from "./plan-store.js";
 import type { AuthoritativeNativePlanning } from "./plan-schema.js";
 
 export type CiWorkflowProvider = {
@@ -28,7 +29,7 @@ export function createGitCiPreparation(options: {
     name: options.workflow.name,
     revision: options.workflow.revision,
   });
-  const revision = createHash("sha256").update("gs-ci-review-preparation-v1\0").update(JSON.stringify(provider)).digest("hex");
+  const revision = gitCiPreparationRevision(provider);
   return {
     name: "git-ci",
     revision,
@@ -81,7 +82,7 @@ export function createGitCiPreparation(options: {
       const inputs = executionInputsSchema.parse(Object.fromEntries(Object.entries(Object.assign({}, primary,
         ...(planning.status === "valid" ? planning.jobs.map((job) => job.inputs) : [])))
         .sort(([left], [right]) => left.localeCompare(right))));
-      const attachment = await saveGitCiPlan(input.target.repositoryPath, {
+      const storedAttachment = await saveGitCiPlan(input.target.repositoryPath, {
         schemaVersion: 1,
         projectId: input.request.namespaceId,
         repositoryId: input.request.repositoryId,
@@ -98,10 +99,11 @@ export function createGitCiPreparation(options: {
           || left.jobName.localeCompare(right.jobName)),
         planning,
       });
-      return { inputs, attachment };
+      return { inputs, attachment: bindGitCiPlanAttachment(storedAttachment, provider) };
     },
     async assertCurrent({ authority, review, attachment }) {
       if (attachment === undefined) return;
+      assertGitCiPlanAttachmentProvider(attachment, provider);
       await assertExecutionInputsCurrent(authority, {
         namespaceId: review.namespaceId,
         repositoryId: review.repositoryId,
@@ -122,4 +124,10 @@ export function createGitCiPreparation(options: {
     },
     ...(options.accepted === undefined ? {} : { accepted: options.accepted }),
   };
+}
+
+export function gitCiPreparationRevision(providerInput: WorkflowProviderIdentity): string {
+  const provider = workflowProviderSchema.parse(providerInput);
+  return createHash("sha256").update("gs-ci-review-preparation-v1\0")
+    .update(JSON.stringify(provider)).digest("hex");
 }
