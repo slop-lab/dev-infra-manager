@@ -24,6 +24,7 @@ failures group as follows; repeated assertions are not independent defects.
 | Native Git owner image | copied removed `core/packages/native-git/...` path | opt-in `storageOwnership.test.ts` | pinned Node image and current monorepo path | Fixed to copy the owning `git-repositories` source; 6/6 pass |
 | Pinned mise smoke drift | expected mandatory mirror, old help/footer, old controller/CLI paths | `mise-install-smoke.bash` | pinned mise v2026.8.4 in its disposable container | Updated to current optional-provider, selected-host help, independent CLI, and managed-controller contracts; smoke passes |
 | Managed controller update | active probe used ordinary state/runtime roots | real mise host update with a running managed controller | managed state root and `/dim/managed` runtime identity | Fixed production probe and focused tests; active update restarts and reconnects |
+| Guest service removal race | `ESRCH: no such process` after live identity validation | parallel `workspaceGuestClient.test.ts` cleanup | supervisor exits between identity check and signal | Treat `ESRCH` as already stopped; deterministic regression and 10 stress runs pass |
 
 The final source-gate logs supersede the earlier aggregate failure result; no
 assertion, permission guard or test selection was weakened.
@@ -90,6 +91,11 @@ The separate Docker-focused follow-up therefore passed 14 review-tracing tests,
 one SSH test, one root-cleanup test, two selected-host stdio tests, both real
 source-CI container tests and the Native Git owner-isolation test. The selected
 host scratch image was label-checked before removal.
+
+The pinned mise end-to-end smoke also passed with mise v2026.8.4 after its
+expectations were reconciled with optional mirror selection, host-owned help,
+independent CLI updates and managed controller paths. It uses a disposable
+container, local registry and temporary installation only.
 
 ## Standalone GS evidence
 
