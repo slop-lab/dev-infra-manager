@@ -4,6 +4,8 @@ Adds revision-pinned discussions to the Git pull request service without adding
 conversation handling to Git review or the diff renderer. Requires repository
 access, Git pull requests, and Git diff services.
 Portable comment and anchor schemas come from `@slop-lab/gs-discussions`.
+`@slop-lab/gs-discussions-service` owns the exact PR-plus-diff composition;
+this package retains DIM authentication and HTTP mapping only.
 
 `POST /v1/projects/:project/repositories/:repository/pull-requests/:id/comments`
 accepts `{expectedVersion,revisionId,body,anchor?:{path,side,line}}`, where `side`

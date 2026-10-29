@@ -30,6 +30,8 @@
   },
   "dependencies": {
     "@slop-lab/gs-discussions": "workspace:0.10.0",
+    "@slop-lab/gs-discussions-service": "workspace:0.10.0",
+    "@slop-lab/gs-pull-request-service": "workspace:0.10.0",
     "@slop-lab/gs-pull-requests": "workspace:0.10.0",
     "zod": "4.6.6"
   },
