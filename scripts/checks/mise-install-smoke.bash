@@ -204,7 +204,7 @@ const reconnect = () => {
   socket = createConnection(socketPath);
   socket.once("connect", () => {
     appendFileSync(connectionLog, "connected\n");
-    socket.write("GET /healthz HTTP/1.1\r\nHost: dim-controller\r\nConnection: close\r\n\r\n");
+    socket.write("GET /healthz HTTP/1.1\r\nHost: dim-controller\r\n");
   });
   socket.once("error", () => undefined);
   socket.once("end", scheduleReconnect);
@@ -226,6 +226,7 @@ for _ in $(seq 1 100); do
   sleep 0.05
 done
 if ! test -s "$partial_connections"; then echo "partial client did not connect to $controller_socket" >&2; exit 1; fi
+connection_count_before="$(wc -l <"$partial_connections")"
 controller_pid_before="$(cat "$controller_pid")"
 if ! dim installer install core --with-managed --local-bin \
   >/tmp/core-update.out 2>/tmp/core-update.err; then
@@ -238,11 +239,14 @@ cat /tmp/core-update.err >&2
 controller_pid_after="$(cat "$controller_pid")"
 if [[ "$controller_pid_after" == "$controller_pid_before" ]]; then echo "active controller was not restarted during host update" >&2; exit 1; fi
 for _ in $(seq 1 100); do
-  test "$(wc -l <"$partial_connections")" -ge 3 && break
+  test "$(wc -l <"$partial_connections")" -gt "$connection_count_before" && break
   sleep 0.05
 done
 connection_count="$(wc -l <"$partial_connections")"
-if [[ "$connection_count" -lt 3 ]]; then echo "partial client reconnected only $connection_count times" >&2; exit 1; fi
+if [[ "$connection_count" -le "$connection_count_before" ]]; then
+  echo "partial client did not reconnect after controller update (before=$connection_count_before after=$connection_count)" >&2
+  exit 1
+fi
 kill "$attacker_pid"
 wait "$attacker_pid" || { status=$?; [[ "$status" == 143 ]] || exit "$status"; }
 if test -e "$runtime/rollback-sentinel"; then echo "host update retained a previous-runtime sentinel" >&2; exit 1; fi
