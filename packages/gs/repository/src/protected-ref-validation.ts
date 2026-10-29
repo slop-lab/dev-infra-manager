@@ -5,6 +5,8 @@ import { assertRepositorySelector, GitRepositoryError, type GitRepositoryRuntime
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
+const incarnationId = z.string().uuid();
+const principalId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
 const gitRef = z.string().refine(isGitRef, "Git ref is invalid");
 const protectedRef = gitRef.refine((value) => value.startsWith("refs/heads/"), "protected ref must name a branch");
 const selectorShape = { namespaceId: identifier, repositoryId: identifier } as const;
@@ -29,7 +31,12 @@ const protectedRefTargetSchema = z.object({
   selector: selectorSchema,
   repositoryPath: z.string().min(1),
   head: protectedRefHeadSchema,
-});
+  incarnationId,
+  authorityEpoch: digest,
+  policyDigest: digest,
+  ownerPrincipalId: principalId,
+  refPolicyRevision: digest,
+}).strict().readonly();
 const protectedRefIntentCoreSchema = z.object({
   ...selectorShape,
   sequence: z.number().int().positive(),
@@ -41,9 +48,16 @@ const protectedRefIntentCoreSchema = z.object({
   candidateTree: objectId,
   authorizationId: digest,
   evidenceDigest: digest,
-});
+  incarnationId,
+  authorityEpoch: digest,
+  policyDigest: digest,
+  ownerPrincipalId: principalId,
+  refPolicyRevision: digest,
+}).strict().readonly();
+const protectedRefFinalizedQuerySchema = protectedRefIntentCoreSchema.unwrap().omit({ sequence: true }).strict().readonly();
 
 export type ProtectedRefChange = z.infer<typeof protectedRefChangeSchema>;
+export type ProtectedRefFinalizedQuery = z.infer<typeof protectedRefFinalizedQuerySchema>;
 
 export function parseProtectedRefChange(input: ProtectedRefChange): ProtectedRefChange {
   const change = protectedRefChangeSchema.parse(input);
@@ -54,6 +68,10 @@ export function parseProtectedRefChange(input: ProtectedRefChange): ProtectedRef
 export function assertProtectedRefIntent(intent: RepositorySelector & object): void {
   protectedRefIntentCoreSchema.parse(intent);
   assertRepositorySelector(intent);
+}
+
+export function parseProtectedRefFinalizedQuery(input: ProtectedRefFinalizedQuery): ProtectedRefFinalizedQuery {
+  return protectedRefFinalizedQuerySchema.parse(input);
 }
 
 export function assertTargetBinding(

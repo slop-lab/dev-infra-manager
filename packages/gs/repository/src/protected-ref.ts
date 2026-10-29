@@ -13,11 +13,21 @@ import {
   assertRecoveryPath,
   assertTargetBinding,
   parseProtectedRefChange,
+  parseProtectedRefFinalizedQuery,
   type ProtectedRefChange,
 } from "./protected-ref-validation.js";
+import {
+  createProtectedRefFinalizedQuery,
+  type ProtectedRefFinalized,
+  type ProtectedRefFinalizedQuery,
+} from "./protected-ref-finalized.js";
 
 const execute = promisify(execFile);
 export type { ProtectedRefChange } from "./protected-ref-validation.js";
+export { parseProtectedRefFinalizedQuery };
+export type { ProtectedRefFinalized, ProtectedRefFinalizedQuery } from "./protected-ref-finalized.js";
+export { createProtectedRefFinalizedQuery };
+export { finalizedProtectedRef, protectedRefIntentMatchesQuery } from "./protected-ref-finalized.js";
 
 export type ProtectedRefHead = {
   readonly sequence: number;
@@ -26,15 +36,18 @@ export type ProtectedRefHead = {
   readonly tree: string;
 };
 
-export type ProtectedRefTarget<Fence, Authority = unknown> = {
+export type ProtectedRefTarget = {
   readonly selector: RepositorySelector;
   readonly repositoryPath: string;
   readonly head: ProtectedRefHead;
-  readonly fence: Fence;
-  readonly authority: Authority;
+  readonly incarnationId: string;
+  readonly authorityEpoch: string;
+  readonly policyDigest: string;
+  readonly ownerPrincipalId: string;
+  readonly refPolicyRevision: string;
 };
 
-export type ProtectedRefIntent<Fence, Proof> = RepositorySelector & {
+export type ProtectedRefIntent = RepositorySelector & {
   readonly sequence: number;
   readonly protectedRef: string;
   readonly proposalRef: string;
@@ -44,8 +57,11 @@ export type ProtectedRefIntent<Fence, Proof> = RepositorySelector & {
   readonly candidateTree: string;
   readonly authorizationId: string;
   readonly evidenceDigest: string;
-  readonly fence: Fence;
-  readonly proof: Proof;
+  readonly incarnationId: string;
+  readonly authorityEpoch: string;
+  readonly policyDigest: string;
+  readonly ownerPrincipalId: string;
+  readonly refPolicyRevision: string;
 };
 
 export type ProtectedRefReceipt = {
@@ -55,25 +71,26 @@ export type ProtectedRefReceipt = {
 
 type Awaitable<Value> = Value | Promise<Value>;
 
-export interface TargetPort<Fence, Proof, Authority> {
-  resolve(change: ProtectedRefChange): Promise<ProtectedRefTarget<Fence, Authority>>;
-  assertCurrent(target: ProtectedRefTarget<Fence, Authority>): Promise<void>;
-  locateForRecovery(intent: ProtectedRefIntent<Fence, Proof>): Promise<string>;
+export interface TargetPort {
+  resolve(change: ProtectedRefChange): Promise<ProtectedRefTarget>;
+  assertCurrent(target: ProtectedRefTarget): Promise<void>;
+  locateForRecovery(intent: ProtectedRefIntent): Promise<string>;
 }
 
-export interface JournalPort<Fence, Proof> {
-  findFinalized(change: ProtectedRefChange, protectedRef: string): Awaitable<ProtectedRefIntent<Fence, Proof> | undefined>;
-  appendIntent(intent: ProtectedRefIntent<Fence, Proof>): Awaitable<void>;
-  finalize(intent: ProtectedRefIntent<Fence, Proof>): Awaitable<void>;
-  cancel(intent: ProtectedRefIntent<Fence, Proof>): Awaitable<void>;
-  pending(): Awaitable<readonly ProtectedRefIntent<Fence, Proof>[]>;
+export interface JournalPort {
+  findFinalized(change: ProtectedRefChange, protectedRef: string): Awaitable<ProtectedRefFinalized | undefined>;
+  findFinalizedExact(query: ProtectedRefFinalizedQuery): Awaitable<ProtectedRefFinalized | undefined>;
+  appendIntent(intent: ProtectedRefIntent): Awaitable<void>;
+  finalize(intent: ProtectedRefIntent): Awaitable<void>;
+  cancel(intent: ProtectedRefIntent): Awaitable<void>;
+  pending(): Awaitable<readonly ProtectedRefIntent[]>;
 }
 
-export interface PolicyPort<Fence, Proof, Authority> {
+export interface PolicyPort {
   authorize(input: {
     readonly change: ProtectedRefChange;
-    readonly target: ProtectedRefTarget<Fence, Authority>;
-  }): Promise<Proof>;
+    readonly target: ProtectedRefTarget;
+  }): Promise<{ readonly refPolicyRevision: string }>;
 }
 
 export type SerializationPort = {
@@ -83,24 +100,24 @@ export type SerializationPort = {
   readonly kind: "already-exclusive";
 };
 
-export type ProtectedRefPorts<Fence, Proof, Authority = unknown> = {
+export type ProtectedRefPorts = {
   readonly runtime: Pick<GitRepositoryRuntime, "gitExecutable" | "storageRoot">;
   readonly gitIdentity: GitExecutableIdentity;
-  readonly targets: TargetPort<Fence, Proof, Authority>;
-  readonly journal: JournalPort<Fence, Proof>;
-  readonly policy: PolicyPort<Fence, Proof, Authority>;
+  readonly targets: TargetPort;
+  readonly journal: JournalPort;
+  readonly policy: PolicyPort;
   readonly serialization: SerializationPort;
 };
 
-export async function compareAndSwapProtectedRef<Fence, Proof, Authority>(
-  ports: ProtectedRefPorts<Fence, Proof, Authority>,
+export async function compareAndSwapProtectedRef(
+  ports: ProtectedRefPorts,
   input: ProtectedRefChange,
 ): Promise<ProtectedRefReceipt> {
   const change = parseProtectedRefChange(input);
   return runExclusive(ports.serialization, () => compareAndSwapInTransaction(ports, change));
 }
 
-export async function recoverProtectedRefChanges<Fence, Proof, Authority>(ports: ProtectedRefPorts<Fence, Proof, Authority>): Promise<void> {
+export async function recoverProtectedRefChanges(ports: ProtectedRefPorts): Promise<void> {
   await runExclusive(ports.serialization, async () => {
     for (const intent of await ports.journal.pending()) {
       assertProtectedRefIntent(intent);
@@ -118,8 +135,8 @@ export async function recoverProtectedRefChanges<Fence, Proof, Authority>(ports:
   });
 }
 
-async function compareAndSwapInTransaction<Fence, Proof, Authority>(
-  ports: ProtectedRefPorts<Fence, Proof, Authority>,
+async function compareAndSwapInTransaction(
+  ports: ProtectedRefPorts,
   change: ProtectedRefChange,
 ): Promise<ProtectedRefReceipt> {
   const target = await ports.targets.resolve(change);
@@ -133,9 +150,12 @@ async function compareAndSwapInTransaction<Fence, Proof, Authority>(
   const tree = await readCommitTree(ports.runtime.gitExecutable, target.repositoryPath, change.candidateCommit);
   if (tree !== change.candidateTree) throw new GitRepositoryError("protected ref candidate tree conflicts");
   const proof = await ports.policy.authorize({ change, target });
+  if (proof.refPolicyRevision !== target.refPolicyRevision) {
+    throw new GitRepositoryError("protected ref update policy changed during authorization");
+  }
   await ports.targets.assertCurrent(target);
   await assertGitExecutableIdentity(ports.runtime.gitExecutable, ports.gitIdentity);
-  const intent: ProtectedRefIntent<Fence, Proof> = {
+  const intent: ProtectedRefIntent = {
     namespaceId: change.namespaceId,
     repositoryId: change.repositoryId,
     sequence: target.head.sequence + 1,
@@ -147,8 +167,11 @@ async function compareAndSwapInTransaction<Fence, Proof, Authority>(
     candidateTree: change.candidateTree,
     authorizationId: change.authorizationId,
     evidenceDigest: change.evidenceDigest,
-    fence: target.fence,
-    proof,
+    incarnationId: target.incarnationId,
+    authorityEpoch: target.authorityEpoch,
+    policyDigest: target.policyDigest,
+    ownerPrincipalId: target.ownerPrincipalId,
+    refPolicyRevision: proof.refPolicyRevision,
   };
   await ports.journal.appendIntent(intent);
   if (!await atomicPromote(ports.runtime, intent, change.expectedCommit, change.candidateCommit)) {
@@ -158,25 +181,25 @@ async function compareAndSwapInTransaction<Fence, Proof, Authority>(
   return { outcome: "promoted", sequence: intent.sequence };
 }
 
-async function retryReceipt<Fence, Proof>(
-  journal: JournalPort<Fence, Proof>,
+async function retryReceipt(
+  journal: JournalPort,
   change: ProtectedRefChange,
-  target: ProtectedRefTarget<Fence, unknown>,
+  target: ProtectedRefTarget,
 ): Promise<ProtectedRefReceipt> {
   const previous = await journal.findFinalized(change, target.head.protectedRef);
-  if (previous !== undefined) assertProtectedRefIntent(previous);
+  if (previous !== undefined) assertProtectedRefIntent(previous.intent);
   if (previous !== undefined
-    && previous.namespaceId === change.namespaceId
-    && previous.repositoryId === change.repositoryId
-    && previous.protectedRef === target.head.protectedRef
-    && previous.proposalRef === change.proposalRef
-    && previous.expectedCommit === change.expectedCommit
-    && previous.candidateCommit === change.candidateCommit
-    && previous.candidateTree === change.candidateTree
-    && previous.authorizationId === change.authorizationId
-    && previous.evidenceDigest === change.evidenceDigest
+    && previous.intent.namespaceId === change.namespaceId
+    && previous.intent.repositoryId === change.repositoryId
+    && previous.intent.protectedRef === target.head.protectedRef
+    && previous.intent.proposalRef === change.proposalRef
+    && previous.intent.expectedCommit === change.expectedCommit
+    && previous.intent.candidateCommit === change.candidateCommit
+    && previous.intent.candidateTree === change.candidateTree
+    && previous.intent.authorizationId === change.authorizationId
+    && previous.intent.evidenceDigest === change.evidenceDigest
     && target.head.commit === change.candidateCommit) {
-    return { outcome: "already-current", sequence: previous.sequence };
+    return { outcome: "already-current", sequence: previous.receipt.sequence };
   }
   throw new GitRepositoryError("protected ref compare-and-swap head conflicts");
 }

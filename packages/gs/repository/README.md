@@ -12,12 +12,21 @@ callback. It neither interprets `.dim` files nor enables review, PR, CI or
 promotion implicitly. Ordinary writes cannot update configured protected refs.
 An authorization callback cannot replace the repository owner's protected set.
 
-Protected-ref orchestration uses typed target-proof, policy and durable-journal
-ports under explicit serialization. Journal calls must complete only after
-durable commit. Recovery cancels an unapplied intent; it never replays old
-authorization. A standalone durable journal implementation is not supplied by
-this preparation checkpoint. DIM binds its existing proof and format-12 journal
-outside this package; repository-only operation needs neither.
+Protected-ref orchestration uses concrete targets and intents bound to exact
+namespace/repository, incarnation, authority epoch, policy digest, owner
+principal and protected head. The only policy proof field is
+`refPolicyRevision`. Journal calls must complete only after durable commit.
+Recovery cancels an unapplied intent or finalizes an already-applied CAS; it
+never reauthorizes or replays Git CAS. `@slop-lab/gs-repository-service`
+supplies the independent SQLite catalog, policy, branch baseline, journal and
+exclusive live-owner implementation. DIM maps its existing proof and format-12
+journal inward without changing persisted transition bytes.
+
+The durable journal also supports exact finalized-action lookup. Callers provide
+the complete historical intent identity except sequence and receive the stored
+intent plus original promoted receipt. This is the reconciliation boundary for a
+feature crash after Git CAS but before its own receipt is finalized; current Git
+state alone is never treated as proof of authorization.
 
 Private receive-hook bytes and `DIM_NATIVE_GIT_*` environment marker names are
 retained because existing owned repositories validate those exact stored bytes.
