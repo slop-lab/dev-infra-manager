@@ -110,16 +110,21 @@ version1="$(dim --version)"
 grep -q "DIM installer $DIM_PACKAGE_VERSION" <<<"$version1"
 grep -q "DIM CLI: not installed" <<<"$version1"
 
-echo "[container] non-TTY clean install refuses a missing required provider before mutation"
+echo "[container] non-TTY clean install rejects an unreviewed optional provider before mutation"
 config_path="$HOME/.config/dim/config.json"
+controller_runtime="/tmp/dim-0/dim/managed"
+controller_pid="$controller_runtime/controller.pid"
+controller_socket="$controller_runtime/workspace/controller.sock"
 mkdir -p "$(dirname "$config_path")"
 printf '{"schemaVersion":1,"workspaceBackend":"sysbox"}\n' >"$config_path"
 config_before="$(sha256sum "$config_path")"
-if dim installer install core --with-managed >/tmp/core-refusal.out 2>/tmp/core-refusal.err; then
-  echo "clean non-TTY core install unexpectedly succeeded without explicit host plugin selection" >&2
+if dim installer install core --with-managed \
+  --host-mirror-plugin '@slop-lab/dim-host-plugin-mirrors@0.9.0' \
+  >/tmp/core-refusal.out 2>/tmp/core-refusal.err; then
+  echo "clean non-TTY core install unexpectedly accepted an unreviewed host plugin selection" >&2
   exit 1
 fi
-grep -Fq -- "--host-mirror-plugin '@slop-lab/dim-host-plugin-mirrors@$DIM_PACKAGE_VERSION'" /tmp/core-refusal.err
+grep -Fq -- "must be the reviewed package '@slop-lab/dim-host-plugin-mirrors@$DIM_PACKAGE_VERSION'" /tmp/core-refusal.err
 test ! -e "$HOME/.local/share/dim/runtime"
 test "$(sha256sum "$config_path")" = "$config_before"
 
@@ -135,42 +140,52 @@ fi
 grep -Fq "not managed by DIM installer" /tmp/core-rollback.err
 test "$(cat "$HOME/.local/bin/dim")" = "user-owned dim"
 test ! -e "$HOME/.local/share/dim/runtime/current"
-test ! -e "/tmp/dim-0/dim/controller.pid"
-test ! -e "/tmp/dim-0/dim/workspace/controller.sock"
+test ! -e "$controller_pid"
+test ! -e "$controller_socket"
 test "$(sha256sum "$config_path")" = "$config_before"
 rm "$HOME/.local/bin/dim"
 
 echo "[container] install the exact reviewed host plugin in the first core transaction"
 dim installer install core --with-managed \
   --host-mirror-plugin "@slop-lab/dim-host-plugin-mirrors@$DIM_PACKAGE_VERSION"
-test ! -e "$HOME/.local/bin/dim"
+if test -e "$HOME/.local/bin/dim"; then
+  echo "mise-managed core install unexpectedly created a direct local bin" >&2
+  exit 1
+fi
 mode="$(mise exec node@24 -- node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).cli.mode)" "$config_path")"
-test "$mode" = "proxied"
+if [[ "$mode" != proxied ]]; then echo "expected proxied CLI mode, got: $mode" >&2; exit 1; fi
 runtime="$HOME/.local/share/dim/runtime/current"
 plugin_version="$(mise exec node@24 -- node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).dependencies['@slop-lab/dim-host-plugin-mirrors'])" "$runtime/package.json")"
-test "$plugin_version" = "$DIM_PACKAGE_VERSION"
-enabled_plugin="$(mise exec node@24 -- node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).plugins[0])" "$runtime/plugins.json")"
-test "$enabled_plugin" = "@slop-lab/dim-host-plugin-mirrors"
+if [[ "$plugin_version" != "$DIM_PACKAGE_VERSION" ]]; then echo "installed mirror plugin version mismatch: $plugin_version" >&2; exit 1; fi
+mirror_enabled="$(mise exec node@24 -- node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).plugins.includes('@slop-lab/dim-host-plugin-mirrors'))" "$runtime/plugins.json")"
+if [[ "$mirror_enabled" != true ]]; then echo "installed mirror plugin was not enabled" >&2; exit 1; fi
 
 echo "[container] dim --version after install (matching versions, proxied)"
 version2="$(dim --version)"
-grep -q "DIM CLI $DIM_PACKAGE_VERSION (via DIM installer $DIM_PACKAGE_VERSION)" <<<"$version2"
-! grep -qi "warning" <<<"$version2"
+if ! grep -q "DIM CLI $DIM_PACKAGE_VERSION (via DIM installer $DIM_PACKAGE_VERSION)" <<<"$version2"; then
+  echo "installed facade version output is missing the matched CLI/installer identity: $version2" >&2
+  exit 1
+fi
+if grep -qi "warning" <<<"$version2"; then echo "installed facade version unexpectedly warned: $version2" >&2; exit 1; fi
 
-echo "[container] dim --help proxied to the real DIM CLI with facade footer"
+echo "[container] dim --help proxied to the selected host-owned command surface"
 help2="$(dim --help)"
-grep -q "Isolated, persistent development workspaces" <<<"$help2"
-grep -q "Running via the DIM installer facade" <<<"$help2"
+if ! grep -q "Persistent, isolated development workspaces" <<<"$help2"; then echo "installed facade did not proxy host-owned help" >&2; exit 1; fi
+if ! grep -q "Client commands: dim host --help; dim forward --help" <<<"$help2"; then echo "proxied host help is missing client command guidance" >&2; exit 1; fi
 
-if mise ls --global | grep -Eq '^node[[:space:]]'; then
+global_tools="$(mise ls --global)"
+if grep -Eq '^node[[:space:]]' <<<"$global_tools"; then
   echo "facade bootstrap must not add Node.js to global mise configuration" >&2
   exit 1
 fi
 
-echo "[container] existing-runtime rollback survives partial clients on every promoted controller"
+echo "[container] existing-runtime update reconnects partial clients without mutating the independent CLI"
+dim controller restart
+test -e "$controller_pid"
+test -S "$controller_socket"
 printf 'previous runtime\n' >"$runtime/rollback-sentinel"
 printf 'user-owned dim\n' >"$HOME/.local/bin/dim"
-config_before_upgrade_rollback="$(sha256sum "$config_path")"
+cli_before_update="$(mise exec node@24 -- node -e "process.stdout.write(JSON.stringify(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).cli))" "$config_path")"
 cat >/tmp/dim-hold-partial.mjs <<'NODE'
 import { appendFileSync } from "node:fs";
 import { createConnection } from "node:net";
@@ -178,15 +193,23 @@ import { createConnection } from "node:net";
 const [socketPath, connectionLog] = process.argv.slice(2);
 let stopping = false;
 let socket;
+let reconnecting = false;
+const scheduleReconnect = () => {
+  if (stopping || reconnecting) return;
+  reconnecting = true;
+  setImmediate(() => { reconnecting = false; reconnect(); });
+};
 const reconnect = () => {
   if (stopping) return;
   socket = createConnection(socketPath);
   socket.once("connect", () => {
     appendFileSync(connectionLog, "connected\n");
-    socket.write("GET /healthz HTTP/1.1\r\nHost: dim-controller\r\n");
+    socket.write("GET /healthz HTTP/1.1\r\nHost: dim-controller\r\nConnection: close\r\n\r\n");
   });
   socket.once("error", () => undefined);
-  socket.once("close", () => setImmediate(reconnect));
+  socket.once("end", scheduleReconnect);
+  socket.once("close", scheduleReconnect);
+  socket.resume();
 };
 process.once("SIGTERM", () => {
   stopping = true;
@@ -196,46 +219,53 @@ reconnect();
 NODE
 partial_connections=/tmp/dim-partial-connections
 mise exec node@24 -- node /tmp/dim-hold-partial.mjs \
-  /tmp/dim-0/dim/workspace/controller.sock "$partial_connections" &
+  "$controller_socket" "$partial_connections" &
 attacker_pid=$!
 for _ in $(seq 1 100); do
   test -s "$partial_connections" && break
   sleep 0.05
 done
-test -s "$partial_connections"
-if dim installer install core --with-managed --local-bin \
-  >/tmp/core-upgrade-rollback.out 2>/tmp/core-upgrade-rollback.err; then
-  echo "existing-runtime install unexpectedly replaced a foreign bin file" >&2
+if ! test -s "$partial_connections"; then echo "partial client did not connect to $controller_socket" >&2; exit 1; fi
+controller_pid_before="$(cat "$controller_pid")"
+if ! dim installer install core --with-managed --local-bin \
+  >/tmp/core-update.out 2>/tmp/core-update.err; then
+  cat /tmp/core-update.err >&2
+  echo "existing-runtime update failed" >&2
   exit 1
 fi
-grep -Fq "not managed by DIM installer" /tmp/core-upgrade-rollback.err
+cat /tmp/core-update.out
+cat /tmp/core-update.err >&2
+controller_pid_after="$(cat "$controller_pid")"
+if [[ "$controller_pid_after" == "$controller_pid_before" ]]; then echo "active controller was not restarted during host update" >&2; exit 1; fi
 for _ in $(seq 1 100); do
   test "$(wc -l <"$partial_connections")" -ge 3 && break
   sleep 0.05
 done
-test "$(wc -l <"$partial_connections")" -ge 3
+connection_count="$(wc -l <"$partial_connections")"
+if [[ "$connection_count" -lt 3 ]]; then echo "partial client reconnected only $connection_count times" >&2; exit 1; fi
 kill "$attacker_pid"
-wait "$attacker_pid"
-test "$(cat "$runtime/rollback-sentinel")" = "previous runtime"
-test "$(cat "$HOME/.local/bin/dim")" = "user-owned dim"
-test "$(sha256sum "$config_path")" = "$config_before_upgrade_rollback"
-test -e /tmp/dim-0/dim/controller.pid
-test -S /tmp/dim-0/dim/workspace/controller.sock
+wait "$attacker_pid" || { status=$?; [[ "$status" == 143 ]] || exit "$status"; }
+if test -e "$runtime/rollback-sentinel"; then echo "host update retained a previous-runtime sentinel" >&2; exit 1; fi
+if [[ "$(cat "$HOME/.local/bin/dim")" != "user-owned dim" ]]; then echo "host update changed the independent local bin" >&2; exit 1; fi
+cli_after_update="$(mise exec node@24 -- node -e "process.stdout.write(JSON.stringify(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).cli))" "$config_path")"
+if [[ "$cli_after_update" != "$cli_before_update" ]]; then echo "host update changed the independent CLI selection" >&2; exit 1; fi
+if ! test -e "$controller_pid"; then echo "updated controller PID is missing" >&2; exit 1; fi
+if ! test -S "$controller_socket"; then echo "updated controller socket is missing" >&2; exit 1; fi
 mise exec node@24 -- node -e '
   const http = require("node:http");
   const request = http.request({ socketPath: process.argv[1], path: "/healthz" }, (response) => {
     response.resume();
     response.once("end", () => process.exit(response.statusCode === 200 ? 0 : 1));
   });
-  request.once("error", () => process.exit(1));
+  request.once("error", (error) => { console.error(error.message); process.exit(1); });
   request.end();
-' /tmp/dim-0/dim/workspace/controller.sock
+' "$controller_socket"
 rm "$HOME/.local/bin/dim"
 
 echo "[container] explicit --local-bin overrides the mise auto-detected default"
-dim installer install core --with-managed --local-bin
+dim installer install cli --local-bin
 test -L "$HOME/.local/bin/dim"
-readlink -f "$HOME/.local/bin/dim" | grep -q "/dim/runtime/current/"
+readlink -f "$HOME/.local/bin/dim" | grep -q "/dim/cli/runtime/current/"
 
 export PATH="$HOME/.local/bin:$PATH"
 which_count="$(which -a dim | sort -u | wc -l)"
