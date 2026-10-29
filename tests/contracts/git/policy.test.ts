@@ -15,7 +15,7 @@ describe("managed branch policy", () => {
     expect(repositoryPolicyRevision(declaration)).toBe(digest);
     const policy = parseRepositoryPolicy({ schemaVersion: 1, ...declaration, policyRevision: digest });
     expect(repositoryDefaultRef(policy)).toBe(declaration.protectedRef);
-    expect(repositoryBranches(policy)).toEqual({ [declaration.protectedRef]: { review: true } });
+    expect(repositoryBranches(policy)).toEqual({ [declaration.protectedRef]: {} });
     expect(() => repositoryBranchPolicy(policy, "refs/heads/main")).toThrow(/not managed/);
   });
   it("binds branch defaults and review choices into the authoritative digest", () => {

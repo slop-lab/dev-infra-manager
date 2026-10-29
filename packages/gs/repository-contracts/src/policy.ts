@@ -7,7 +7,7 @@ const protectedRef = z.string().max(1024).refine((value) => value.startsWith("re
   && !/[\x00-\x20\x7f~^:?*[\]]/.test(value)
   && value.slice("refs/heads/".length).split("/").every((part) => part.length > 0 && !part.startsWith(".")));
 
-export const repositoryBranchPolicySchema = z.object({ review: z.boolean() }).strict().readonly();
+export const repositoryBranchPolicySchema = z.record(z.string().min(1).max(64), z.json()).readonly();
 export type RepositoryBranchPolicy = z.infer<typeof repositoryBranchPolicySchema>;
 
 const repositoryPolicyShape = z.object({
@@ -48,7 +48,7 @@ export function repositoryDefaultRef(policy: RepositoryPolicy): string {
 }
 
 export function repositoryBranches(policy: RepositoryPolicy): Readonly<Record<string, RepositoryBranchPolicy>> {
-  return policy.branches ?? { [policy.protectedRef]: { review: true } };
+  return policy.branches ?? { [policy.protectedRef]: {} };
 }
 
 export function repositoryBranchPolicy(policy: RepositoryPolicy, ref: string): RepositoryBranchPolicy {

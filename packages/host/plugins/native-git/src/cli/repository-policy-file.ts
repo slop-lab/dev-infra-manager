@@ -2,7 +2,7 @@ import { constants, type BigIntStats } from "node:fs";
 import { open, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "@slop-lab/dim-host-core";
-import { repositoryBranchPolicySchema as nativeRepositoryBranchPolicySchema, type RepositoryBranchPolicy as NativeRepositoryBranchPolicy } from "@slop-lab/gs-repository-contracts";
+type NativeRepositoryBranchPolicy = { readonly review: boolean };
 
 const maximumPolicyBytes = 64 * 1024;
 
@@ -75,7 +75,12 @@ function parseNativeRepositoryPolicyFile(serialized: string): NativeRepositoryPo
   let branches: Record<string, NativeRepositoryBranchPolicy> | undefined;
   if (value.branches !== undefined) {
     if (!isRecord(value.branches)) throw new UserError("repository branches must be an object");
-    branches = Object.fromEntries(Object.entries(value.branches).map(([ref, rule]) => [ref, nativeRepositoryBranchPolicySchema.parse(rule)]));
+    branches = Object.fromEntries(Object.entries(value.branches).map(([ref, rule]) => {
+      if (!isRecord(rule) || Object.keys(rule).length !== 1 || typeof rule.review !== "boolean") {
+        throw new UserError("repository branch policy requires only a boolean review declaration");
+      }
+      return [ref, { review: rule.review }];
+    }));
   }
   return { repositoryId: value.repositoryId, extensions: value.extensions,
     ...(value.defaultRef === undefined ? {} : { defaultRef: value.defaultRef }), ...(branches === undefined ? {} : { branches }) };

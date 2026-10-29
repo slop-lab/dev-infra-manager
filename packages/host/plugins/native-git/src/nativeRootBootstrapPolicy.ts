@@ -16,7 +16,7 @@ export function compileNativeRepositoryBootstrapPolicy(input: {
   readonly protectedRef: string;
   readonly extensions?: unknown;
   readonly defaultRef?: string;
-  readonly branches?: Readonly<Record<string, { readonly review: boolean }>>;
+  readonly branches?: NativeImportedRootPolicy["branches"];
 }): NativeRepositoryBootstrapPolicy {
   if (Object.keys(input).some((key) => !["repositoryId", "protectedRef", "extensions", "defaultRef", "branches"].includes(key))) {
     throw new UserError("repository policy input contains unknown fields");
