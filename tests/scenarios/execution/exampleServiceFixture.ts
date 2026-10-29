@@ -6,6 +6,7 @@ import { controlPlanePlugin as gitCiPlugin } from "../../../packages/control-pla
 import { controlPlanePlugin as mergePlugin } from "../../../packages/control-plane/plugins/git-merge-policy/src/index.js";
 import { controlPlanePlugin as workflowPlugin } from "../../../packages/control-plane/plugins/ci-workflows/src/index.js";
 import { codeReviewService, type CodeReviewService } from "../../../packages/control-plane/plugins/git-review/src/plugin-api.js";
+import type { RunningControlPlanePlugin } from "../../../packages/control-plane/core/src/plugin-api.js";
 import { idleNativeConfig } from "../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { activationToken, finalizeReadinessToken, generationId, importer, humanReviewer, hostPromoter,
   workspaceWriteIssuer } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
@@ -29,11 +30,27 @@ export async function startExampleService(recipe: ExampleRecipe, root: string) {
   if (!selected.has("@slop-lab/dim-control-plane-plugin-git-repositories")) throw new Error("example does not declare its Git repository service");
   const prepared = await Promise.all(entries.map(({ plugin, config }) => plugin.configure(config)));
   const extensions = prepared.flatMap((entry) => entry.extensions ?? []);
-  const service = await configuredNativeGitBundleServer({ ...options, config: repositoryConfiguration(config), extensions });
+  const lifetime = new AbortController();
+  const runningPlugins: RunningControlPlanePlugin[] = [];
+  let service: Awaited<ReturnType<typeof configuredNativeGitBundleServer>> | undefined;
   try {
-    const origin = await service.listen("127.0.0.1", 0);
+    for (const entry of prepared) runningPlugins.push(await entry.start({ signal: lifetime.signal, extensions }));
+    const configured = await configuredNativeGitBundleServer({ ...options, config: repositoryConfiguration(config), extensions });
+    service = configured;
+    const origin = await configured.listen("127.0.0.1", 0);
     const create = codeReviewService(extensions).create;
-    const running = { ...service, origin, createReview: (selector: Parameters<CodeReviewService["create"]>[1]) => create(service.context, selector) };
+    const running = { ...configured, origin,
+      createReview: (selector: Parameters<CodeReviewService["create"]>[1]) => create(configured.context, selector),
+      async close() {
+        lifetime.abort();
+        await configured.close();
+        for (const plugin of runningPlugins.reverse()) await plugin.close();
+      } };
     services.push(running); return running;
-  } catch (error) { await service.close(); throw error; }
+  } catch (error) {
+    lifetime.abort();
+    await service?.close();
+    for (const plugin of runningPlugins.reverse()) await plugin.close();
+    throw error;
+  }
 }
