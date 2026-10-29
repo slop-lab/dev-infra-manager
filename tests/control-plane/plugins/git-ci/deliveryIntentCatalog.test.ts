@@ -3,7 +3,7 @@ import { copyFile, open, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFil
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
+import { dimDeliveryBinding as authoritativeNativeDeliveryBinding } from "../../../support/dimCi.js";
 import {
   readSelectableDeliveryIntents,
   recordExplicitAuthoritativeNativeDeliveryIntent
@@ -211,8 +211,8 @@ it("reads one verified projection per poll without warm body rereads for a multi
   expect(projectionReadsAfterCold).toBe(1);
   expect(readProjection).toHaveBeenCalledTimes(2);
   expect(readBody).toHaveBeenCalledTimes(bodyReadsAfterCold + 1);
-  expect(cold[0]?.event.jobName).toBe(
-    [...envelope.events].sort((left, right) => left.jobName.localeCompare(right.jobName))[0]?.jobName
+  expect(cold[0]?.event.checkName).toBe(
+    [...envelope.events].sort((left, right) => left.checkName.localeCompare(right.checkName))[0]?.checkName
   );
 }, 30_000);
 

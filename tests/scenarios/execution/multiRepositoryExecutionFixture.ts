@@ -8,6 +8,7 @@ import { createRootBundle, createFinalizeRoot, uploadRootBundle, parseImportRece
   workspaceWriteIssuerAuthorization, runGit } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { idleNativeConfig } from "../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 import { assignment } from "../../contracts/ci/executionFixture.js";
+import { encodeDimReviewJobAvailableEvent } from "../../../packages/contracts/ci/src/execution-protocol.js";
 
 /** Fresh actual Git repositories and authority per scenario, without test-order state. */
 export async function multiRepositoryExecutionFixture() {
@@ -56,9 +57,9 @@ export async function multiRepositoryExecutionFixture() {
     now: () => now,
     advanceClock(milliseconds: number) { now += milliseconds; },
     async authorize(jobName: string) {
-      const event = envelope.events.find((event) => event.jobName === jobName);
+      const event = envelope.events.find((event) => event.checkName === jobName);
       if (!event) throw new Error(`missing fixture job '${jobName}'`);
-      return source.authorize({ ...assignment(), event, generationId });
+      return source.authorize({ ...assignment(), event: encodeDimReviewJobAvailableEvent(event), generationId });
     },
     async publicHead() {
       return (await runGit("/usr/bin/git", ["--git-dir", join(native.root, "project-a/public.git"), "rev-parse", "refs/heads/main"])).stdout.trim();

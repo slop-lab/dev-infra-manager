@@ -73,8 +73,8 @@ export async function checkGitCiEnvelope(input: {
     input.envelope, policy.requiredJobSetRevision);
   const attachments = [];
   for (const required of policy.requiredJobs) {
-    const event = input.envelope?.events.find((candidate) => candidate.executionKind === required.kind
-      && candidate.jobName === required.name);
+    const event = input.envelope?.events.find((candidate) => candidate.provider === required.provider
+      && candidate.checkName === required.name);
     if (event === undefined) throw new GitCiQualityError("promotion-required Git CI job is missing");
     const evidence = await checkRequiredExecutionEvidence({
       provider: input.executionProvider,
@@ -89,7 +89,7 @@ export async function checkGitCiEnvelope(input: {
         policyDigest: input.input.policyDigest,
       },
     });
-    attachments.push({ kind: "git-ci" as const, id: `${required.kind}:${required.name}`, digest: evidence.digest });
+    attachments.push({ kind: "git-ci" as const, id: `${required.provider}:${required.name}`, digest: evidence.digest });
   }
   return attachments;
 }

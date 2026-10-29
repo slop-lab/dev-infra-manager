@@ -5,6 +5,7 @@ import type { AuthoritativeNativeReviewEnvelope } from "../../../../packages/gs/
 import type { AuthoritativeNativeReviewHooks, CodeReviewService } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { readAuthoritativeNativeReviewEnvelopes as readReviewEnvelopes } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { gitCiEnvelope, readAuthoritativeNativeReviewEnvelopes } from "../../../../packages/gs/ci/src/plan-store.js";
+import { decodeDimLegacyReviewEnvelope } from "../../../../packages/gs/review-contracts/src/dim-legacy-codec.js";
 import type { NativeHumanReviewerHooks } from "../../../../packages/control-plane/plugins/git-review/src/native-human-reviewer-http.js";
 import type { CiDeliveryPublicationFaults } from "../../../../packages/gs/ci/src/delivery-publication.js";
 import { readRawProposalJobs } from "../../../../packages/control-plane/plugins/git-review/src/raw-proposal-journal.js";
@@ -143,7 +144,8 @@ export async function createBundleReview(service: RunningService, repositoryId =
   const envelope = await reviews.create(service.context, {
     projectId: "project-a", repositoryId, proposalRef: reviewProposalRef
   });
-  const planned = await gitCiEnvelope(rootRepository(service.context.stateDirectory, repositoryId), envelope);
+  const planned = await gitCiEnvelope(rootRepository(service.context.stateDirectory, repositoryId),
+    decodeDimLegacyReviewEnvelope(envelope));
   if (planned === undefined) throw new ReviewFixtureError();
   return planned;
 }

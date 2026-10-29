@@ -40,7 +40,7 @@ export async function selectCatalogPendingDeliveries(input: {
   while (selected.length < input.limit) {
     const reviewIntents = input.cursor.nextGroup();
     if (reviewIntents.length === 0) break;
-    const candidates = await resolveReviewIntents(input.repository, reviewIntents);
+    const candidates = await resolveReviewIntents(input.repository, reviewIntents, input.binding);
     for (const candidate of candidates) {
       const marker = await readDeliveryMarker(input.paths, candidate);
       if (!await reconcileRecordedMarkerIntent({ paths: intentPaths(input.paths), intent: candidate.intent,
@@ -69,7 +69,7 @@ async function selectUnprimedDeliveries(input: {
   }
   const candidates: AuthoritativeNativePendingDelivery[] = [];
   for (const reviewIntents of byReview.values()) {
-    for (const candidate of await resolveReviewIntents(input.repository, reviewIntents)) {
+    for (const candidate of await resolveReviewIntents(input.repository, reviewIntents, input.binding)) {
       const marker = await readDeliveryMarker(input.paths, candidate);
       if (!await reconcileRecordedMarkerIntent({ paths: intentPaths(input.paths), intent: candidate.intent,
         marker, binding: input.binding, generationId: input.generationId })) {
@@ -81,8 +81,9 @@ async function selectUnprimedDeliveries(input: {
 }
 
 async function resolveReviewIntents(repository: string,
-  intents: readonly DeliveryIntent[]): Promise<readonly AuthoritativeNativePendingDelivery[]> {
-  const resolved = await resolveAuthoritativeNativeDeliveries(repository, intents);
+  intents: readonly DeliveryIntent[],
+  binding: AuthoritativeNativeDeliveryBinding): Promise<readonly AuthoritativeNativePendingDelivery[]> {
+  const resolved = await resolveAuthoritativeNativeDeliveries(repository, intents, binding);
   return resolved.map((delivery, index) => ({ ...delivery, intent: intents[index] }))
     .filter((candidate): candidate is AuthoritativeNativePendingDelivery => candidate.intent !== undefined)
     .sort(compareDeliveries);
@@ -92,7 +93,7 @@ function compareDeliveries(left: AuthoritativeNativePendingDelivery,
   right: AuthoritativeNativePendingDelivery): number {
   return left.createdAt.localeCompare(right.createdAt)
     || left.event.reviewId.localeCompare(right.event.reviewId)
-    || left.event.jobName.localeCompare(right.event.jobName)
+    || left.event.checkName.localeCompare(right.event.checkName)
     || left.event.eventId.localeCompare(right.event.eventId);
 }
 

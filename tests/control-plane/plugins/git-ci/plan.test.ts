@@ -6,6 +6,7 @@ import { createAuthoritativeNativeReviewEnvelope } from "../../../../packages/co
 import { saveAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-store.js";
 import { gitCiEnvelope, saveGitCiPlan, type GitCiPlan } from "../../../../packages/gs/ci/src/plan-store.js";
 import { gitCiPolicy, parseGitCiPolicy, requiredJobsRevision } from "../../../../packages/gs/ci/src/policy.js";
+import { decodeDimLegacyReviewEnvelope } from "../../../../packages/gs/review-contracts/src/dim-legacy-codec.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -24,19 +25,19 @@ it("keeps CI plan storage separate from a usable review without a CI attachment"
   const repository = await fixture();
   const review = createAuthoritativeNativeReviewEnvelope({ identity, policyDigest: plan.policyDigest, attachments: [], createdAt: new Date().toISOString() });
   await saveAuthoritativeNativeReviewEnvelope(repository, review);
-  expect(await gitCiEnvelope(repository, review)).toBeUndefined();
+  expect(await gitCiEnvelope(repository, decodeDimLegacyReviewEnvelope(review))).toBeUndefined();
   expect(review).not.toHaveProperty("planning"); expect(review).not.toHaveProperty("events");
 });
 it("binds an immutable plan to its review and rejects changed plan bytes rather than executing them", async () => {
   const repository = await fixture(), attachment = await saveGitCiPlan(repository, plan);
   const review = createAuthoritativeNativeReviewEnvelope({ identity, policyDigest: plan.policyDigest, attachments: [attachment], createdAt: new Date().toISOString() });
   await saveAuthoritativeNativeReviewEnvelope(repository, review);
-  expect((await gitCiEnvelope(repository, review))?.review.reviewId).toBe(review.review.reviewId);
+  expect((await gitCiEnvelope(repository, decodeDimLegacyReviewEnvelope(review)))?.review.reviewId).toBe(review.review.reviewId);
   expect(await saveGitCiPlan(repository, plan)).toEqual(attachment);
   const file = join(repository, "dim-git-ci-plans", `${attachment.id}.json`);
   const before = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>;
   await writeFile(file, JSON.stringify({ ...before, candidateCommit: "f".repeat(40) }));
-  await expect(gitCiEnvelope(repository, review)).rejects.toThrow(/does not match/);
+  await expect(gitCiEnvelope(repository, decodeDimLegacyReviewEnvelope(review))).rejects.toThrow(/does not match/);
 });
 it("owns its repository allowlist and derives job revisions without a redundant policy input", () => {
   const policy = { schemaVersion: 1 as const, protectedRef: "refs/heads/main", policyRevision: "a".repeat(64), extensions: {} };

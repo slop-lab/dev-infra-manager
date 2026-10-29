@@ -59,7 +59,7 @@ export function createGitCiPreparation(options: {
           status: "valid",
           configBlob: candidate.configBlob,
           jobs: await Promise.all(candidate.plan.map(async (job) => ({
-            executionKind: job.kind,
+            executionKind: job.provider,
             jobName: job.name,
             evidenceClass: "candidate-controlled" as const,
             script: job.script,
@@ -90,8 +90,8 @@ export function createGitCiPreparation(options: {
         candidateTree: input.evidence.candidateTree,
         policyDigest: input.target.policyDigest,
         qualityRevision: policy.requiredJobSetRevision,
-        requiredJobs: policy.requiredJobs.map(({ name, kind, evidenceClass }) => ({
-          executionKind: kind,
+        requiredJobs: policy.requiredJobs.map(({ name, provider, evidenceClass }) => ({
+          executionKind: provider,
           jobName: name,
           evidenceClass,
         })).sort((left, right) => left.executionKind.localeCompare(right.executionKind)
@@ -103,7 +103,7 @@ export function createGitCiPreparation(options: {
     async assertCurrent({ authority, review, attachment }) {
       if (attachment === undefined) return;
       await assertExecutionInputsCurrent(authority, {
-        namespaceId: review.projectId,
+        namespaceId: review.namespaceId,
         repositoryId: review.repositoryId,
         protectedRef: review.protectedRef,
         candidateCommit: review.candidateCommit,
@@ -111,7 +111,7 @@ export function createGitCiPreparation(options: {
         inputs: review.inputs,
       });
       const target = await authority.resolve({
-        namespaceId: review.projectId,
+        namespaceId: review.namespaceId,
         repositoryId: review.repositoryId,
         protectedRef: review.protectedRef,
       });

@@ -5,6 +5,7 @@ import { readAuthoritativeNativeReviewEnvelope, type NativeCandidateJobInputs } 
 import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { CandidateExecutionError } from "@slop-lab/gs-ci-contracts";
 import { nativeHumanReviewStaleReasons } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
+import { toDimReview } from "./review-adapter.js";
 
 type Target = Awaited<ReturnType<typeof resolveAuthoritativeNativeRepositoryTarget>>;
 type Envelope = NonNullable<Awaited<ReturnType<typeof readAuthoritativeNativeReviewEnvelope>>>;
@@ -25,7 +26,7 @@ export async function loadAuthoritativeExecutionReview(
 ): Promise<AuthoritativeExecutionReviewSnapshot> {
   const initial = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.projectId, repositoryId: selector.repositoryId });
   const envelope = await readAuthoritativeNativeReviewEnvelope(initial.repository, selector.reviewId);
-  if (envelope === undefined || envelope.review.projectId !== selector.projectId
+  if (envelope === undefined || envelope.review.namespaceId !== selector.projectId
     || envelope.review.repositoryId !== selector.repositoryId) {
     throw new CandidateExecutionError("authoritative execution review was not found");
   }
@@ -39,12 +40,12 @@ export async function loadCurrentAuthoritativeExecutionInputs(
   snapshot: AuthoritativeExecutionReviewSnapshot
 ): Promise<CurrentAuthoritativeExecutionInputs> {
   const inputs = await loadAuthoritativeNativeCandidateJobInputs(runtime, {
-    projectId: snapshot.envelope.review.projectId, repositoryId: snapshot.envelope.review.repositoryId, protectedRef: snapshot.envelope.review.protectedRef,
+    projectId: snapshot.envelope.review.namespaceId, repositoryId: snapshot.envelope.review.repositoryId, protectedRef: snapshot.envelope.review.protectedRef,
     candidateCommit: snapshot.envelope.review.candidateCommit,
     candidateTree: snapshot.envelope.review.candidateTree
   });
   const currentTarget = await resolveAuthoritativeNativeRepositoryTarget(runtime, {
-    projectId: snapshot.envelope.review.projectId, repositoryId: snapshot.envelope.review.repositoryId, protectedRef: snapshot.envelope.review.protectedRef
+    projectId: snapshot.envelope.review.namespaceId, repositoryId: snapshot.envelope.review.repositoryId, protectedRef: snapshot.envelope.review.protectedRef
   });
   const currentEnvelope = await readAuthoritativeNativeReviewEnvelope(
     currentTarget.repository,
@@ -63,7 +64,7 @@ async function assertCurrentReview(
   target: Target,
   review: Envelope["review"]
 ): Promise<void> {
-  const staleReasons = await nativeHumanReviewStaleReasons(runtime, target, review);
+  const staleReasons = await nativeHumanReviewStaleReasons(runtime, target, toDimReview(review));
   if (staleReasons.length > 0) {
     throw new CandidateExecutionError("authoritative execution review is stale");
   }

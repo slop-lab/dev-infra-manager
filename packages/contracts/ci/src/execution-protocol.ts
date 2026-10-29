@@ -1,11 +1,8 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
-import {
-  candidateExecutionDescriptorDigest,
-  candidateExecutionDescriptorSchema,
-  executionProfileFields,
-  reviewJobAvailableEventSchema
-} from "@slop-lab/gs-ci-contracts";
+import { dimExecutionDescriptorDigest, dimExecutionDescriptorSchema, executionProfileFields } from "./candidate-execution.js";
+import { decodeDimReviewJobAvailableEvent, dimReviewJobAvailableEventCodec,
+  dimReviewJobAvailableEventSchema, encodeDimReviewJobAvailableEvent } from "./events.js";
 
 /** Ephemeral candidate reads allow a 30-second Git operation plus authority admission.
  * Workers refresh before half the lifetime remains; every HTTP request still
@@ -14,10 +11,12 @@ import {
 export const executionCandidateLeaseLifetimeMilliseconds = 120_000;
 export const executionCandidateLeaseMinimumRemainingMilliseconds = 60_000;
 
-export const executionDescriptorSchema = candidateExecutionDescriptorSchema;
-export const executionDescriptorDigest = candidateExecutionDescriptorDigest;
+export { decodeDimReviewJobAvailableEvent, dimExecutionDescriptorDigest, dimExecutionDescriptorSchema,
+  dimReviewJobAvailableEventCodec, dimReviewJobAvailableEventSchema, encodeDimReviewJobAvailableEvent };
+export const executionDescriptorSchema = dimExecutionDescriptorSchema;
+export const executionDescriptorDigest = dimExecutionDescriptorDigest;
 export type ExecutionDescriptor = z.infer<typeof executionDescriptorSchema>;
-export const executionEventSchema = reviewJobAvailableEventSchema;
+export const executionEventSchema = dimReviewJobAvailableEventSchema;
 export type ExecutionEvent = z.infer<typeof executionEventSchema>;
 export const executionProfileSchema = z.object({ runnerBaseImage: executionProfileFields.runnerBaseImage,
   jobBaseImage: executionProfileFields.jobBaseImage,
@@ -30,11 +29,11 @@ export const executionGrantRequestSchema = z.object({ executionId: z.string().uu
 export type ExecutionGrantRequest = z.infer<typeof executionGrantRequestSchema>;
 export const executionGrantSchema = executionGrantRequestSchema.unwrap().extend({
   attempt: z.number().int().positive(), issuedAt: z.string().datetime(),
-  descriptor: candidateExecutionDescriptorSchema,
+  descriptor: dimExecutionDescriptorSchema,
   descriptorDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/)
 }).strict().readonly().superRefine((grant, context) => {
   const descriptor = grant.descriptor;
-  if (grant.descriptorDigest !== candidateExecutionDescriptorDigest(descriptor)
+  if (grant.descriptorDigest !== dimExecutionDescriptorDigest(descriptor)
     || descriptor.projectId !== grant.event.projectId || descriptor.repositoryId !== grant.event.repositoryId
     || !isDeepStrictEqual(descriptor.inputs, grant.event.inputs) || descriptor.jobName !== grant.event.jobName
     || descriptor.generationId !== grant.generationId

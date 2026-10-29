@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { z } from "zod";
-import { readAuthoritativeNativeReviewEnvelope as readReview, readAuthoritativeNativeReviewEnvelopes as readReviews,
-  assertAuthoritativeNativeReviewStore as assertReviewStore, type AuthoritativeNativeReviewEnvelope as ReviewEnvelope,
-  assertVerifiedCiReviewSourceCurrent, ownedReviewDirectory,
-  readReviewJson, writeImmutableReviewRecord, type ReviewAttachment,
-  type VerifiedCiReviewSource } from "@slop-lab/gs-review";
+import { readReviewEnvelope as readReview, readReviewEnvelopes as readReviews,
+  assertReviewStore, type ReviewEnvelope, ownedReviewDirectory,
+  readReviewJson, writeImmutableReviewRecord, type ReviewAttachment } from "@slop-lab/gs-review";
+import { assertVerifiedCiReviewSourceCurrent,
+  type VerifiedCiReviewSource } from "@slop-lab/gs-review/dim-legacy-provenance";
+import type { Review } from "@slop-lab/gs-review-contracts";
+import type { AuthoritativeNativeReview } from "@slop-lab/gs-review-contracts/dim-legacy-codec";
 import { gitCiPlanningSchema, authoritativeNativeRequiredJobSchema, createAuthoritativeNativeReviewEnvelope,
   createAuthoritativeNativeReviewDeliveryProjection, type AuthoritativeNativeReviewDeliveryProjection,
   type AuthoritativeNativeReviewEnvelope } from "./plan-schema.js";
@@ -94,7 +96,7 @@ export async function readVerifiedGitCiDeliveryProjection(
     });
     assertPlanMatchesSource(record.plan, attachment, source);
     const projection = createAuthoritativeNativeReviewDeliveryProjection({
-      review: source.summary.review, qualityRevision: record.plan.qualityRevision,
+      review: neutralReviewSummary(source.summary.review), qualityRevision: record.plan.qualityRevision,
       policyDigest: record.plan.policyDigest, requiredJobs: record.plan.requiredJobs, planning: record.plan.planning
     });
     await assertVerifiedCiReviewSourceCurrent(repository, source);
@@ -113,7 +115,7 @@ export async function gitCiEnvelope(repository: string, envelope: ReviewEnvelope
   if (!/^[0-9a-f]{64}$/.test(attachment.id) || attachment.digest !== attachment.id) throw new Error("Git CI attachment identity is invalid");
   const plan = gitCiPlanSchema.parse(await readReviewJson(join(repository, "dim-git-ci-plans", `${attachment.id}.json`), 8 * 1024 * 1024, true));
   const review = envelope.review;
-  if (planDigest(plan) !== attachment.digest || plan.policyDigest !== envelope.policyDigest || plan.projectId !== review.projectId
+  if (planDigest(plan) !== attachment.digest || plan.policyDigest !== envelope.policyDigest || plan.projectId !== review.namespaceId
     || plan.repositoryId !== review.repositoryId || plan.expectedProtectedHead !== review.expectedProtectedHead
     || plan.candidateCommit !== review.candidateCommit || plan.candidateTree !== review.candidateTree) throw new Error("Git CI plan does not match its reviewed snapshot");
   const { reviewId: _id, createdAt, ...identity } = review;
@@ -138,4 +140,26 @@ function assertPlanMatchesSource(plan: GitCiPlan, attachment: ReviewAttachment, 
     || plan.candidateCommit !== review.candidateCommit || plan.candidateTree !== review.candidateTree) {
     throw new Error("Git CI plan does not match its reviewed snapshot");
   }
+}
+
+function neutralReviewSummary(review: Omit<AuthoritativeNativeReview, "changes" | "patch" | "patchBytes">):
+  Omit<Review, "changes" | "patch" | "patchBytes"> {
+  return {
+    schemaVersion: 1,
+    namespaceId: review.projectId,
+    repositoryId: review.repositoryId,
+    inputs: review.inputs,
+    protectedRef: review.protectedRef,
+    proposalRef: review.proposalRef,
+    expectedProtectedHead: review.expectedProtectedHead,
+    candidateCommit: review.candidateCommit,
+    candidateTree: review.candidateTree,
+    policyRevision: review.policyRevision,
+    requiredReviewRevision: review.requiredReviewRevision,
+    ...(review.workspaceId === undefined ? {} : { candidatePrincipalId: review.workspaceId }),
+    requiredReviewerIds: review.requiredReviewerIds,
+    ...(review.changeRuleEvidence === undefined ? {} : { changeRuleEvidence: review.changeRuleEvidence }),
+    reviewId: review.reviewId,
+    createdAt: review.createdAt,
+  };
 }

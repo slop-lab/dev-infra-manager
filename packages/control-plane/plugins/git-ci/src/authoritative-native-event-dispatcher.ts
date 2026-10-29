@@ -16,6 +16,7 @@ import type {
   NativeGitAdmissionHttpClient,
   NativeGitAdmissionHttpResponse,
 } from "@slop-lab/dim-contracts-git/http";
+import { dimReviewJobAvailableEventCodec, encodeDimReviewJobAvailableEvent } from "@slop-lab/dim-contracts-ci/execution";
 
 const maximumResponseBytes = 64 * 1024;
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
@@ -47,12 +48,14 @@ export function createAuthoritativeNativeEventDispatcher(
   return createCiDeliveryDispatcher({
     serviceId: "ci",
     destination: options.webhook.endpoint,
+    eventCodec: dimReviewJobAvailableEventCodec,
     generationId: options.generationId,
     repositories: () => readNativeProjectRegistrations(options.state).map((registration) =>
       join(options.stateDirectory, registration.projectId, `${registration.repositoryId}.git`)),
     submit: {
       async submit(input) {
-        const receipt = { generationId: input.generationId, event: input.event } as const;
+        const receipt = { generationId: input.generationId,
+          event: encodeDimReviewJobAvailableEvent(input.event) } as const;
         const acknowledgement = acknowledgementSchema.safeParse(await requestJson(options.httpClient, {
           endpoint: options.webhook.endpoint,
           method: "POST",

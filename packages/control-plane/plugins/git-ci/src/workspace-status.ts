@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { ReviewCiJob, ReviewCiStatus } from "@slop-lab/gs-ci-contracts";
 import type { AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { currentExecutionEvidence, ExecutionConflictError } from "./execution-evidence.js";
@@ -14,7 +15,7 @@ export async function readWorkspaceCiStatus(runtime: GitCiRuntime, target: Autho
   if (review.policy !== "enabled" || !plan || plan.planning.status !== "valid") return { state: "unavailable", review, jobs: [] };
   const jobs: ReviewCiJob[] = [];
   for (const event of plan.events) {
-    const identity = { name: event.jobName, kind: event.executionKind };
+    const identity = { name: event.checkName, kind: z.enum(["ordinary-sysbox", "qemu"]).parse(event.provider) };
     try {
       const { grant, result } = await currentExecutionEvidence(runtime, target.repository, event);
       jobs.push({ ...identity, executionId: grant.executionId, status: result.result === "success" && result.completion.kind === "exited" && "exitCode" in result.completion && result.completion.exitCode === 0 ? "succeeded" : "failed" });

@@ -11,8 +11,8 @@ describe("DIM workflow language", () => {
     script: tools/source-check
 `));
     expect(jobs).toEqual([
-      { name: "integration", kind: "qemu", script: "scripts/integration.sh", argv: candidateArgv },
-      { name: "source", kind: "ordinary-sysbox", script: "tools/source-check", argv: candidateArgv }
+      { name: "integration", provider: "qemu", script: "scripts/integration.sh", argv: candidateArgv },
+      { name: "source", provider: "ordinary-sysbox", script: "tools/source-check", argv: candidateArgv }
     ]);
   });
 

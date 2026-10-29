@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, rename, rm, unlink, writeFile } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
+import { dimDeliveryBinding as authoritativeNativeDeliveryBinding } from "../../../support/dimCi.js";
 import {
   readSelectableDeliveryIntents,
   readVerifiedDeliveryIntents,

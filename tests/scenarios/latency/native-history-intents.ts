@@ -16,7 +16,7 @@ export async function seedRetainedHistoryIntents(input: {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const event = input.envelope.events[0];
   if (event === undefined) throw new NativeHistoryIntentFixtureError("history fixture has no canonical CI event");
-  const eventDigest = `sha256:${createHash("sha256").update(JSON.stringify(event)).digest("hex")}`;
+  const eventDigest = `sha256:${createHash("sha256").update(input.binding.eventCodec.serialize(event)).digest("hex")}`;
   const count = 10_000;
   const records: { readonly name: string; readonly serialized: string }[] = [];
   for (let index = 1; index <= count; index += 1) {

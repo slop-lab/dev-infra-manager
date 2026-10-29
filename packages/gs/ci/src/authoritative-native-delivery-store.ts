@@ -91,7 +91,7 @@ async function acknowledgeUnlocked(repository: string, delivery: AuthoritativeNa
     throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery acknowledgement conflicts with explicit intent");
   }
   return withCurrentDeliveryIntent(intentPaths(paths), delivery.intent, async (current) => {
-    const stored = await resolveAuthoritativeNativeDelivery(repository, current);
+    const stored = await resolveAuthoritativeNativeDelivery(repository, current, binding);
     if (!sameAuthoritativeNativeDelivery(delivery, stored)) {
       throw new AuthoritativeNativeDeliveryStoreError(
         "authoritative delivery provenance changed before acknowledgement"
@@ -126,7 +126,7 @@ async function supersedeUnlocked(repository: string, delivery: AuthoritativeNati
     );
   }
   await withCurrentDeliveryIntent(intentPaths(paths), delivery.intent, async (current) => {
-    const stored = await resolveAuthoritativeNativeDelivery(repository, current);
+    const stored = await resolveAuthoritativeNativeDelivery(repository, current, binding);
     if (!sameAuthoritativeNativeDelivery(delivery, stored)) {
       throw new AuthoritativeNativeDeliveryStoreError(
         "authoritative delivery provenance changed before supersession"
@@ -143,7 +143,7 @@ export async function auditAuthoritativeNativeDeliveryOutbox(repository: string,
     if (!await deliveryHistoryExists(repository)) return;
     const paths = await initializeDeliveryStoreUnlocked(repository);
     const intents = await readVerifiedDeliveryIntents(paths.intents);
-    const events = await readVerifiedAuthoritativeNativeDeliveryEvents(repository);
+    const events = await readVerifiedAuthoritativeNativeDeliveryEvents(repository, binding);
     const eventsById = new Map(events.map((delivery) => [delivery.event.eventId, delivery]));
     const selections = intents.map((intent) => {
       const delivery = eventsById.get(intent.eventId);
@@ -154,7 +154,7 @@ export async function auditAuthoritativeNativeDeliveryOutbox(repository: string,
         );
       }
       return { intent, delivery, order: { createdAt: delivery.createdAt, reviewId: delivery.event.reviewId,
-        jobName: delivery.event.jobName, eventId: delivery.event.eventId } };
+        jobName: delivery.event.checkName, eventId: delivery.event.eventId } };
     });
     rememberDeliveryIntentOrders(paths.intents, selections);
     await auditDeliveryMarkers(paths, events);

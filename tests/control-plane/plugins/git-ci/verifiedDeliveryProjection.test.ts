@@ -21,6 +21,7 @@ import {
   startFinalizeService
 } from "../git-repositories/nativeRootImportFinalizeFixture.js";
 import { nativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";
+import { decodeDimLegacyReviewEnvelope } from "../../../../packages/gs/review-contracts/src/dim-legacy-codec.js";
 
 const roots: string[] = [];
 
@@ -36,7 +37,7 @@ describe("verified Git CI delivery projection", () => {
     const fixture = await projectionFixture();
     const source = (await readVerifiedCiReviewSources(fixture.repository, fixture.review.review.reviewId))[0];
     if (source === undefined) throw new ProjectionFixtureError("verified review source is missing");
-    const legacy = await gitCiEnvelope(fixture.repository, fixture.review);
+    const legacy = await gitCiEnvelope(fixture.repository, decodeDimLegacyReviewEnvelope(fixture.review));
     if (legacy === undefined) throw new ProjectionFixtureError("legacy CI envelope is missing");
 
     // When

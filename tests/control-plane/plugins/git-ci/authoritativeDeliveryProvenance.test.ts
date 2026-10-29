@@ -7,7 +7,7 @@ import {
   readAuthoritativeNativeReviewEnvelopes,
   saveAuthoritativeNativeReviewEnvelope
 } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
+import { dimDeliveryBinding as authoritativeNativeDeliveryBinding } from "../../../support/dimCi.js";
 import {
   acknowledgeAuthoritativeNativeDelivery,
   auditAuthoritativeNativeDeliveryOutbox,

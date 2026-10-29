@@ -82,9 +82,9 @@ process.send?.({ kind: "ready", remote: remote.toString() });`;
 
     // Then
     const recovered = await waitForPublishedReview(fixture.root, candidate);
-    expect(recovered.events.map(({ executionKind, jobName }) => ({ executionKind, jobName }))).toEqual([
-      { executionKind: "ordinary-sysbox", jobName: "source" },
-      { executionKind: "qemu", jobName: "integration" }
+    expect(recovered.events.map(({ provider, checkName }) => ({ provider, checkName }))).toEqual([
+      { provider: "ordinary-sysbox", checkName: "source" },
+      { provider: "qemu", checkName: "integration" }
     ]);
     expect(new Set(recovered.events.map(({ eventId }) => eventId)).size).toBe(2);
     await closeFinalizeService(restarted);

@@ -15,6 +15,7 @@ import { deliveryIntentKey } from "../../../packages/gs/ci/src/delivery-intent-r
 type DeliveryStoreModule = typeof import("../../../packages/gs/ci/src/authoritative-native-delivery-store.js");
 type BindingModule = typeof import("../../../packages/gs/ci/src/authoritative-native-delivery-binding.js");
 type PlanStoreModule = typeof import("../../../packages/gs/ci/src/plan-store.js");
+type ExecutionModule = typeof import("../../../packages/contracts/ci/src/execution-protocol.js");
 type FixtureModule = typeof import("../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js");
 
 type MeasurementInput = {
@@ -48,9 +49,13 @@ export async function measureNativeHistory(input: MeasurementInput): Promise<obj
     "packages/gs/ci/src/authoritative-native-delivery-binding.ts");
   const planStore: PlanStoreModule = await sourceImport(sourceTree,
     "packages/gs/ci/src/plan-store.ts");
+  const execution: ExecutionModule = await sourceImport(sourceTree,
+    "packages/contracts/ci/src/execution-protocol.ts");
   const fixture: FixtureModule = await sourceImport(sourceTree,
     "tests/control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.ts");
-  const binding = bindingApi.authoritativeNativeDeliveryBinding("ci", "http://execution:8080/v1/jobs");
+  const binding = bindingApi.authoritativeNativeDeliveryBinding(
+    "ci", "http://execution:8080/v1/jobs", execution.dimReviewJobAvailableEventCodec,
+  );
   const transientDirectory = join(input.repository, "dim-git-ci-deliveries");
   const serviceRoot = await fixture.createFinalizeRoot("native-history-identity");
   const service = await fixture.startFinalizeService(serviceRoot);

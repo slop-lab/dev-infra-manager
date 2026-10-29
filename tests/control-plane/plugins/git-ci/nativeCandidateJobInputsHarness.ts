@@ -1,15 +1,15 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CandidateRequiredJob as NativeCandidateRequiredJob } from "../../../../packages/gs/ci-contracts/src/index.js";
+import type { CandidateRequiredCheck } from "../../../../packages/gs/ci-contracts/src/index.js";
 import type { CandidateGitReader } from "../../../../packages/gs/ci/src/candidate-execution-git.js";
 import { assertGitVersion, type GitRepositoryRuntime } from "../../../../packages/control-plane/plugins/git-repositories/src/repository.js";
 import { git, gitExecutable } from "../../../support/gitCommands.js";
 
 export const nativeRequiredJobs = [
-  { name: "source", kind: "ordinary-sysbox" },
-  { name: "integration", kind: "qemu" }
-] as const satisfies readonly NativeCandidateRequiredJob[];
+  { name: "source", provider: "ordinary-sysbox" },
+  { name: "integration", provider: "qemu" }
+] as const satisfies readonly CandidateRequiredCheck[];
 
 export type NativeCandidateJobInputsFixture = {
   readonly root: string;

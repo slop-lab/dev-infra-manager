@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it } from "vitest";
-import { executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
+import { encodeDimReviewJobAvailableEvent, executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
 import { activateFinalizeServiceForGeneration, activationTokenB, cleanupFinalizeFixtures, closeFinalizeService,
   generationB, generationId, runGit, startFinalizeServiceForGeneration, workspaceWriteIssuerAuthorization } from "../git-repositories/nativeRootImportFinalizeFixture.js";
 import { idleNativeConfig } from "../git-repositories/bundleConfigFixture.js";
@@ -56,7 +56,8 @@ it("requests and reports exact ordinary-branch CI idempotently within the worksp
   const config = idleNativeConfig();
   for (const event of envelope.events) {
     const grantResponse = await post({ origin: fixture.service.origin, path: "/v1/execution-grants", credential: config.ci.grantIssuer, body: {
-      executionId: randomUUID(), generationId, event, workerId: "worker-a", slotId: "primary", profile: slot.profile,
+      executionId: randomUUID(), generationId, event: encodeDimReviewJobAvailableEvent(event),
+      workerId: "worker-a", slotId: "primary", profile: slot.profile,
     } });
     expect(grantResponse.status, await grantResponse.clone().text()).toBe(201);
     const grant = executionGrantSchema.parse(await grantResponse.json());

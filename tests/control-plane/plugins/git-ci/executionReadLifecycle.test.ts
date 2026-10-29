@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
-import { executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
+import { encodeDimReviewJobAvailableEvent, executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
 import * as gateApi from "../../../../packages/control-plane/plugins/git-repositories/src/native-root-read-lifecycle.js";
 import * as backend from "../../../../packages/control-plane/plugins/git-repositories/src/backend.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "./nativeBundleReviewFixture.js";
@@ -33,7 +33,8 @@ it("holds execution Git read admission until backend completion so shutdown drai
     "x-dim-generation-id": generationId, "content-type": "application/json"
   });
   const granted = await fetch(`${fixture.service.origin}/v1/execution-grants`, { method: "POST", headers: headers(config.ci.grantIssuer),
-    body: JSON.stringify({ executionId: randomUUID(), generationId, event, workerId: "worker-a", slotId: "primary", profile: slot.profile }) });
+    body: JSON.stringify({ executionId: randomUUID(), generationId,
+      event: encodeDimReviewJobAvailableEvent(event), workerId: "worker-a", slotId: "primary", profile: slot.profile }) });
   expect(granted.status).toBe(201);
   const grant = executionGrantSchema.parse(await granted.json());
   const leased = await fetch(`${fixture.service.origin}/v1/executions/project-a/root/${grant.executionId}/read-lease`, {

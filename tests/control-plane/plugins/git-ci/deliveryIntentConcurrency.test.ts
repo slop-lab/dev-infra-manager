@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { link, open, rename, unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
+import { dimDeliveryBinding as authoritativeNativeDeliveryBinding } from "../../../support/dimCi.js";
 import {
   readPendingAuthoritativeNativeDeliveries,
   recordExplicitAuthoritativeNativeDeliveryIntent,

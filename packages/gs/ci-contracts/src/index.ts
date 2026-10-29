@@ -1,16 +1,12 @@
 export {
-  candidateExecutionDescriptorDigest,
-  candidateExecutionDescriptorSchema,
   CandidateExecutionError,
   executionInputsSchema,
-  executionProfileFields,
-  type CandidateExecutionDescriptor,
   type ExecutionInputs
 } from "./candidate-execution.js";
 
 export {
-  reviewJobAvailableEventSchema,
-  type ReviewJobAvailableEvent
+  reviewCheckAvailableEventSchema,
+  type ReviewCheckAvailableEvent
 } from "./events.js";
 
 export {
@@ -23,7 +19,8 @@ export {
 export {
   isCandidateArgv,
   isCandidatePath,
-  type CandidateRequiredJob,
+  workflowJobSchema,
+  type CandidateRequiredCheck,
   type WorkflowCompiler,
   type WorkflowJob
 } from "./workflow.js";

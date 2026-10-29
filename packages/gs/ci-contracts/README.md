@@ -1,8 +1,10 @@
 # @slop-lab/gs-ci-contracts
 
-Portable CI workflow, immutable repository input, candidate execution descriptor,
-event and review-status schemas. The package does not contain scheduler state,
-worker placement, credentials, HTTP transport or DIM configuration aggregates.
+Portable CI workflow, immutable repository input, check event, evidence-provider
+and review-status schemas. Workflow jobs select a named provider; they do not
+declare DIM worker kinds, images, resource profiles, Project identities or
+scheduler generations.
 
-Existing serialized event names, descriptor fields and digest domains remain
-unchanged because they are persisted protocol ABI.
+DIM's persisted execution descriptor, placement profile and review-job event
+wire codecs live in `@slop-lab/dim-contracts-ci`. Their existing bytes and
+digest domains remain unchanged while GS public models stay placement-neutral.

@@ -36,7 +36,7 @@ describe("candidate job inputs", () => {
       plan: [
         {
           name: "source",
-          kind: "ordinary-sysbox",
+          provider: "ordinary-sysbox",
           script: {
             path: ".dim/ci/jobs/source.bash",
             objectId: await objectId(fixture, ".dim/ci/jobs/source.bash"),
@@ -46,7 +46,7 @@ describe("candidate job inputs", () => {
         },
         {
           name: "integration",
-          kind: "qemu",
+          provider: "qemu",
           script: {
             path: ".dim/ci/jobs/integration.bash",
             objectId: await objectId(fixture, ".dim/ci/jobs/integration.bash"),

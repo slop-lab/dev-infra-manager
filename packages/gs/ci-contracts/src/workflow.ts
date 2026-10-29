@@ -1,10 +1,16 @@
-export type WorkflowJob = {
-  readonly name: string;
-  readonly kind: "ordinary-sysbox" | "qemu";
-  readonly script: string;
-  readonly repositories?: readonly string[];
-  readonly argv: readonly string[];
-};
+import { z } from "zod";
+
+const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
+
+export const workflowJobSchema = z.object({
+  name: identifier,
+  provider: identifier,
+  script: z.string().refine(isCandidatePath),
+  repositories: z.array(identifier).max(64).optional().readonly(),
+  argv: z.array(z.string()).refine(isCandidateArgv).readonly(),
+}).strict().readonly();
+
+export type WorkflowJob = z.infer<typeof workflowJobSchema>;
 
 export function isCandidatePath(value: string): boolean {
   return value.length > 0 && value.length <= 4096 && !value.startsWith("/")
@@ -24,4 +30,4 @@ export interface WorkflowCompiler {
   compile(bytes: Buffer): readonly WorkflowJob[];
 }
 
-export type CandidateRequiredJob = Pick<WorkflowJob, "name" | "kind">;
+export type CandidateRequiredCheck = Pick<WorkflowJob, "name" | "provider">;

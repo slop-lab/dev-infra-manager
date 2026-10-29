@@ -3,13 +3,14 @@ import {
   assertVerifiedCiReviewSourceCurrent,
   readVerifiedCiReviewSources,
   type VerifiedCiReviewSource
-} from "@slop-lab/gs-review";
+} from "@slop-lab/gs-review/dim-legacy-provenance";
 import {
   readVerifiedGitCiDeliveryProjection,
   type VerifiedGitCiDeliveryProjection
 } from "./plan-store.js";
 import type { DeliveryIntent } from "./delivery-intent-record.js";
 import { AuthoritativeNativeDeliveryStoreError } from "./delivery-marker-storage.js";
+import type { AuthoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
 
 export type AuthoritativeNativeDeliveryProvenance = {
   readonly sourceVersions: readonly string[];
@@ -38,9 +39,10 @@ type ProjectionVariant = {
 
 export async function resolveAuthoritativeNativeDelivery(
   repository: string,
-  intent: DeliveryIntent
+  intent: DeliveryIntent,
+  binding: AuthoritativeNativeDeliveryBinding,
 ): Promise<ResolvedAuthoritativeNativeDelivery> {
-  const resolved = await resolveAuthoritativeNativeDeliveries(repository, [intent]);
+  const resolved = await resolveAuthoritativeNativeDeliveries(repository, [intent], binding);
   const delivery = resolved[0];
   if (delivery === undefined) {
     throw new AuthoritativeNativeDeliveryStoreError(
@@ -52,7 +54,8 @@ export async function resolveAuthoritativeNativeDelivery(
 
 export async function resolveAuthoritativeNativeDeliveries(
   repository: string,
-  intents: readonly DeliveryIntent[]
+  intents: readonly DeliveryIntent[],
+  binding: AuthoritativeNativeDeliveryBinding,
 ): Promise<readonly ResolvedAuthoritativeNativeDelivery[]> {
   if (intents.length === 0) return [];
   const reviewId = intents[0]?.reviewId;
@@ -64,14 +67,15 @@ export async function resolveAuthoritativeNativeDeliveries(
   const sources = await readVerifiedCiReviewSources(repository, reviewId);
   const variants = await readProjectionVariants(repository, sources, reviewId);
   const deliveries: ResolvedAuthoritativeNativeDelivery[] = [];
-  for (const intent of intents) deliveries.push(resolveIntentFromVariants(intent, variants));
+  for (const intent of intents) deliveries.push(resolveIntentFromVariants(intent, variants, binding));
   await Promise.all(sources.map((source) =>
     assertVerifiedCiReviewSourceCurrent(repository, source)));
   return deliveries;
 }
 
 function resolveIntentFromVariants(intent: DeliveryIntent,
-  variants: ReadonlyMap<string, ProjectionVariant>): ResolvedAuthoritativeNativeDelivery {
+  variants: ReadonlyMap<string, ProjectionVariant>,
+  binding: AuthoritativeNativeDeliveryBinding): ResolvedAuthoritativeNativeDelivery {
   const selected = variants.get(intent.envelopeId);
   if (selected === undefined) {
     throw new AuthoritativeNativeDeliveryStoreError(
@@ -85,7 +89,7 @@ function resolveIntentFromVariants(intent: DeliveryIntent,
       "authoritative delivery intent does not match its verified event"
     );
   }
-  const eventDigest = `sha256:${createHash("sha256").update(JSON.stringify(event)).digest("hex")}`;
+  const eventDigest = `sha256:${createHash("sha256").update(binding.eventCodec.serialize(event)).digest("hex")}`;
   if (eventDigest !== intent.eventDigest) {
     throw new AuthoritativeNativeDeliveryStoreError(
       "authoritative delivery intent event digest is invalid"
@@ -103,14 +107,15 @@ function resolveIntentFromVariants(intent: DeliveryIntent,
 }
 
 export async function readVerifiedAuthoritativeNativeDeliveryEvents(
-  repository: string
+  repository: string,
+  binding: AuthoritativeNativeDeliveryBinding,
 ): Promise<readonly VerifiedAuthoritativeNativeDeliveryEvent[]> {
   const sources = await readVerifiedCiReviewSources(repository);
   const variants = await readProjectionVariants(repository, sources);
   const events = new Map<string, VerifiedAuthoritativeNativeDeliveryEvent>();
   for (const variant of variants.values()) {
     for (const event of variant.projection.events) {
-      const eventDigest = `sha256:${createHash("sha256").update(JSON.stringify(event)).digest("hex")}`;
+      const eventDigest = `sha256:${createHash("sha256").update(binding.eventCodec.serialize(event)).digest("hex")}`;
       const previous = events.get(event.eventId);
       if (previous !== undefined && previous.eventDigest !== eventDigest) {
         throw new AuthoritativeNativeDeliveryStoreError(

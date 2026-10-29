@@ -10,6 +10,7 @@ import { addCandidateCommit, createBundleReview, reviewProposalRef, reviewWorksp
 import { activateFinalizeService, createFinalizeRoot, createRootBundle, finalizeRootImport, generationId, importer,
   parseImportReceipt, projectInput, runGit, uploadRootBundle, workspaceWriteIssuerAuthorization } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 import { assignment } from "../../contracts/ci/executionFixture.js";
+import { encodeDimReviewJobAvailableEvent } from "../../../packages/contracts/ci/src/execution-protocol.js";
 
 const example = fileURLToPath(new URL("../../../examples/projects/native-multiple-repositories", import.meta.url));
 
@@ -71,9 +72,9 @@ export async function multipleRepositoryExampleFixture(directory = example) {
   }
   async function authorize(repositoryId: string, jobName: string) {
     const review = await propose(repositoryId);
-    const event = review.events.find((event) => event.jobName === jobName);
+    const event = review.events.find((event) => event.checkName === jobName);
     if (!event) throw new Error(`example ${repositoryId}/${jobName} did not produce a runnable job`);
-    return source.authorize({ ...assignment(), generationId, event });
+    return source.authorize({ ...assignment(), generationId, event: encodeDimReviewJobAvailableEvent(event) });
   }
   return { root, service, source, snapshots, authorize, recipe };
 }

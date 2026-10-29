@@ -59,12 +59,12 @@ async function recordExplicitUnlocked(repository: string, envelope: Authoritativ
     existingNames.add(entry.name);
   }
   const candidates = envelope.events.map((event) => {
-    const eventDigest = `sha256:${createHash("sha256").update(JSON.stringify(event)).digest("hex")}`;
+    const eventDigest = `sha256:${createHash("sha256").update(binding.eventCodec.serialize(event)).digest("hex")}`;
     const intent = deliveryIntentSchema.parse({ schemaVersion: 1, state: "pending", eventId: event.eventId, eventDigest,
       reviewId: envelope.review.reviewId, envelopeId: envelope.envelopeId, generationId, serviceId: binding.serviceId,
       destinationDigest: binding.destinationDigest, ownerRequestId });
     const order = { createdAt: envelope.review.createdAt, reviewId: event.reviewId,
-      jobName: event.jobName, eventId: event.eventId } satisfies DeliveryIntentSelectionOrder;
+      jobName: event.checkName, eventId: event.eventId } satisfies DeliveryIntentSelectionOrder;
     return { intent, name: `${deliveryIntentKey(intent)}.json`, order };
   });
   for (const candidate of candidates) {
@@ -85,7 +85,7 @@ async function recordExplicitUnlocked(repository: string, envelope: Authoritativ
 }
 
 export async function readSelectableDeliveryIntents(directory: string,
-  binding: AuthoritativeNativeDeliveryBinding, generationId: string,
+  binding: Pick<AuthoritativeNativeDeliveryBinding, "serviceId" | "destinationDigest">, generationId: string,
   now: number): Promise<readonly DeliveryIntent[]> {
   const cursor = await readSelectableDeliveryIntentCursor(directory, binding, generationId, now);
   if (cursor.kind === "unprimed") return cursor.intents;
@@ -98,7 +98,7 @@ export async function readSelectableDeliveryIntents(directory: string,
 }
 
 export async function readSelectableDeliveryIntentCursor(directory: string,
-  binding: AuthoritativeNativeDeliveryBinding, generationId: string,
+  binding: Pick<AuthoritativeNativeDeliveryBinding, "serviceId" | "destinationDigest">, generationId: string,
   now: number): Promise<DeliveryIntentCursor> {
   return withIntentOperation(repositoryFromIntentDirectory(directory),
     () => readCatalogSelectableDeliveryIntents(directory, { generationId,

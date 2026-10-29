@@ -14,7 +14,7 @@ const compiler: WorkflowCompiler = {
   compile(bytes) {
     const parsed: unknown = JSON.parse(bytes.toString("utf8"));
     if (parsed !== "run-check") throw new Error("invalid custom workflow");
-    return [{ name: "check", kind: "ordinary-sysbox", script: "build/check.sh",
+      return [{ name: "check", provider: "ordinary-sysbox", script: "build/check.sh",
       argv: ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"] }];
   }
 };
@@ -41,8 +41,8 @@ describe("Git workflow compiler boundary", () => {
     fixtures.push(fixture);
     const unordered: WorkflowCompiler = { configurationPath: ".dim/ci/runner.yml", compile() {
       return [
-        { name: "integration", kind: "qemu", script: ".dim/ci/jobs/integration.bash", argv: ["/bin/sh"] },
-        { name: "source", kind: "ordinary-sysbox", script: ".dim/ci/jobs/source.bash", argv: ["/bin/sh"] }
+        { name: "integration", provider: "qemu", script: ".dim/ci/jobs/integration.bash", argv: ["/bin/sh"] },
+        { name: "source", provider: "ordinary-sysbox", script: ".dim/ci/jobs/source.bash", argv: ["/bin/sh"] }
       ];
     } };
 
@@ -62,7 +62,7 @@ describe("Git workflow compiler boundary", () => {
     const fixture = await nativeCandidateJobInputsFixture("sha1");
     fixtures.push(fixture);
     const unsafeCompiler: WorkflowCompiler = { configurationPath: ".dim/ci/runner.yml", compile() {
-      return [{ name: "check", kind: "ordinary-sysbox", script: "../host-secret", argv: ["/bin/sh"] }];
+      return [{ name: "check", provider: "ordinary-sysbox", script: "../host-secret", argv: ["/bin/sh"] }];
     } };
     await expect(readNativeCandidateJobInputsFromGit(fixture.reader, fixture.input, unsafeCompiler))
       .rejects.toThrow();

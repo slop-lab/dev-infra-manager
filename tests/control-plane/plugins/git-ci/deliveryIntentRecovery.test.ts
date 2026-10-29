@@ -3,7 +3,7 @@ import { link, mkdir, open, readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { acknowledgeAuthoritativeNativeDelivery, readPendingAuthoritativeNativeDeliveries, recordExplicitAuthoritativeNativeDeliveryIntent } from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
+import { dimDeliveryBinding as authoritativeNativeDeliveryBinding } from "../../../support/dimCi.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "./nativeBundleReviewFixture.js";
 import { cleanupFinalizeFixtures, closeFinalizeService, generationId, rootRepository } from "../git-repositories/nativeRootImportFinalizeFixture.js";
 import type { DeliveryIntent } from "../../../../packages/gs/ci/src/authoritative-native-delivery-intent-store.js";
@@ -72,6 +72,12 @@ it("rejects an intent replacement staging entry with a changed event identity", 
   expect(JSON.parse(await readFile(intentPath, "utf8"))).toEqual(pending.intent);
   expect(await readdir(join(repository, "dim-git-ci-deliveries", "intent-staging")))
     .toEqual([basename(stagedPath)]);
+  try {
+    await closeFinalizeService(fixture.service);
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    expect(error.message).toMatch(/intent|staging|identity|shutdown failed/i);
+  }
 }, 30_000);
 
 async function findIntentPath(repository: string, expected: DeliveryIntent): Promise<string> {

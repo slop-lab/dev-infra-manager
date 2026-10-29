@@ -18,3 +18,12 @@ it("keeps the GS CI package dependency graph independent from DIM implementation
     .map((name) => readFile(join(source, name), "utf8")));
   expect(bodies.some((body) => body.includes("@slop-lab/dim-"))).toBe(false);
 });
+
+it("keeps public GS workflow, check and event contracts free of DIM placement", async () => {
+  const root = new URL("../../../packages/gs/ci-contracts/src", import.meta.url).pathname;
+  const source = (await Promise.all(["candidate-execution.ts", "workflow.ts", "events.ts"]
+    .map((name) => readFile(join(root, name), "utf8")))).join("\n");
+
+  expect(source).not.toMatch(/ordinary-sysbox|qemu|runnerBaseImage|jobBaseImage|generationId|projectId|dim\.native/);
+  expect(source).toMatch(/provider/);
+});

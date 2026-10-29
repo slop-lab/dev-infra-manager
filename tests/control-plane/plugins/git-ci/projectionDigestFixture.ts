@@ -5,7 +5,7 @@ const job = { executionKind: "ordinary-sysbox", jobName: "source", evidenceClass
 
 export const projectionDigestInput = {
   identity: {
-    schemaVersion: 2, serviceId: "native-main", projectId: "project-a", repositoryId: "root",
+    schemaVersion: 1, namespaceId: "project-a", repositoryId: "root",
     inputs: { root: primary }, protectedRef: "refs/heads/main", proposalRef: "refs/heads/feature",
     expectedProtectedHead: "1".repeat(40), candidateCommit: primary.commit, candidateTree: primary.tree,
     policyRevision: "4".repeat(64), requiredReviewRevision: "5".repeat(64), requiredReviewerIds: ["owner"],

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { z } from "zod";
-import { authoritativeNativeDeliveryBinding } from "../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
+import { dimDeliveryBinding as authoritativeNativeDeliveryBinding } from "../../support/dimCi.js";
 import { createAuthoritativeNativeReviewEnvelope } from "../../../packages/gs/ci/src/plan-schema.js";
 import { projectionDigestInput } from "../../control-plane/plugins/git-ci/projectionDigestFixture.js";
 import { seedRetainedHistoryIntents } from "./native-history-intents.js";

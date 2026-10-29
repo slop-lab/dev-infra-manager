@@ -4,11 +4,13 @@ import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { executionGrantSchema, executionGrantRequestSchema, executionResultSchema,
-  type ExecutionGrant, type ExecutionResult } from "@slop-lab/dim-contracts-ci/execution";
+import { executionEventSchema, executionGrantSchema, executionGrantRequestSchema, executionResultSchema,
+  encodeDimReviewJobAvailableEvent, type ExecutionGrant, type ExecutionResult } from "@slop-lab/dim-contracts-ci/execution";
+import { reviewCheckAvailableEventSchema } from "@slop-lab/gs-ci-contracts";
 
 import { loadAuthoritativeExecutionReview, loadCurrentAuthoritativeExecutionInputs } from "./authoritative-execution-review-inputs.js";
-import { candidateExecutionDescriptorSchema, candidateExecutionDescriptorDigest as descriptorDigest } from "@slop-lab/gs-ci-contracts";
+import { dimExecutionDescriptorDigest as descriptorDigest,
+  dimExecutionDescriptorSchema } from "@slop-lab/dim-contracts-ci/execution";
 import { ownedReviewDirectory, readReviewJson as readStoredJson, writeImmutableReviewRecord } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 
 export async function authorizeExecution(runtime: GitCiRuntime, value: unknown): Promise<ExecutionGrant> {
@@ -16,11 +18,20 @@ export async function authorizeExecution(runtime: GitCiRuntime, value: unknown):
   if (request.generationId !== runtime.expectedGenerationId) throw new ExecutionConflictError("execution generation is stale");
   const snapshot = await loadAuthoritativeExecutionReview(runtime, request.event);
   const { inputs, review } = await loadCurrentAuthoritativeExecutionInputs(runtime, snapshot);
-  const event = snapshot.envelope.events.find((event) => event.eventId === request.event.eventId);
-  if (event === undefined || !isDeepStrictEqual(event, request.event)) throw new ExecutionConflictError("execution event is stale");
-  const job = inputs.plan.find((job) => job.name === event.jobName && job.kind === event.executionKind);
+  const selectedEvent = snapshot.envelope.events.find((event) => event.eventId === request.event.eventId);
+  if (selectedEvent === undefined) throw new ExecutionConflictError("execution event is stale");
+  const event = dimExecutionEvent(selectedEvent);
+  if (!isDeepStrictEqual(event, request.event)) throw new ExecutionConflictError("execution event is stale");
+  const job = inputs.plan.find((job) => job.name === event.jobName && job.provider === event.executionKind);
   if (job === undefined || inputs.configBlob === null) throw new ExecutionConflictError("execution job is missing");
-  await assertExecutionInputsCurrent(runtime, { ...review, inputs: event.inputs });
+  await assertExecutionInputsCurrent(runtime, {
+    projectId: review.namespaceId,
+    repositoryId: review.repositoryId,
+    protectedRef: review.protectedRef,
+    candidateCommit: review.candidateCommit,
+    candidateTree: review.candidateTree,
+    inputs: event.inputs,
+  });
   const root = join(snapshot.target.repository, "dim-execution-grants");
   await ownedReviewDirectory(root);
   const existing = await readOptional(join(root, `${request.executionId}.json`));
@@ -33,8 +44,8 @@ export async function authorizeExecution(runtime: GitCiRuntime, value: unknown):
   }
   const history = await grants(snapshot.target.repository);
   const attempt = history.filter((grant) => sameJob(grant, event)).reduce((max, grant) => Math.max(max, grant.attempt), 0) + 1;
-  const descriptor = candidateExecutionDescriptorSchema.parse({
-    projectId: review.projectId, repositoryId: review.repositoryId, inputs: event.inputs, protectedRef: review.protectedRef,
+  const descriptor = dimExecutionDescriptorSchema.parse({
+    projectId: review.namespaceId, repositoryId: review.repositoryId, inputs: event.inputs, protectedRef: review.protectedRef,
     expectedProtectedHead: review.expectedProtectedHead, candidateCommit: review.candidateCommit, candidateTree: review.candidateTree,
     policyRevision: review.policyRevision, requiredReviewRevision: review.requiredReviewRevision,
     requiredJobSetRevision: snapshot.envelope.qualityRevision, generationId: runtime.expectedGenerationId,
@@ -58,7 +69,7 @@ export async function assertCurrentExecution(runtime: GitCiRuntime, grant: Execu
   if (grant.generationId !== runtime.expectedGenerationId) throw new ExecutionConflictError("execution generation is stale");
   const snapshot = await loadAuthoritativeExecutionReview(runtime, grant.event);
   const { inputs, review } = await loadCurrentAuthoritativeExecutionInputs(runtime, snapshot);
-  const job = inputs.plan.find((job) => job.name === grant.event.jobName && job.kind === grant.event.executionKind);
+  const job = inputs.plan.find((job) => job.name === grant.event.jobName && job.provider === grant.event.executionKind);
   if (job === undefined || inputs.configBlob === null
     || grant.descriptor.expectedProtectedHead !== review.expectedProtectedHead
     || grant.descriptor.candidateCommit !== review.candidateCommit || grant.descriptor.candidateTree !== review.candidateTree
@@ -69,9 +80,18 @@ export async function assertCurrentExecution(runtime: GitCiRuntime, grant: Execu
     || !isDeepStrictEqual(grant.descriptor.script, job.script) || !isDeepStrictEqual(grant.descriptor.argv, job.argv)) {
     throw new ExecutionConflictError("execution descriptor no longer matches reviewed inputs");
   }
-  if (!snapshot.envelope.events.some((event) => isDeepStrictEqual(event, grant.event))) throw new ExecutionConflictError("execution envelope is stale");
+  if (!snapshot.envelope.events.some((event) => isDeepStrictEqual(dimExecutionEvent(event), grant.event))) {
+    throw new ExecutionConflictError("execution envelope is stale");
+  }
   if (!isDeepStrictEqual(grant.descriptor.inputs, grant.event.inputs)) throw new ExecutionConflictError("execution input snapshot conflicts");
-  await assertExecutionInputsCurrent(runtime, { ...review, inputs: grant.descriptor.inputs });
+  await assertExecutionInputsCurrent(runtime, {
+    projectId: review.namespaceId,
+    repositoryId: review.repositoryId,
+    protectedRef: review.protectedRef,
+    candidateCommit: review.candidateCommit,
+    candidateTree: review.candidateTree,
+    inputs: grant.descriptor.inputs,
+  });
   const latest = (await grants(snapshot.target.repository)).filter((other) => other.generationId === runtime.expectedGenerationId && sameJob(other, grant.event))
     .sort((left, right) => right.attempt - left.attempt)[0];
   if (latest?.executionId !== grant.executionId) throw new ExecutionConflictError("execution attempt was superseded");
@@ -99,14 +119,15 @@ export async function recordExecutionEvidence(runtime: GitCiRuntime,
 }
 
 export async function currentExecutionEvidence(runtime: GitCiRuntime,
-  repository: string, event: ExecutionGrant["event"]): Promise<{ grant: ExecutionGrant; result: ExecutionResult; digest: string }> {
+  repository: string, value: unknown): Promise<{ grant: ExecutionGrant; result: ExecutionResult; digest: string }> {
+  const event = dimExecutionEvent(value);
   const grant = (await grants(repository)).filter((candidate) => candidate.generationId === runtime.expectedGenerationId && sameJob(candidate, event))
     .sort((a, b) => b.attempt - a.attempt)[0];
   if (grant === undefined) throw new ExecutionConflictError("execution evidence is missing", "evidence-missing");
   await assertCurrentExecution(runtime, grant);
-  const value = await readOptional(join(repository, "dim-execution-evidence", `${grant.executionId}.json`));
-  if (value === undefined) throw new ExecutionConflictError("execution evidence is missing", "evidence-missing");
-  const result = executionResultSchema.parse(value);
+  const resultValue = await readOptional(join(repository, "dim-execution-evidence", `${grant.executionId}.json`));
+  if (resultValue === undefined) throw new ExecutionConflictError("execution evidence is missing", "evidence-missing");
+  const result = executionResultSchema.parse(resultValue);
   return { grant, result, digest: createHash("sha256").update(JSON.stringify({ grant, result })).digest("hex") };
 }
 
@@ -121,6 +142,10 @@ async function grants(repository: string): Promise<ExecutionGrant[]> {
 function sameJob(grant: ExecutionGrant, event: ExecutionGrant["event"]): boolean {
   return grant.event.projectId === event.projectId && grant.event.repositoryId === event.repositoryId && grant.event.envelopeId === event.envelopeId
     && grant.event.executionKind === event.executionKind && grant.event.jobName === event.jobName;
+}
+function dimExecutionEvent(value: unknown): ExecutionGrant["event"] {
+  const legacy = executionEventSchema.safeParse(value);
+  return legacy.success ? legacy.data : encodeDimReviewJobAvailableEvent(reviewCheckAvailableEventSchema.parse(value));
 }
 export class ExecutionConflictError extends Error {
   constructor(message: string, readonly code: "conflict" | "evidence-missing" = "conflict") { super(message); }

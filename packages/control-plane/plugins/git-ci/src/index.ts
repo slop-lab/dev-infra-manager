@@ -10,12 +10,14 @@ import { readVerifiedCiReviewSources, reviewPreparationExtension,
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import { requireWorkflowCompiler, WORKFLOW_COMPILER_EXTENSION } from "@slop-lab/dim-contracts-ci/workflow-plugin-api";
 import type { WorkflowCompiler } from "@slop-lab/gs-ci-contracts";
+import { dimReviewJobAvailableEventCodec } from "@slop-lab/dim-contracts-ci/execution";
 import { gitCiConfigSchema } from "./config.js";
 import { gitCiPreparation } from "./preparation.js";
 import { createExecutionHttpService } from "./execution-http.js";
 import { createAuthoritativeNativeEventDispatcher } from "./authoritative-native-event-dispatcher.js";
 import { assertGitCiPromotable, gitCiQualityRevision, type GitCiQualityInput } from "./quality.js";
 import { gitCiRefUpdatePolicyExtension } from "./ref-update-policy.js";
+import { toGsReviewEnvelope } from "./review-adapter.js";
 import type { GitCiRuntime } from "./runtime.js";
 import { handleReviewCiStatus } from "./review-status-http.js";
 import { handleWorkspaceCandidateCi } from "./workspace-candidate-http.js";
@@ -29,7 +31,7 @@ export type GitCiOptions = {
 export function prepareGitCi(config: import("./config.js").GitCiConfig, options: GitCiOptions = {}): PreparedControlPlanePlugin {
     let compiler: WorkflowCompiler | undefined;
     let runtime: GitCiRuntime | undefined;
-    const binding = authoritativeNativeDeliveryBinding("ci", config.webhook.endpoint);
+    const binding = authoritativeNativeDeliveryBinding("ci", config.webhook.endpoint, dimReviewJobAvailableEventCodec);
     const preparation = gitCiPreparation(() => {
       if (!compiler) throw new Error("Git CI repository attachment is not ready"); return compiler;
     }, async ({ runtime: base, envelope, ownerRequestId }) => {
@@ -37,7 +39,7 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
       const requestRuntime = { ...base, authoritativeTargetProofs: base.authoritativeTargetProofs ?? new Map() };
       const target = await resolveAuthoritativeNativeRepositoryTarget(requestRuntime, { projectId: envelope.review.projectId,
         repositoryId: envelope.review.repositoryId, protectedRef: envelope.review.protectedRef });
-      const planned = await gitCiEnvelope(target.repository, envelope);
+      const planned = await gitCiEnvelope(target.repository, toGsReviewEnvelope(envelope));
       if (planned !== undefined) await recordExplicitAuthoritativeNativeDeliveryIntent(target.repository, planned,
         runtime.expectedGenerationId, binding, ownerRequestId);
     }, config.compiler);
@@ -61,7 +63,7 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
         const execution = createExecutionHttpService({ config, runtime, stateDirectory: context.stateDirectory,
           mutate: context.mutate, read: context.read, signal: context.signal,
           ...(options.now === undefined ? {} : { now: options.now }) });
-        context.signal.addEventListener("abort", () => { void dispatcher.close(); execution.close(); }, { once: true });
+        context.signal.addEventListener("abort", () => { dispatcher.stop(); execution.close(); }, { once: true });
         const attachedRuntime = runtime;
         return { async handle(request, response, url) {
           if (await handleWorkspaceCandidateCi(context, attachedRuntime, { request, response, url, accepted: dispatcher.wake })) return true;

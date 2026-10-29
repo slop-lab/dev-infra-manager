@@ -39,8 +39,8 @@ describe("authoritative installed native review creation", () => {
     if (changed?.planning.status !== "valid") throw new TypeError("changed envelope planning is invalid");
     const source = changed.planning.jobs.find(({ jobName }) => jobName === "source");
     expect(source?.script.sha256).toBe(`sha256:${createHash("sha256").update(changedScript).digest("hex")}`);
-    expect(changed.events.find(({ jobName }) => jobName === "source")?.eventId)
-      .not.toBe(original.events.find(({ jobName }) => jobName === "source")?.eventId);
+    expect(changed.events.find(({ checkName }) => checkName === "source")?.eventId)
+      .not.toBe(original.events.find(({ checkName }) => checkName === "source")?.eventId);
   });
 
   it("publishes candidate events for newly added ordinary and QEMU jobs", async () => {
@@ -70,11 +70,11 @@ describe("authoritative installed native review creation", () => {
     // Then
     const candidate = (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD"])).stdout.trim();
     const added = await waitForPublishedReview(fixture.root, candidate);
-    expect(added?.events.map(({ executionKind, jobName }) => ({ executionKind, jobName }))).toEqual([
-      { executionKind: "ordinary-sysbox", jobName: "lint" },
-      { executionKind: "ordinary-sysbox", jobName: "source" },
-      { executionKind: "qemu", jobName: "integration" },
-      { executionKind: "qemu", jobName: "smoke" }
+    expect(added?.events.map(({ provider, checkName }) => ({ provider, checkName }))).toEqual([
+      { provider: "ordinary-sysbox", checkName: "lint" },
+      { provider: "ordinary-sysbox", checkName: "source" },
+      { provider: "qemu", checkName: "integration" },
+      { provider: "qemu", checkName: "smoke" }
     ]);
     expect(new Set(added?.events.map(({ eventId }) => eventId)).size).toBe(4);
   });
@@ -88,9 +88,9 @@ describe("authoritative installed native review creation", () => {
     expect(names).toHaveLength(1);
     const resolved = await createBundleReview(fixture.service);
     expect(names[0]).toMatch(new RegExp(`^${resolved.review.reviewId}\\.[a-f0-9]{64}\\.json$`));
-    expect(resolved.events.map(({ executionKind, jobName }) => ({ executionKind, jobName }))).toEqual([
-      { executionKind: "ordinary-sysbox", jobName: "source" },
-      { executionKind: "qemu", jobName: "integration" }
+    expect(resolved.events.map(({ provider, checkName }) => ({ provider, checkName }))).toEqual([
+      { provider: "ordinary-sysbox", checkName: "source" },
+      { provider: "qemu", checkName: "integration" }
     ]);
   });
 
@@ -104,7 +104,7 @@ describe("authoritative installed native review creation", () => {
 
     // Then
     expect(created.requiredJobs).toEqual([]);
-    expect(created.events.map(({ jobName }) => jobName)).toEqual(["source", "integration"]);
+    expect(created.events.map(({ checkName }) => checkName)).toEqual(["source", "integration"]);
   });
 
   it("records a missing manifest as valid empty planning with no events", async () => {

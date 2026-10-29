@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { z } from "zod";
 import { reviewCiStatusSchema, type ReviewCiJob, type ReviewCiStatus } from "@slop-lab/gs-ci-contracts";
 import { assertAuthoritativeNativeReviewRefs, readAuthoritativeNativeReviewEnvelope } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { repositoryAccessProvider, RepositoryAccessError, readNativeProjectRootCurrentHeadFromDatabase,
@@ -7,6 +8,8 @@ import { currentExecutionEvidence, ExecutionConflictError } from "./execution-ev
 import { gitCiPolicy, readAuthoritativeNativeReviewEnvelope as readCiEnvelope } from "@slop-lab/gs-ci";
 import type { GitCiRuntime } from "./runtime.js";
 import type { AuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+
+const executionKindSchema = z.enum(["ordinary-sysbox", "qemu"]);
 
 export async function handleReviewCiStatus(context: RepositoryExtensionContext, runtime: GitCiRuntime,
   http: { readonly request: IncomingMessage; readonly response: ServerResponse; readonly url: URL }): Promise<boolean> {
@@ -44,7 +47,9 @@ export async function readReviewCiStatus(runtime: GitCiRuntime, target: Authorit
   if (!Object.hasOwn(target.imported.policy.extensions, "git-ci")) return publish({ state: "not-configured", policy: "absent", requiredJobs: [] });
   const policy = gitCiPolicy(target.imported.policy, review.repositoryId);
   const head = readNativeProjectRootCurrentHeadFromDatabase(runtime.state.database, review.projectId, review.repositoryId, review.protectedRef);
-  const staleJobs = policy.requiredJobs.map(({ name, kind }) => ({ name, kind, status: "stale" as const }));
+  const staleJobs = policy.requiredJobs.map(({ name, provider }) => ({
+    name, kind: executionKindSchema.parse(provider), status: "stale" as const,
+  }));
   if (envelope.policyDigest !== target.imported.policyDigest || head.commit !== review.expectedProtectedHead) {
     return publish({ state: "stale", policy: "enabled", requiredJobs: staleJobs, reason: "stale-review" });
   }
@@ -58,19 +63,22 @@ export async function readReviewCiStatus(runtime: GitCiRuntime, target: Authorit
   }
   const plan = await readCiEnvelope(target.repository, reviewId);
   if (!plan || plan.qualityRevision !== policy.requiredJobSetRevision || plan.planning.status !== "valid") {
-    return publish({ state: "failed", policy: "enabled", requiredJobs: policy.requiredJobs.map(({ name, kind }) => ({ name, kind, status: "failed" })), reason: "invalid-plan" });
+    return publish({ state: "failed", policy: "enabled", requiredJobs: policy.requiredJobs.map(({ name, provider }) => ({
+      name, kind: executionKindSchema.parse(provider), status: "failed",
+    })), reason: "invalid-plan" });
   }
   const jobs: ReviewCiJob[] = [];
   for (const required of policy.requiredJobs) {
-    const event = plan.events.find((entry) => entry.jobName === required.name && entry.executionKind === required.kind);
-    if (!event) { jobs.push({ name: required.name, kind: required.kind, status: "failed" }); continue; }
+    const kind = executionKindSchema.parse(required.provider);
+    const event = plan.events.find((entry) => entry.checkName === required.name && entry.provider === required.provider);
+    if (!event) { jobs.push({ name: required.name, kind, status: "failed" }); continue; }
     try {
       const { grant, result } = await currentExecutionEvidence(runtime, target.repository, event);
       const succeeded = result.result === "success" && result.completion.kind === "exited" && "exitCode" in result.completion && result.completion.exitCode === 0;
-      jobs.push({ name: required.name, kind: required.kind, executionId: grant.executionId, status: succeeded ? "succeeded" : "failed" });
+      jobs.push({ name: required.name, kind, executionId: grant.executionId, status: succeeded ? "succeeded" : "failed" });
     } catch (error) {
-      if (error instanceof ExecutionConflictError) jobs.push({ name: required.name, kind: required.kind, status: error.code === "evidence-missing" ? "pending" : "stale" });
-      else if (error instanceof Error) jobs.push({ name: required.name, kind: required.kind, status: "unavailable" });
+      if (error instanceof ExecutionConflictError) jobs.push({ name: required.name, kind, status: error.code === "evidence-missing" ? "pending" : "stale" });
+      else if (error instanceof Error) jobs.push({ name: required.name, kind, status: "unavailable" });
       else throw error;
     }
   }

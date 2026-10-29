@@ -38,16 +38,16 @@ describe("authoritative installed native review creation", () => {
     expect(retried).toEqual(created);
     expect(afterRestart).toEqual(created);
     expect(created.review.repositoryId).toBe("root");
-    expect(created.events.map(({ schemaVersion }) => schemaVersion)).toEqual([3, 3]);
+    expect(created.events.map(({ schemaVersion }) => schemaVersion)).toEqual([1, 1]);
     expect(created.review.patchBytes).toMatch(/^[A-Za-z0-9+/]+=*$/);
     expect(Buffer.from(created.review.patchBytes, "base64").includes(Buffer.from("GIT binary patch"))).toBe(true);
-    expect(created.events.map(({ executionKind, jobName, evidenceClass }) => ({
-      executionKind,
-      jobName,
+    expect(created.events.map(({ provider, checkName, evidenceClass }) => ({
+      provider,
+      checkName,
       evidenceClass
     }))).toEqual([
-      { executionKind: "ordinary-sysbox", jobName: "source", evidenceClass: "candidate-controlled" },
-      { executionKind: "qemu", jobName: "integration", evidenceClass: "candidate-controlled" }
+      { provider: "ordinary-sysbox", checkName: "source", evidenceClass: "candidate-controlled" },
+      { provider: "qemu", checkName: "integration", evidenceClass: "candidate-controlled" }
     ]);
     expect(await publishedReviewNames(fixture.root)).toHaveLength(1);
     await closeFinalizeService(restarted);

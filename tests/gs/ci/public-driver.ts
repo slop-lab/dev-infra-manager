@@ -4,13 +4,13 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { CiExecutionEvidence } from "../../../packages/gs/ci-contracts/src/index.js";
 import { authoritativeNativeDeliveryBinding, createCiDeliveryDispatcher, createGitCiPreparation,
-  createGitCiRefUpdatePolicy, gitCiPolicyOwner, gitCiEnvelope,
+  createGitCiRefUpdatePolicy, gitCiPolicyOwner, gitCiEnvelope, jsonCiDeliveryEventCodec,
   readAuthoritativeNativeReviewEnvelope as readCiEnvelope, readPendingAuthoritativeNativeDeliveries,
   recordExplicitAuthoritativeNativeDeliveryIntent } from "../../../packages/gs/ci/src/index.js";
 import { repositoryPolicyRevision } from "../../../packages/gs/repository-contracts/src/index.js";
 import { assertGitVersion, initializeRepository } from "../../../packages/gs/repository/src/index.js";
-import { openRepositoryAuthority } from "../../../packages/gs/repository-service/src/index.js";
-import { createGitRepositoryReadService, createReviewFeature,
+import { createGitRepositoryReadService, openRepositoryAuthority } from "../../../packages/gs/repository-service/src/index.js";
+import { createReviewFeature,
   defaultReviewChangeMatchers } from "../../../packages/gs/review/src/index.js";
 
 class PublicDriverError extends Error {
@@ -26,7 +26,7 @@ const selector = { namespaceId: "tenant", repositoryId: "main" } as const;
 const repository = join(storageRoot, selector.namespaceId, `${selector.repositoryId}.git`);
 const proposalRef = "refs/heads/review-candidate";
 const statePath = join(root, "authority.sqlite3");
-const binding = authoritativeNativeDeliveryBinding("portable", "portable://execution");
+const binding = authoritativeNativeDeliveryBinding("portable", "portable://execution", jsonCiDeliveryEventCodec);
 
 await mkdir(join(storageRoot, selector.namespaceId), { recursive: true });
 await git(["init", source]);
@@ -58,7 +58,7 @@ const policyBase = {
     "code-review": { requiredReviewerIds: ["owner"], pathReviewerRules: [], changeReviewerRules: [] },
     "git-ci": {
       ciRepositoryIds: ["main"],
-      requiredJobs: [{ name: "check", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
+      requiredJobs: [{ name: "check", provider: "portable", evidenceClass: "candidate-controlled" }],
     },
   },
 };
@@ -83,7 +83,7 @@ const preparation = createGitCiPreparation({
         if (!value || typeof value !== "object" || !("script" in value) || typeof value.script !== "string") {
           throw new PublicDriverError("workflow is invalid");
         }
-        return [{ name: "check", kind: "ordinary-sysbox", script: value.script, argv: ["/bin/sh", "/run/job"] }];
+        return [{ name: "check", provider: "portable", script: value.script, argv: ["/bin/sh", "/run/job"] }];
       },
     },
   },
@@ -188,6 +188,7 @@ const deliveryObserved = new Promise<void>((resolve) => { delivered = resolve; }
 const dispatcher = await createCiDeliveryDispatcher({
   serviceId: binding.serviceId,
   destination: "portable://execution",
+  eventCodec: jsonCiDeliveryEventCodec,
   generationId: authority.authorityEpoch,
   repositories: () => [repository],
   serialize: (operation) => operation(),
@@ -211,6 +212,7 @@ await authority.close();
 const restartedDispatcher = await createCiDeliveryDispatcher({
   serviceId: binding.serviceId,
   destination: "portable://execution",
+  eventCodec: jsonCiDeliveryEventCodec,
   generationId: authorityEpoch,
   repositories: () => [repository],
   serialize: (operation) => operation(),

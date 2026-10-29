@@ -25,13 +25,16 @@ export interface CiDeliverySubmitPort {
 export type CiDeliveryDispatcher = {
   readonly start: () => void;
   readonly wake: () => void;
+  readonly stop: () => void;
   readonly close: () => Promise<void>;
   readonly healthy: () => boolean;
+  readonly whenFailed: () => Promise<Error>;
 };
 
 export type CiDeliveryDispatcherOptions = {
   readonly serviceId: string;
   readonly destination: string;
+  readonly eventCodec: import("./authoritative-native-delivery-binding.js").CiDeliveryEventCodec;
   readonly generationId: string;
   readonly repositories: () => readonly string[] | Promise<readonly string[]>;
   readonly submit: CiDeliverySubmitPort;
@@ -51,7 +54,7 @@ export async function createCiDeliveryDispatcher(options: CiDeliveryDispatcherOp
     idle: options.idleMilliseconds ?? 1_000,
     request: options.requestTimeoutMilliseconds ?? 5_000,
   };
-  const binding = authoritativeNativeDeliveryBinding(options.serviceId, options.destination);
+  const binding = authoritativeNativeDeliveryBinding(options.serviceId, options.destination, options.eventCodec);
   if (Object.values(timing).some((value) => !Number.isInteger(value) || value < 1 || value > 30_000)
     || timing.minimum > timing.maximum) {
     throw new CiDeliveryError("CI delivery timing is invalid");
@@ -65,15 +68,23 @@ export async function createCiDeliveryDispatcher(options: CiDeliveryDispatcherOp
   let task: Promise<void> | undefined;
   let wakeCurrent: (() => void) | undefined;
   let failure: Error | undefined;
+  let reportFailure: ((error: Error) => void) | undefined;
+  const failed = new Promise<Error>((resolve) => { reportFailure = resolve; });
   let persistenceUnavailable = false;
   return {
     start() {
       task ??= run().catch((error: unknown) => {
         failure = error instanceof Error ? error : new CiDeliveryError("CI delivery failed");
+        reportFailure?.(failure);
       });
     },
     wake() { wakeCurrent?.(); },
+    stop() {
+      shutdown.abort();
+      wakeCurrent?.();
+    },
     healthy() { return failure === undefined && !persistenceUnavailable; },
+    whenFailed() { return failed; },
     async close() {
       shutdown.abort();
       wakeCurrent?.();
@@ -159,9 +170,9 @@ async function pendingDelivery(
   }));
   return candidates.filter((candidate): candidate is Pending => candidate !== undefined)
     .sort((left, right) => left.delivery.createdAt.localeCompare(right.delivery.createdAt)
-      || left.delivery.event.projectId.localeCompare(right.delivery.event.projectId)
+      || left.delivery.event.namespaceId.localeCompare(right.delivery.event.namespaceId)
       || left.delivery.event.reviewId.localeCompare(right.delivery.event.reviewId)
-      || left.delivery.event.jobName.localeCompare(right.delivery.event.jobName)
+      || left.delivery.event.checkName.localeCompare(right.delivery.event.checkName)
       || left.delivery.event.eventId.localeCompare(right.delivery.event.eventId))[0];
 }
 

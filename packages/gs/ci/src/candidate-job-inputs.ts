@@ -7,7 +7,8 @@ import {
   type CandidateObjectTuple,
   readCandidateBlob
 } from "./candidate-execution-git.js";
-import { CandidateExecutionError, isCandidatePath, isCandidateArgv, type WorkflowCompiler, type CandidateRequiredJob as NativeCandidateRequiredJob } from "@slop-lab/gs-ci-contracts";
+import { CandidateExecutionError, isCandidatePath, isCandidateArgv, type WorkflowCompiler,
+  type CandidateRequiredCheck } from "@slop-lab/gs-ci-contracts";
 
 export type NativeCandidateBlobIdentity = {
   readonly objectId: string;
@@ -18,7 +19,7 @@ export type NativeCandidateScriptIdentity = NativeCandidateBlobIdentity & {
   readonly path: string;
 };
 
-export type NativeCandidateJobInputPlanEntry = NativeCandidateRequiredJob & {
+export type NativeCandidateJobInputPlanEntry = CandidateRequiredCheck & {
   readonly script: NativeCandidateScriptIdentity;
   readonly argv: readonly string[];
   readonly repositories: readonly string[];
@@ -44,7 +45,7 @@ export async function readNativeCandidateJobInputsFromGit(
   const configBlob = await readCandidateBlob(reader, target.candidateTree, configurationPath, 64 * 1024);
   const compiled = z.array(z.object({
     name: z.string().regex(/^[a-z][a-z0-9-]{0,62}$/),
-    kind: z.enum(["ordinary-sysbox", "qemu"]),
+    provider: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
     script: z.string().refine(isCandidatePath),
     repositories: z.array(z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/)).max(64).refine((ids) => new Set(ids).size === ids.length).optional(),
     argv: z.array(z.string()).refine(isCandidateArgv)
@@ -53,12 +54,12 @@ export async function readNativeCandidateJobInputsFromGit(
     throw new CandidateExecutionError("compiled workflow job names must be unique");
   }
   const plan: NativeCandidateJobInputPlanEntry[] = [];
-  for (const job of compiled.sort((left, right) => left.kind.localeCompare(right.kind)
+  for (const job of compiled.sort((left, right) => left.provider.localeCompare(right.provider)
     || left.name.localeCompare(right.name))) {
     const scriptBlob = await readCandidateBlob(reader, target.candidateTree, job.script, 1024 * 1024);
     plan.push({
       name: job.name,
-      kind: job.kind,
+      provider: job.provider,
       script: { path: job.script, objectId: scriptBlob.objectId, sha256: sha256(scriptBlob.bytes) },
       argv: job.argv, repositories: job.repositories ?? []
     });

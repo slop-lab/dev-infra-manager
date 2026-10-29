@@ -24,7 +24,7 @@ export function createGitCiRefUpdatePolicy(executionProvider: CiExecutionProvide
       });
       assertTargetProof(input.target, target);
       const envelopes = (await readAuthoritativeNativeReviewEnvelopes(target.repositoryPath)).filter(({ review, policyDigest }) =>
-        review.projectId === input.change.namespaceId && review.repositoryId === input.change.repositoryId
+        review.namespaceId === input.change.namespaceId && review.repositoryId === input.change.repositoryId
         && review.protectedRef === target.head.protectedRef && review.proposalRef === input.change.proposalRef
         && review.expectedProtectedHead === input.change.expectedCommit
         && review.candidateCommit === input.change.candidateCommit

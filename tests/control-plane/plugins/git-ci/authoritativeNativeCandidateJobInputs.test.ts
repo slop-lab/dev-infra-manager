@@ -49,7 +49,7 @@ describe("authoritative imported-root candidate job inputs", () => {
       },
       plan: [
         {
-          name: "source", kind: "ordinary-sysbox",
+          name: "source", provider: "ordinary-sysbox",
           script: {
             path: ".dim/ci/jobs/source.bash",
             objectId: await objectId(fixture, ".dim/ci/jobs/source.bash"),
@@ -58,7 +58,7 @@ describe("authoritative imported-root candidate job inputs", () => {
           argv: candidateArgv, repositories: []
         },
         {
-          name: "integration", kind: "qemu",
+          name: "integration", provider: "qemu",
           script: {
             path: ".dim/ci/jobs/integration.bash",
             objectId: await objectId(fixture, ".dim/ci/jobs/integration.bash"),
@@ -81,9 +81,9 @@ describe("authoritative imported-root candidate job inputs", () => {
     const result = await loadAuthoritativeNativeCandidateJobInputs(fixture.context, fixture.selector);
 
     // Then
-    expect(result.plan.map(({ name, kind }) => ({ name, kind }))).toEqual([
-      { name: "integration", kind: "ordinary-sysbox" },
-      { name: "source", kind: "ordinary-sysbox" }
+    expect(result.plan.map(({ name, provider }) => ({ name, provider }))).toEqual([
+      { name: "integration", provider: "ordinary-sysbox" },
+      { name: "source", provider: "ordinary-sysbox" }
     ]);
     await fixture.close();
   });
@@ -148,9 +148,9 @@ describe("authoritative imported-root candidate job inputs", () => {
     const result = await loadAuthoritativeNativeCandidateJobInputs(reopened.context, fixture.selector);
 
     // Then
-    expect(result.plan.map(({ name, kind }) => ({ name, kind }))).toEqual([
-      { name: "source", kind: "ordinary-sysbox" },
-      { name: "integration", kind: "qemu" }
+    expect(result.plan.map(({ name, provider }) => ({ name, provider }))).toEqual([
+      { name: "source", provider: "ordinary-sysbox" },
+      { name: "integration", provider: "qemu" }
     ]);
     await reopened.close();
   });

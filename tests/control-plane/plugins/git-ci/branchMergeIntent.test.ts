@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { readPendingAuthoritativeNativeDeliveries } from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
+import { dimDeliveryBinding as authoritativeNativeDeliveryBinding } from "../../../support/dimCi.js";
 import { nativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";
 import { cleanupFinalizeFixtures, generationId, hostPromoterAuthorization, rootRepository, runGit } from "../git-repositories/nativeRootImportFinalizeFixture.js";
 

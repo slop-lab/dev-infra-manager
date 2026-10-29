@@ -22,7 +22,7 @@ const configSchema = z.object({ jobs: z.record(jobNameSchema, jobSchema) }).stri
 
 export type WorkflowJob = {
   readonly name: string;
-  readonly kind: "ordinary-sysbox" | "qemu";
+  readonly provider: "ordinary-sysbox" | "qemu";
   readonly script: string;
   readonly repositories?: readonly string[];
   readonly argv: typeof candidateArgv;
@@ -39,7 +39,7 @@ export const dimWorkflowCompiler = {
     const jobs = Object.entries(parsed.data.jobs);
     if (jobs.length > 64) throw new WorkflowSyntaxError("workflow exceeds 64 jobs");
     return jobs.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
-      .map(([name, job]) => ({ name, kind: job.runtime === "vm" ? "qemu" : "ordinary-sysbox",
+      .map(([name, job]) => ({ name, provider: job.runtime === "vm" ? "qemu" : "ordinary-sysbox",
         script: job.script, argv: candidateArgv, ...(job.repositories === undefined ? {} : { repositories: job.repositories }) }));
   }
 };

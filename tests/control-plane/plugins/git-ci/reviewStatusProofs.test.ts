@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
-import { executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
+import { encodeDimReviewJobAvailableEvent, executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
 import * as rootProofGit from "../../../../packages/control-plane/plugins/git-repositories/src/native-root-import-proof-git.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "./nativeBundleReviewFixture.js";
 import { cleanupFinalizeFixtures, generationId, humanReviewerAuthorization, rootRepository } from "../git-repositories/nativeRootImportFinalizeFixture.js";
@@ -23,7 +23,8 @@ it("reuses immutable proof across required CI jobs while checking live storage o
   const config = idleNativeConfig();
   let firstGrant: ReturnType<typeof executionGrantSchema.parse> | undefined;
   for (const event of envelope.events) {
-    const response = await post("/v1/execution-grants", config.ci.grantIssuer, { executionId: randomUUID(), generationId, event,
+    const response = await post("/v1/execution-grants", config.ci.grantIssuer, { executionId: randomUUID(), generationId,
+      event: encodeDimReviewJobAvailableEvent(event),
       workerId: "worker-a", slotId: "primary", profile: slot.profile });
     expect(response.status, await response.clone().text()).toBe(201);
     const grant = executionGrantSchema.parse(await response.json());

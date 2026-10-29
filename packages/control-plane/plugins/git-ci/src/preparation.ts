@@ -22,6 +22,7 @@ import type {
   ReviewPreparation,
 } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import type { GitCiRuntime } from "./runtime.js";
+import { toGsReviewIdentity, toGsReviewIdentityWithoutInputs } from "./review-adapter.js";
 
 export function gitCiPreparation(
   compiler: () => WorkflowCompiler,
@@ -78,7 +79,7 @@ export function gitCiPreparation(
         },
         target,
         evidence: input.evidence,
-        identity: input.identity,
+        identity: toGsReviewIdentityWithoutInputs(input.identity),
       });
     },
     async assertCurrent(input) {
@@ -87,7 +88,7 @@ export function gitCiPreparation(
       const core = create(runtime);
       await core.preparation.assertCurrent?.({
         authority: core.authority,
-        review: input.review,
+        review: toGsReviewIdentity(input.review),
         ...(input.attachment === undefined ? {} : { attachment: input.attachment }),
       });
     },

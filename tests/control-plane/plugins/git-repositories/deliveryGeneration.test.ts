@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, expect, it } from "vitest";
 import { acknowledgeAuthoritativeNativeDelivery, readPendingAuthoritativeNativeDeliveries,
   recordExplicitAuthoritativeNativeDeliveryIntent, supersedeAuthoritativeNativeDelivery } from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
+import { dimDeliveryBinding as authoritativeNativeDeliveryBinding } from "../../../support/dimCi.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "../git-ci/nativeBundleReviewFixture.js";
 import { cleanupFinalizeFixtures, generationId, rootRepository } from "./nativeRootImportFinalizeFixture.js";
 afterEach(cleanupFinalizeFixtures);
@@ -13,7 +13,7 @@ it("preserves completed delivery deduplication across generation replacement whi
   await fixture.service.context.serialize(async () => {
     const repository = rootRepository(fixture.root), binding = authoritativeNativeDeliveryBinding("ci", "http://execution:8080/v1/jobs");
     const pending = await readPendingAuthoritativeNativeDeliveries(repository, 10, binding, generationId);
-    expect(pending.map((job) => job.event.executionKind).sort()).toEqual(["ordinary-sysbox", "qemu"]);
+    expect(pending.map((job) => job.event.provider).sort()).toEqual(["ordinary-sysbox", "qemu"]);
     const job = pending[0]!;
     await acknowledgeAuthoritativeNativeDelivery(repository, job, { serviceId: "ci", generationId, executionId: randomUUID() }, binding);
     expect((await readPendingAuthoritativeNativeDeliveries(repository, 10, binding, generationId))
