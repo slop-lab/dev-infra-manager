@@ -20,8 +20,10 @@ ref never grants another repository, host credential or protected-ref authority.
 | `@slop-lab/gs-ci`, `@slop-lab/gs-ci-contracts` | Portable provider-selected checks, immutable plans/evidence and durable delivery outbox | Execution profiles, images, placement, scheduler leases and worker credentials |
 | Git repositories control-plane plugin | DIM registration/import, activation, workspace grants, exact owned-ref proofs and format-12 journal adapter | Duplicating GS Git/CAS implementations |
 | Git diff, discussions, PR and blame control-plane plugins | Authenticated HTTP/Project adapters and owner activation for GS services | Durable PR algorithm ownership or implicit grants |
-| Git review and merge-policy control-plane plugins | DIM role credentials, activation, raw proposal capture, legacy wire codecs and GS authority adapters | Duplicating review/merge algorithms |
-| Git-CI and CI-workflows control-plane plugins | DIM compiler registration, legacy execution/event codecs and scheduler/worker adapters | Worker images/resources chosen by candidates |
+| GS explicit legacy codec entrypoints | Byte-preserving persisted review/merge identities, separate from neutral primary SDK models | DIM activation, credentials or runtime registration |
+| Git review and merge-policy control-plane plugins | DIM role credentials, activation, raw proposal capture, consumption of GS persisted codecs, storage-path and authority adapters | Duplicating review/merge algorithms |
+| `@slop-lab/dim-contracts-ci` | Legacy execution descriptors, placement/status/event schemas and wire codecs | Portable GS check semantics or service execution |
+| Git-CI and CI-workflows control-plane plugins | DIM compiler registration, consumption of legacy CI codecs and scheduler/worker adapters | Worker images/resources chosen by candidates |
 | Execution scheduler / host worker plugins | Trusted capacity enrollment, leases, execution, cleanup and result publication | Repository policy changes and protected promotion |
 | `@slop-lab/gs-sync` / DIM Git-sync plugin | GS fetch/propose/publish algorithms / DIM credential, host configuration and HTTP mapping | Force publication or bypassing protected promotion |
 | `@slop-lab/gs-client` / Native Git service client | GS semantic requests and exact-PR choreography / DIM private role attestation, bounded HTTP, wire mapping and presentation DTOs | A server, workspace lifecycle or independent promotion authority |
