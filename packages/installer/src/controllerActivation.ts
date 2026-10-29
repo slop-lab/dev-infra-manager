@@ -9,9 +9,9 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
   const uid = process.getuid?.();
   if (process.platform !== "linux" || uid === undefined) return false;
   const home = env.HOME ?? os.homedir();
-  const defaultState = path.resolve(home, ".local/state/dim");
-  const state = path.resolve(env.DIM_STATE_ROOT ?? defaultState);
-  const runtime = path.join(env.XDG_RUNTIME_DIR ?? path.join(os.tmpdir(), `dim-${uid}`), "dim");
+  const defaultState = path.resolve(home, ".local/state/dim/managed");
+  const state = path.resolve(env.DIM_MANAGED_STATE_ROOT ?? env.DIM_STATE_ROOT ?? defaultState);
+  const runtime = path.join(env.XDG_RUNTIME_DIR ?? path.join(os.tmpdir(), `dim-${uid}`), "dim", "managed");
   const directory = state === defaultState ? runtime
     : path.join(runtime, createHash("sha256").update(state).digest("hex").slice(0, 16));
   const pidPath = path.join(directory, "controller.pid");

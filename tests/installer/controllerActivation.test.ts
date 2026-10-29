@@ -16,12 +16,12 @@ async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), "dim-installer-activation-"));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
   const runtime = path.join(root, "runtime/current");
-  const run = path.join(root, "run/dim");
+  const run = path.join(root, "run/dim/managed");
   await mkdir(runtime, { recursive: true });
   await mkdir(run, { recursive: true });
   return { root, runtime, pidPath: path.join(run, "controller.pid"),
     env: { ...process.env, HOME: root, XDG_CONFIG_HOME: path.join(root, "config"),
-      XDG_RUNTIME_DIR: path.join(root, "run"), DIM_STATE_ROOT: path.join(root, ".local/state/dim") } };
+      XDG_RUNTIME_DIR: path.join(root, "run"), DIM_MANAGED_STATE_ROOT: path.join(root, ".local/state/dim/managed") } };
 }
 
 async function runningFixture() {
@@ -55,7 +55,7 @@ describe("existing managed controller activation", () => {
 
   it("automatically restarts an active installation and restores its prior runtime when readiness fails", async () => {
     const { root, runtime, env } = await runningFixture();
-    for (const name of ["HOME", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DIM_STATE_ROOT"] as const) vi.stubEnv(name, env[name]);
+    for (const name of ["HOME", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DIM_MANAGED_STATE_ROOT"] as const) vi.stubEnv(name, env[name]);
     const previous = path.join(runtime, "node_modules/.bin/dim-host");
     const priorCalls = path.join(root, "prior-calls.json");
     const targetCalls = path.join(root, "target-calls.json");
@@ -72,7 +72,7 @@ describe("existing managed controller activation", () => {
 
   it.each([undefined, false])("upgrades the generic controller without optional integrations (restart=%s)", async (restartController) => {
     const { root, runtime, env } = await runningFixture();
-    for (const name of ["HOME", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DIM_STATE_ROOT"] as const) vi.stubEnv(name, env[name]);
+    for (const name of ["HOME", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DIM_MANAGED_STATE_ROOT"] as const) vi.stubEnv(name, env[name]);
     const previous = path.join(runtime, "node_modules/.bin/dim-host");
     await mkdir(path.dirname(previous), { recursive: true });
     await writeStubCli(previous, { versionOutput: "1.0.0" });
