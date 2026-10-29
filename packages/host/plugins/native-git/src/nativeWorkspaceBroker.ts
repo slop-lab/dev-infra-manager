@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
+import { repositoryBranches as nativeRepositoryBranches } from "@slop-lab/gs-repository-contracts";
 import { timingSafeEqual } from "node:crypto";
 import { nativeWorkspaceBrokerRuntimeRevision } from "./nativeWorkspaceBrokerRuntime.js";
 import { createServer, request as httpRequest, type Server } from "node:http";

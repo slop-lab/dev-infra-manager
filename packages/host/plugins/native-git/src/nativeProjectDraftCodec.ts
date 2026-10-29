@@ -1,4 +1,4 @@
-import { parseAuthoritativeImportedRootPolicy } from "@slop-lab/dim-contracts-git";
+import { parseRepositoryPolicy as parseAuthoritativeImportedRootPolicy } from "@slop-lab/gs-repository-contracts";
 import { createHash } from "node:crypto";
 import { UserError } from "@slop-lab/dim-host-core";
 import type { NativeGitRootImportResult } from "./nativeGitRootImporterClient.js";

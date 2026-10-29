@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect, it, vi } from "vitest";
-import { nativeRepositoryPolicyRevision, parseAuthoritativeImportedRootPolicy, type NativeGitProjectAttachment } from "@slop-lab/dim-contracts-git";
+import type { NativeGitProjectAttachment } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision, parseRepositoryPolicy as parseAuthoritativeImportedRootPolicy } from "@slop-lab/gs-repository-contracts";
 import type { NativeControlPlaneConnection } from "../../../../packages/host/plugins/native-git/src/nativeControlPlaneConnection.js";
 
 const mocks = vi.hoisted(() => ({ discover: vi.fn(), inspect: vi.fn(), readiness: vi.fn() }));

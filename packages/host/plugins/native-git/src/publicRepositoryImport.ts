@@ -13,7 +13,7 @@ import { NativeProjectPendingStore } from "./nativeProjectPendingStore.js";
 import { loadNativeGitRootImporterConnection } from "./nativeGitRootImporterConnection.js";
 import { createNativeGitRootImporterClient } from "./nativeGitRootImporterClient.js";
 import type { NativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
-import type { NativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
+import type { RepositoryBranchPolicy as NativeRepositoryBranchPolicy } from "@slop-lab/gs-repository-contracts";
 
 export interface PublicRepositoryImportInput {
   name: string; projectId: string; repositoryId: string; url: string; branch?: string;

@@ -1,4 +1,4 @@
-import { parseAuthoritativeImportedRootPolicy, type NativeImportedRootPolicy } from "@slop-lab/dim-contracts-git";
+import { parseRepositoryPolicy as parseAuthoritativeImportedRootPolicy, type RepositoryPolicy as NativeImportedRootPolicy } from "@slop-lab/gs-repository-contracts";
 import { lstat, mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";

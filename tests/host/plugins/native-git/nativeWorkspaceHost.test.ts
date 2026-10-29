@@ -10,7 +10,7 @@ import { createNativeProjectConsole } from "../../../../packages/host/plugins/na
 import { createNativeRepositoryPolicyClient } from "../../../../packages/host/plugins/native-git/src/nativeRepositoryPolicyClient.js";
 import { loadNativeGitRootImporterConnection } from "../../../../packages/host/plugins/native-git/src/nativeGitRootImporterConnection.js";
 import { NativeProjectPendingStore } from "../../../../packages/host/plugins/native-git/src/nativeProjectPendingStore.js";
-import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision } from "@slop-lab/gs-repository-contracts";
 import { hostPlugin } from "../../../../packages/host/plugins/native-git/src/plugin.js";
 
 vi.mock("../../../../packages/host/plugins/native-git/src/nativeWorkspaceBrokerProcess.js", () => ({ ensureNativeWorkspaceBroker: vi.fn(async () => {}) }));

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { parseAuthoritativeImportedRootPolicy, type NativeImportedRootPolicy } from "@slop-lab/dim-contracts-git";
+import { parseRepositoryPolicy as parseAuthoritativeImportedRootPolicy, type RepositoryPolicy as NativeImportedRootPolicy } from "@slop-lab/gs-repository-contracts";
 import { createNodeNativeGitAdmissionHttpClient, type NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import { UserError } from "@slop-lab/dim-host-core";
 import type { NativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";

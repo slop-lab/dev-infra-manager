@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
-import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision } from "@slop-lab/gs-repository-contracts";
 import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-git-merge-policy";
 import { controlPlanePlugin as syncPlugin } from "@slop-lab/dim-control-plane-plugin-git-sync";
 import { basic, fixture, generationId, git, record, reviewer, text, token } from "../../control-plane/plugins/git-repositories/optionalFeaturesFixture.js";

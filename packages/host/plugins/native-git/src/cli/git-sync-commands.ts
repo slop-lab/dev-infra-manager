@@ -6,7 +6,7 @@ import { selectedControlPlaneImporterFile } from "../controlPlaneSelection.js";
 import { loadGitSyncConnection, requestGitSync } from "../nativeGitSyncClient.js";
 import { selectNativeProject } from "./native-project-selector.js";
 import { normalizeRepositoryRef } from "../repositoryRef.js";
-import { nativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
+import { repositoryBranchPolicy as nativeRepositoryBranchPolicy } from "@slop-lab/gs-repository-contracts";
 
 export function registerGitSyncCommands(repository: Command): void {
   for (const [command, operation, description] of [

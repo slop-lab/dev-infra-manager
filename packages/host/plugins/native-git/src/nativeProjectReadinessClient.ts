@@ -1,6 +1,6 @@
 import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
 import type { NativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
-import { nativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
+import { repositoryBranchPolicy as nativeRepositoryBranchPolicy } from "@slop-lab/gs-repository-contracts";
 import type { NativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
 import type { NativeProjectRecord } from "./nativeProjectPendingCodec.js";
 

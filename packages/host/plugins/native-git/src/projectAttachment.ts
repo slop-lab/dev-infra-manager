@@ -2,10 +2,12 @@ import { isDeepStrictEqual } from "node:util";
 import { managedStateRoot } from "@slop-lab/dim-host-core/controller";
 import { validateLifecycleName } from "@slop-lab/dim-host-core";
 import {
-  nativeRepositoryBranches,
-  nativeRepositoryDefaultRef,
   type NativeGitProjectAttachment
 } from "@slop-lab/dim-contracts-git";
+import {
+  repositoryBranches as nativeRepositoryBranches,
+  repositoryDefaultRef as nativeRepositoryDefaultRef
+} from "@slop-lab/gs-repository-contracts";
 import {
   createNativeGitProjectAttachmentClient,
   nativeGitManagementOperations

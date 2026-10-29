@@ -1,4 +1,4 @@
-import { nativeRepositoryPolicyRevision, parseAuthoritativeImportedRootPolicy } from "../../packages/contracts/git/src/index.js";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision, parseRepositoryPolicy as parseAuthoritativeImportedRootPolicy } from "../../packages/gs/repository-contracts/src/index.js";
 
 /** Test authors select feature declarations explicitly; production owners validate each namespace. */
 export function gitPolicy(extensions: Readonly<Record<string, unknown>> = {}, protectedRef = "refs/heads/main") {

@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
+import { repositoryBranches as nativeRepositoryBranches } from "@slop-lab/gs-repository-contracts";
 import { UserError } from "@slop-lab/dim-host-core";
 import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";

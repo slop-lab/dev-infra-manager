@@ -2,7 +2,7 @@ import { constants, type BigIntStats } from "node:fs";
 import { open, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "@slop-lab/dim-host-core";
-import { nativeRepositoryBranchPolicySchema, type NativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
+import { repositoryBranchPolicySchema as nativeRepositoryBranchPolicySchema, type RepositoryBranchPolicy as NativeRepositoryBranchPolicy } from "@slop-lab/gs-repository-contracts";
 
 const maximumPolicyBytes = 64 * 1024;
 

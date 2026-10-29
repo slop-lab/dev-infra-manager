@@ -7,7 +7,7 @@ import { UserError } from "@slop-lab/dim-host-core";
 import { compileNativeRepositoryBootstrapPolicy, parseNativeRootBootstrapManifestYaml,
   type NativeRepositoryBootstrapPolicy } from "./nativeRootBootstrapPolicy.js";
 import { normalizeRepositoryRef } from "./repositoryRef.js";
-import type { NativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
+import type { RepositoryBranchPolicy as NativeRepositoryBranchPolicy } from "@slop-lab/gs-repository-contracts";
 
 const execute = promisify(execFile);
 const maximumBundleBytes = 256 * 1024 * 1024 - 64 * 1024 - 1;

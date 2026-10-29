@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
-import { nativeRepositoryPolicyRevision, parseAuthoritativeImportedRootPolicy } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision, parseRepositoryPolicy as parseAuthoritativeImportedRootPolicy } from "@slop-lab/gs-repository-contracts";
 import { afterEach, expect, it } from "vitest";
 import { createNativeGitProjectAttachmentClient } from "../../../../packages/service-clients/native-git/src/project-attachment.js";
 

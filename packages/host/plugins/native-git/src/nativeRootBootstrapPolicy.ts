@@ -1,4 +1,4 @@
-import { nativeRepositoryPolicyRevision, parseAuthoritativeImportedRootPolicy, type NativeImportedRootPolicy } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision, parseRepositoryPolicy as parseAuthoritativeImportedRootPolicy, type RepositoryPolicy as NativeImportedRootPolicy } from "@slop-lab/gs-repository-contracts";
 import { parseDocument } from "yaml";
 import { UserError } from "@slop-lab/dim-host-core";
 import { normalizeRepositoryRef } from "./repositoryRef.js";

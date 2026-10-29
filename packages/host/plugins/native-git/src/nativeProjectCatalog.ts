@@ -1,7 +1,7 @@
 import type { NativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
 import type { NativeProjectRecord } from "./nativeProjectPendingCodec.js";
 import { proveNativeProjectReadiness } from "./nativeProjectReadinessClient.js";
-import { nativeRepositoryBranches, nativeRepositoryDefaultRef } from "@slop-lab/dim-contracts-git";
+import { repositoryBranches as nativeRepositoryBranches, repositoryDefaultRef as nativeRepositoryDefaultRef } from "@slop-lab/gs-repository-contracts";
 
 export function nativeProjectSelectionEntry(project: NativeProjectRecord) {
   const repositories = Object.values(project.repositories).sort((left, right) => left.repositoryId.localeCompare(right.repositoryId))

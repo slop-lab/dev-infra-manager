@@ -1,4 +1,4 @@
-import { parseAuthoritativeImportedRootPolicy } from "@slop-lab/dim-contracts-git";
+import { parseRepositoryPolicy as parseAuthoritativeImportedRootPolicy } from "@slop-lab/gs-repository-contracts";
 import { UserError, validateLifecycleName } from "@slop-lab/dim-host-core";
 import { parseNativeProjectDraft } from "./nativeProjectDraftCodec.js";
 import type { NativeGitRootImportResult } from "./nativeGitRootImporterClient.js";

@@ -1,5 +1,5 @@
 import { refreshNativeWorkspaceConnection } from "./nativeWorkspaceConnection.js";
-import { nativeRepositoryDefaultRef, nativeRepositoryBranchPolicy } from "@slop-lab/dim-contracts-git";
+import { repositoryDefaultRef as nativeRepositoryDefaultRef, repositoryBranchPolicy as nativeRepositoryBranchPolicy } from "@slop-lab/gs-repository-contracts";
 import { normalizeRepositoryRef } from "./repositoryRef.js";
 import { selectedControlPlaneHostFile } from "./controlPlaneSelection.js";
 import { createHash, randomBytes } from "node:crypto";
