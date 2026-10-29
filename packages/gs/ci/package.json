@@ -1,0 +1,76 @@
+{
+  "name": "@slop-lab/gs-ci",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Standalone reviewed-candidate CI planning, evidence and durable delivery",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": { "types": "./src/index.ts", "default": "./src/index.ts" },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./policy": {
+      "source": { "types": "./src/policy.ts", "default": "./src/policy.ts" },
+      "types": "./dist/policy.d.ts",
+      "import": "./dist/policy.js",
+      "default": "./dist/policy.js"
+    },
+    "./plan": {
+      "source": { "types": "./src/plan-schema.ts", "default": "./src/plan-schema.ts" },
+      "types": "./dist/plan-schema.d.ts",
+      "import": "./dist/plan-schema.js",
+      "default": "./dist/plan-schema.js"
+    },
+    "./store": {
+      "source": { "types": "./src/plan-store.ts", "default": "./src/plan-store.ts" },
+      "types": "./dist/plan-store.d.ts",
+      "import": "./dist/plan-store.js",
+      "default": "./dist/plan-store.js"
+    },
+    "./outbox": {
+      "source": { "types": "./src/authoritative-native-delivery-store.ts", "default": "./src/authoritative-native-delivery-store.ts" },
+      "types": "./dist/authoritative-native-delivery-store.d.ts",
+      "import": "./dist/authoritative-native-delivery-store.js",
+      "default": "./dist/authoritative-native-delivery-store.js"
+    },
+    "./candidate-reader": {
+      "source": { "types": "./src/candidate-execution-git.ts", "default": "./src/candidate-execution-git.ts" },
+      "types": "./dist/candidate-execution-git.d.ts",
+      "import": "./dist/candidate-execution-git.js",
+      "default": "./dist/candidate-execution-git.js"
+    },
+    "./workflow-planning": {
+      "source": { "types": "./src/candidate-job-inputs.ts", "default": "./src/candidate-job-inputs.ts" },
+      "types": "./dist/candidate-job-inputs.d.ts",
+      "import": "./dist/candidate-job-inputs.js",
+      "default": "./dist/candidate-job-inputs.js"
+    },
+    "./internal/*": {
+      "source": { "types": "./src/*.ts", "default": "./src/*.ts" },
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../build-package.ts",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@slop-lab/gs-ci-contracts": "workspace:0.10.0",
+    "@slop-lab/gs-repository": "workspace:0.10.0",
+    "@slop-lab/gs-repository-contracts": "workspace:0.10.0",
+    "@slop-lab/gs-repository-service": "workspace:0.10.0",
+    "@slop-lab/gs-review": "workspace:0.10.0",
+    "@slop-lab/gs-review-contracts": "workspace:0.10.0",
+    "zod": "4.6.6"
+  },
+  "devDependencies": { "@types/node": "24.13.3", "typescript": "5.8.3" },
+  "engines": { "node": "^24.0.0 || ^26.0.0" },
+  "publishConfig": { "access": "public" }
+}
