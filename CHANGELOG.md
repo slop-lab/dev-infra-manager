@@ -60,8 +60,8 @@ is implied by these source changes.
   selections, workspaces and immutable import evidence without reimporting source,
   changing protected refs or granting cross-authority access.
   Detect and restart an already active managed controller from its managed
-  state/runtime identity during host updates, while retaining the independently
-  selected CLI and reconnecting existing clients.
+  state/runtime identity and exact installed host entrypoint during host updates,
+  while retaining the independently selected CLI and reconnecting existing clients.
 
 - Split managed Git into independent repository, code-review, merge-policy,
   Git CI and webhook control-plane plugins. Repository hosting no longer
@@ -203,8 +203,8 @@ is implied by these source changes.
   use needs no per-workspace bridge/IP/port firewall rule; external ingress still
   retains its explicit operator reachability requirements.
   Concurrent service resume keeps one supervisor and workload across atomic
-  owner-record replacement; removal treats a supervisor that exits between
-  identity verification and signaling as already stopped.
+  owner-record replacement; removal binds signals to the recorded process
+  identities and terminates the recorded child if its supervisor already exited.
   Installed host plugins prepare their guest clients without repository
   configuration; agents discover commands and readiness inside the workspace.
   Share bounded, identity-checked file delivery across integrations, including
