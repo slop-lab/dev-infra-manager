@@ -1,0 +1,33 @@
+{
+  "name": "@slop-lab/gs-review",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Standalone Git review policy, evidence, decisions, storage and authorization engine",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": { "types": "./src/index.ts", "default": "./src/index.ts" },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../build-package.ts",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@slop-lab/gs-repository": "workspace:0.10.0",
+    "@slop-lab/gs-repository-contracts": "workspace:0.10.0",
+    "@slop-lab/gs-repository-service": "workspace:0.10.0",
+    "@slop-lab/gs-review-contracts": "workspace:0.10.0",
+    "jsonc-parser": "3.3.1",
+    "zod": "4.6.6"
+  },
+  "devDependencies": { "@types/node": "24.13.3", "typescript": "5.8.3" },
+  "engines": { "node": "^24.0.0 || ^26.0.0" },
+  "publishConfig": { "access": "public" }
+}
