@@ -2,7 +2,6 @@ import {
   commentPullRequestInputSchema,
   createPullRequestInputSchema,
   diffInputSchema,
-  gitCiStatusSchema,
   preparedPullRequestReviewSchema,
   pullRequestSelectionSchema,
   updatePullRequestInputSchema,
@@ -12,7 +11,8 @@ import { parseDiffSnapshot } from "@slop-lab/gs-diff";
 import { parsePullRequest, parsePullRequestList } from "@slop-lab/gs-pull-requests";
 import type { Operation } from "@slop-lab/dim-contracts-operations";
 import { z } from "zod";
-import { reviewDto } from "./dto.js";
+import { dimCiStatusDto, parseReviewDto } from "./dto.js";
+import { gitCiStatusSchema } from "@slop-lab/gs-client";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const scope = z.object({ projectId: identifier, repositoryId: identifier }).strict();
@@ -26,7 +26,7 @@ export const repositoryFeatureOperations: readonly Operation[] = [
     const { projectId, repositoryId, ...input } = row;
     return { projectId: identifier.parse(projectId), repositoryId: identifier.parse(repositoryId), ...gitBlameRequestSchema.parse(input) };
   }, parseOutput: parseGitLineAttribution },
-  { name: "ci.status", description: "Inspect required DIM CI evidence for an exact review", access: "read", parseInput: (value) => scope.extend({ reviewId: z.string().regex(/^[a-f0-9]{64}$/) }).parse(value), parseOutput: (value) => gitCiStatusSchema.parse(value) },
+  { name: "ci.status", description: "Inspect required DIM CI evidence for an exact review", access: "read", parseInput: (value) => scope.extend({ reviewId: z.string().regex(/^[a-f0-9]{64}$/) }).parse(value), parseOutput: (value) => dimCiStatusDto(gitCiStatusSchema.parse(value)) },
   { name: "pull-requests.list", description: "List repository pull requests", access: "read", parseInput: (value) => scope.parse(value), parseOutput: parsePullRequestList },
   { name: "pull-requests.create", description: "Open a pull request from a candidate ref", access: "operator", parseInput: (value) => dimInput(createPullRequestInputSchema, value), parseOutput: parsePullRequest },
   { name: "pull-requests.detail", description: "Read a pull request and its revisions", access: "read", parseInput: (value) => selected.parse(value), parseOutput: parsePullRequest },
@@ -37,11 +37,11 @@ export const repositoryFeatureOperations: readonly Operation[] = [
 ];
 
 export const pullRequestWorkflowOperations: readonly Operation[] = [
-  { name: "pull-requests.approve", description: "Approve the exact selected pull request revision", access: "reviewer", parseInput: (value) => dimInput(pullRequestSelectionSchema, value), parseOutput: reviewDto },
-  { name: "pull-requests.revoke", description: "Revoke this reviewer's approval of the selected revision", access: "reviewer", parseInput: (value) => dimInput(pullRequestSelectionSchema, value), parseOutput: reviewDto },
+  { name: "pull-requests.approve", description: "Approve the exact selected pull request revision", access: "reviewer", parseInput: (value) => dimInput(pullRequestSelectionSchema, value), parseOutput: parseReviewDto },
+  { name: "pull-requests.revoke", description: "Revoke this reviewer's approval of the selected revision", access: "reviewer", parseInput: (value) => dimInput(pullRequestSelectionSchema, value), parseOutput: parseReviewDto },
   { name: "pull-requests.merge", description: "Promote the exact revision through human and DIM CI policy without approving it", access: "operator", parseInput: (value) => dimInput(pullRequestSelectionSchema, value), parseOutput: (value) => {
     const result = z.object({ pullRequest: z.unknown(), review: z.unknown(), promotion: z.unknown(), refreshPending: z.boolean() }).strict().parse(value);
-    return { ...result, pullRequest: parsePullRequest(result.pullRequest), review: reviewDto(result.review) };
+    return { ...result, pullRequest: parsePullRequest(result.pullRequest), review: parseReviewDto(result.review) };
   } },
 ];
 

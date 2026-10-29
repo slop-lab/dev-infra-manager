@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
 
-const packageNames = ["repository-contracts", "review-contracts", "ci-contracts", "diff", "blame", "discussions", "pull-requests", "client"] as const;
+const packageNames = ["repository-contracts", "review-contracts", "diff", "blame", "discussions", "pull-requests", "client"] as const;
 
 it("builds and operates the GS client graph outside DIM with an injected transport", async () => {
   // Given
@@ -58,6 +58,8 @@ it("builds and operates the GS client graph outside DIM with an injected transpo
     const manifest: unknown = JSON.parse(await readFile(join(owner, "client/dist/package.json"), "utf8"));
     expect(manifest).toMatchObject({ version: "0.10.0-p2-client" });
     expect(JSON.stringify(manifest)).not.toContain("@slop-lab/dim-");
+    const primarySource = `${await readFile(join(owner, "client/src/schemas.ts"), "utf8")}\n${await readFile(join(owner, "client/src/transport.ts"), "utf8")}`;
+    expect(primarySource).not.toMatch(/dim-legacy|authoritativeNative|native-main|projectId|workspaceId|generationId|requiredJobs|executionId/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

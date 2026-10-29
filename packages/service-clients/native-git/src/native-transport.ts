@@ -1,7 +1,7 @@
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
-import type { BoundedJsonTransport, GitServiceRequest } from "@slop-lab/gs-client";
-import { mapReviewNamespace } from "./dto.js";
+import { preparedPullRequestReviewSchema, type BoundedJsonTransport, type GitServiceRequest } from "@slop-lab/gs-client";
+import { decodeDimCiStatus, decodeDimResolvedReview, decodeDimReviewDetail } from "./wire-codec.js";
 
 type Credential = { readonly username: string; readonly password: string };
 type TransportConfig = {
@@ -33,7 +33,13 @@ export class NativeGitJsonTransport implements BoundedJsonTransport {
   async request(request: GitServiceRequest): Promise<unknown> {
     const mapped = mapRequest(request);
     const value = await this.requestPath(mapped.path, mapped.method, mapped.body, request.responseLimitBytes, mapped.authority);
-    return request.kind === "reviews.detail" ? mapReviewNamespace(value) : value;
+    switch (request.kind) {
+      case "pull-requests.review": return preparedPullRequestReviewSchema.parse(value);
+      case "reviews.resolve": return decodeDimResolvedReview(value);
+      case "reviews.detail": return decodeDimReviewDetail(value);
+      case "ci.status": return decodeDimCiStatus(value);
+      default: return value;
+    }
   }
 
   requestIdentity(path: string, authority: "reviewer" | "promoter" = "reviewer"): Promise<unknown> {

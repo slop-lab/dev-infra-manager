@@ -18,7 +18,9 @@ export {
   updatePullRequestInputSchema,
 } from "./inputs.js";
 export {
+  gitCiCheckSchema,
   gitCiStatusSchema,
+  gitReviewSchema,
   parseGitCiStatus,
   parseGitReview,
   preparedPullRequestReviewSchema,
@@ -26,6 +28,7 @@ export {
   promotionSchema,
   reviewSummarySchema,
   syncResultSchema,
+  type GitCiCheck,
   type GitCiStatus,
   type GitReview,
   type PromotionReceipt,

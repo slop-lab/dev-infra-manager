@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "@slop-lab/gs-blame": "workspace:0.10.0",
-    "@slop-lab/gs-ci-contracts": "workspace:0.10.0",
     "@slop-lab/gs-diff": "workspace:0.10.0",
     "@slop-lab/gs-discussions": "workspace:0.10.0",
     "@slop-lab/gs-pull-requests": "workspace:0.10.0",

@@ -141,6 +141,31 @@ describe("portable Git service client", () => {
     // Then
     expect(result).toEqual(response);
   });
+
+  it("parses provider-neutral CI checks without DIM generation or execution fields", async () => {
+    // Given
+    const reviewId = "c".repeat(64);
+    const response = {
+      schemaVersion: 1,
+      reviewId,
+      candidateCommit: headCommit,
+      expectedProtectedHead: baseCommit,
+      policy: "enabled",
+      state: "succeeded",
+      requiredChecks: [{ name: "test", provider: "ordinary-sysbox", status: "succeeded", runId: randomUUID() }],
+    };
+    const client = createGitServiceClient({
+      capabilities: ["git-ci"],
+      transport: { async request() { return response; } },
+    });
+
+    // When
+    const result = await client.readCiStatus({ ...selector, reviewId });
+
+    // Then
+    expect(result).toEqual(response);
+    expect(JSON.stringify(result)).not.toMatch(/generationId|executionId|requiredJobs|kind/);
+  });
 });
 
 function preparedReviewResponse(pullRequestId: string, revisionId: string, reviewId: string) {
@@ -148,14 +173,13 @@ function preparedReviewResponse(pullRequestId: string, revisionId: string, revie
     pullRequestId,
     revisionId,
     review: {
-      schemaVersion: 3,
+      schemaVersion: 1,
       envelopeId: "d".repeat(64),
       policyDigest: "e".repeat(64),
       attachments: [],
       review: {
-        schemaVersion: 2,
-        serviceId: "native-main",
-        projectId: selector.namespaceId,
+        schemaVersion: 1,
+        namespaceId: selector.namespaceId,
         repositoryId: selector.repositoryId,
         inputs: { [selector.repositoryId]: { commit: "a".repeat(40), tree: "b".repeat(40) } },
         protectedRef: "refs/heads/main",

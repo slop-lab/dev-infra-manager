@@ -2,6 +2,7 @@ import { gitBlameRequestSchema, parseGitLineAttribution, type GitLineAttribution
 import { parseDiffSnapshot, type DiffSnapshot } from "@slop-lab/gs-diff";
 import { parsePullRequest, parsePullRequestList, type PullRequest } from "@slop-lab/gs-pull-requests";
 import type { RepositorySelector } from "@slop-lab/gs-repository-contracts";
+import { reviewEnvelopeSchema } from "@slop-lab/gs-review-contracts";
 import { z } from "zod";
 import {
   commentPullRequestInputSchema,
@@ -129,9 +130,7 @@ export class GitServiceClient implements PullRequestWorkflowPort {
     this.require("git-review");
     const { namespaceId, repositoryId, proposalRef, protectedRef } = resolveReviewInputSchema.parse(input);
     const body = { proposalRef, ...(protectedRef === undefined ? {} : { protectedRef }) };
-    const resolved = z.object({ review: z.object({ reviewId: z.string().regex(/^[a-f0-9]{64}$/) }) }).parse(
-      await this.send({ kind: "reviews.resolve", selector: { namespaceId, repositoryId }, input: body }),
-    );
+    const resolved = reviewEnvelopeSchema.parse(await this.send({ kind: "reviews.resolve", selector: { namespaceId, repositoryId }, input: body }));
     return this.readReview({ namespaceId, repositoryId }, resolved.review.reviewId);
   }
 
@@ -189,14 +188,14 @@ export class GitServiceClient implements PullRequestWorkflowPort {
     this.require("git-review");
     const review = parseGitReview(await this.send({ kind: "reviews.detail", selector, input: { reviewId } }));
     if (!this.supports("git-ci")) return { ...review, ci: gitCiStatusSchema.parse({ schemaVersion: 1, reviewId,
-      candidateCommit: review.candidateCommit, expectedProtectedHead: review.expectedProtectedHead, state: "not-configured", policy: "absent", requiredJobs: [] }) };
+      candidateCommit: review.candidateCommit, expectedProtectedHead: review.expectedProtectedHead, state: "not-configured", policy: "absent", requiredChecks: [] }) };
     let rawCi: unknown;
     try {
       rawCi = await this.send({ kind: "ci.status", selector, input: { reviewId } });
     } catch (error) {
       if (!(error instanceof Error)) throw error;
       return { ...review, ci: gitCiStatusSchema.parse({ schemaVersion: 1, reviewId, candidateCommit: review.candidateCommit,
-        expectedProtectedHead: review.expectedProtectedHead, state: "unavailable", policy: "unknown", requiredJobs: [], reason: "inspection-unavailable" }) };
+        expectedProtectedHead: review.expectedProtectedHead, state: "unavailable", policy: "unknown", requiredChecks: [], reason: "inspection-unavailable" }) };
     }
     const ci = parseGitCiStatus(rawCi);
     if (ci.reviewId !== reviewId || ci.candidateCommit !== review.candidateCommit || ci.expectedProtectedHead !== review.expectedProtectedHead) {

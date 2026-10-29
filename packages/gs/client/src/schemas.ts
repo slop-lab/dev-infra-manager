@@ -1,5 +1,4 @@
-import { reviewCiJobSchema, reviewCiStatusSchema } from "@slop-lab/gs-ci-contracts";
-import { authoritativeNativeReviewEnvelopeSchema } from "@slop-lab/gs-review-contracts";
+import { reviewEnvelopeSchema, reviewSchema as neutralReviewSchema } from "@slop-lab/gs-review-contracts";
 import { z } from "zod";
 
 const MAX_CHANGES = 5_000;
@@ -28,6 +27,13 @@ const changedPathSchema = z.object({
 const approvalSchema = z.object({ approvalId: digest, reviewerId: identifier, approvedAt: z.string().datetime() }).strip().readonly();
 const revocationSchema = z.object({ approvalId: digest, revokedAt: z.string().datetime() }).strip().readonly();
 
+export const gitCiCheckSchema = z.object({
+  name: identifier,
+  provider: identifier,
+  status: z.enum(["pending", "failed", "succeeded", "stale", "unavailable"]),
+  runId: z.string().min(1).max(256).optional(),
+}).strict().readonly();
+
 export const gitCiStatusSchema = z.object({
   schemaVersion: z.literal(1),
   reviewId: digest,
@@ -35,21 +41,21 @@ export const gitCiStatusSchema = z.object({
   expectedProtectedHead: objectId,
   policy: z.enum(["absent", "enabled", "unknown"]),
   state: z.enum(["not-configured", "not-required", "pending", "failed", "succeeded", "stale", "unavailable"]),
-  requiredJobs: z.array(reviewCiJobSchema).max(64).readonly(),
+  requiredChecks: z.array(gitCiCheckSchema).max(64).readonly(),
   reason: z.enum(["invalid-plan", "stale-review", "evidence-unavailable", "inspection-unavailable"]).optional(),
 }).strict().superRefine((status, context) => {
-  if (status.state === "succeeded" && (status.policy !== "enabled" || status.requiredJobs.length === 0
-    || status.requiredJobs.some((job) => job.status !== "succeeded"))) {
+  if (status.state === "succeeded" && (status.policy !== "enabled" || status.requiredChecks.length === 0
+    || status.requiredChecks.some((check) => check.status !== "succeeded"))) {
     context.addIssue({ code: "custom", message: "successful CI requires successful evidence for every required job" });
   }
-  if ((status.state === "not-configured" && (status.policy !== "absent" || status.requiredJobs.length !== 0))
-    || (status.state === "not-required" && (status.policy !== "enabled" || status.requiredJobs.length !== 0))) {
+  if ((status.state === "not-configured" && (status.policy !== "absent" || status.requiredChecks.length !== 0))
+    || (status.state === "not-required" && (status.policy !== "enabled" || status.requiredChecks.length !== 0))) {
     context.addIssue({ code: "custom", message: "CI requirement state conflicts with policy" });
   }
 }).readonly();
 
-const reviewSchema = z.object({
-  schemaVersion: z.literal(2),
+export const gitReviewSchema = z.object({
+  schemaVersion: z.literal(1),
   namespaceId: identifier,
   repositoryId: identifier,
   protectedRef: displayText(1024).min(1),
@@ -60,7 +66,6 @@ const reviewSchema = z.object({
   candidateTree: objectId,
   policyRevision: displayText(1024),
   requiredReviewRevision: displayText(1024),
-  workspaceId: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
   requiredReviewerIds: z.array(identifier).max(256).readonly(),
   changes: z.array(changedPathSchema).max(MAX_CHANGES).readonly(),
   patch: patchText,
@@ -70,34 +75,42 @@ const reviewSchema = z.object({
   staleReasons: z.array(displayText(1024)).max(256).readonly(),
   approvals: z.array(approvalSchema).max(MAX_EVIDENCE_ENTRIES).readonly(),
   revocations: z.array(revocationSchema).max(MAX_EVIDENCE_ENTRIES).readonly(),
-  ci: z.union([reviewCiStatusSchema, gitCiStatusSchema]).optional(),
+  ci: gitCiStatusSchema.optional(),
 }).strip().readonly();
 
 export type GitCiStatus = z.infer<typeof gitCiStatusSchema>;
-export type GitReview = Omit<z.infer<typeof reviewSchema>, "ci"> & { readonly ci?: GitCiStatus };
+export type GitCiCheck = z.infer<typeof gitCiCheckSchema>;
+export type GitReview = z.infer<typeof gitReviewSchema>;
 export type PromotionReceipt = z.infer<typeof promotionSchema>;
 
 export const preparedPullRequestReviewSchema = z.object({
   pullRequestId: z.string().min(1).max(256),
   revisionId: z.string().min(1).max(256),
-  review: authoritativeNativeReviewEnvelopeSchema,
+  review: reviewEnvelopeSchema,
 }).strict().readonly();
 export type PreparedPullRequestReview = z.infer<typeof preparedPullRequestReviewSchema>;
 
 export function parseGitCiStatus(value: unknown): GitCiStatus {
-  const { generationId: _generationId, ...status } = reviewCiStatusSchema.parse(value);
-  return gitCiStatusSchema.parse(status);
+  return gitCiStatusSchema.parse(value);
 }
 
 export function parseGitReview(value: unknown): GitReview {
-  const row = z.record(z.string(), z.unknown()).parse(value);
-  const envelope = row.schemaVersion === 3
-    ? z.object({ review: z.record(z.string(), z.unknown()), status: z.unknown(), staleReasons: z.unknown(), approvals: z.unknown(), revocations: z.unknown() }).passthrough().parse(row)
-    : { review: row, status: row.status, staleReasons: row.staleReasons, approvals: row.approvals, revocations: row.revocations };
-  const parsed = reviewSchema.parse({ ...envelope.review, status: envelope.status, staleReasons: envelope.staleReasons, approvals: envelope.approvals, revocations: envelope.revocations });
-  const { ci, ...review } = parsed;
-  if (ci === undefined) return review;
-  return { ...review, ci: "generationId" in ci ? parseGitCiStatus(ci) : gitCiStatusSchema.parse(ci) };
+  const response = z.object({
+    review: neutralReviewSchema,
+    status: z.enum(["pending", "approved", "revoked", "stale"]),
+    staleReasons: z.array(displayText(1024)).max(256).readonly(),
+    approvals: z.array(approvalSchema).max(MAX_EVIDENCE_ENTRIES).readonly(),
+    revocations: z.array(revocationSchema).max(MAX_EVIDENCE_ENTRIES).readonly(),
+    ci: gitCiStatusSchema.optional(),
+  }).strict().readonly().parse(value);
+  return gitReviewSchema.parse({
+    ...response.review,
+    status: response.status,
+    staleReasons: response.staleReasons,
+    approvals: response.approvals,
+    revocations: response.revocations,
+    ...(response.ci === undefined ? {} : { ci: response.ci }),
+  });
 }
 
 export const reviewSummarySchema = z.object({

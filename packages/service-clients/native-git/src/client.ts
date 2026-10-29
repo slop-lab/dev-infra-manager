@@ -147,7 +147,7 @@ function projectInput(input: Record<string, unknown>): Record<string, unknown> &
 }
 
 function portableReview(review: { readonly namespaceId: string } & Record<string, unknown>): ReviewDto {
-  return reviewDto({ ...review, projectId: review.namespaceId });
+  return reviewDto(review);
 }
 
 export { NativeGitClientError, NativeGitHttpError } from "./native-transport.js";

@@ -4,7 +4,7 @@ import type { Operation } from "@slop-lab/dim-contracts-operations";
 import { preparedMergeSchema } from "@slop-lab/gs-client";
 import { NativeGitClient, NativeGitClientError } from "./client.js";
 import { createSyncClient, syncResultSchema } from "./sync.js";
-import { reviewDto } from "./dto.js";
+import { parseReviewDto } from "./dto.js";
 import { loadPrivateJson } from "./private-file.js";
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const actor = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
@@ -16,7 +16,7 @@ export type NativeGitOperatorProject = z.infer<typeof nativeGitProjectSchema>;
 const projectsSchema = z.array(nativeGitProjectSchema).max(1000).refine((rows) => new Set(rows.map((row) => row.projectId)).size === rows.length);
 const scope = z.object({ projectId: identifier, repositoryId: identifier }).strict();
 const review = scope.extend({ reviewId: z.string().regex(/^[a-f0-9]{64}$/) });
-const reviewResult = (value: unknown) => { const row = z.record(z.string(), z.unknown()).parse(value); return reviewDto({ schemaVersion: 3, review: row, status: row.status, staleReasons: row.staleReasons, approvals: row.approvals, revocations: row.revocations }); };
+const reviewResult = (value: unknown) => parseReviewDto(value);
 const summaries = z.array(z.object({ reviewId: z.string().regex(/^[a-f0-9]{64}$/), proposalRef: z.string().max(1024), protectedRef: z.string().max(1024), candidateCommit: z.string().regex(/^[a-f0-9]{40,64}$/), createdAt: z.string().datetime(), status: z.string().max(64) }).strict()).max(100);
 const promotion = z.object({ schemaVersion: z.literal(1), outcome: z.enum(["promoted", "already-current"]), reviewId: z.string(), protectedRef: z.string(), expectedProtectedHead: z.string(), candidateCommit: z.string(), candidateTree: z.string() }).strict();
 export const nativeGitOperations: readonly Operation[] = [
