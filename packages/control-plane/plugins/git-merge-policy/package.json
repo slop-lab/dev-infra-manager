@@ -50,6 +50,11 @@
     "build": "node ../../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts"
   },
   "dependencies": {
+    "@slop-lab/gs-merge-policy": "workspace:0.10.0",
+    "@slop-lab/gs-repository-contracts": "workspace:0.10.0",
+    "@slop-lab/gs-repository-service": "workspace:0.10.0",
+    "@slop-lab/gs-review": "workspace:0.10.0",
+    "@slop-lab/gs-review-contracts": "workspace:0.10.0",
     "zod": "4.6.6",
     "@slop-lab/dim-contracts-git": "workspace:0.10.0"
   },

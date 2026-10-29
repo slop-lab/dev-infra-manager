@@ -7,6 +7,8 @@ import { MergeAuthorizationStore, promoteInstalledNativeReview, controlPlanePlug
 import { startWebhookService, webhookConfigurationSchema } from "@slop-lab/dim-control-plane-plugin-webhooks";
 import { webhookEventSources } from "@slop-lab/dim-control-plane-plugin-webhooks/plugin-api";
 import { configuredNativeGitBundleServer } from "@slop-lab/dim-control-plane-plugin-git-repositories";
+import { mergeFinalizedQuery } from "@slop-lab/gs-merge-policy";
+import { createDetachedGsReviewExecution } from "../../../../packages/control-plane/plugins/git-review/src/gs-review-runtime.js";
 import { fixture, git, basic, reviewer, token, generationId, record, text } from "../git-repositories/optionalFeaturesFixture.js";
 const promoter = { hostId: "host-a", username: "promoter", password: token(10) };
 const foreignPromoter = { hostId: "host-b", username: "foreign-promoter", password: token(11) };
@@ -105,6 +107,21 @@ it.each(["afterIntent", "afterCompareAndSwap"] as const)("recovers only accepted
     const origin = await restarted.listen("127.0.0.1", 0);
     const source = webhookEventSources(f.extensions).find(({ name }) => name === "merge-policy");
     expect((await source?.read())?.length).toBe(interruption === "afterIntent" ? 0 : 1);
+    if (interruption === "afterCompareAndSwap") {
+      const recoveredStore = new MergeAuthorizationStore(join(f.root, "state/.extensions/merge-policy/authorizations.sqlite3"));
+      try {
+        const entry = recoveredStore.read()[0];
+        if (entry === undefined) throw new Error("recovered merge authorization missing");
+        const query = mergeFinalizedQuery(entry);
+        if (query === undefined) throw new Error("recovered merge proof missing");
+        const detached = await createDetachedGsReviewExecution(restarted.context.runtime, {
+          namespaceId: "project", repositoryId: "main",
+        });
+        expect(await detached.access.authority.findFinalized(query)).toEqual({
+          intent: { ...query, sequence: 1 }, receipt: { outcome: "promoted", sequence: 1 },
+        });
+      } finally { recoveredStore.close(); }
+    }
     const promoted = await fetch(`${origin}${f.path}/promotions`, { method: "POST", headers: headers(), body: JSON.stringify({ schemaVersion: 1 }) });
     expect(promoted.status, await promoted.clone().text()).toBe(interruption === "afterIntent" ? 201 : 200);
     expect(record(await promoted.json()).sequence).toBe(1);

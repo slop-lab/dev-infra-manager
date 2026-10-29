@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { assertRequiredMergeQualityGuards, type MergeQualityGuard } from "../../../../packages/control-plane/plugins/git-merge-policy/src/plugin-api.js";
-import { MergeAuthorizationStore, authorizationIdentity, type MergeAuthorization } from "../../../../packages/control-plane/plugins/git-merge-policy/src/state.js";
+import { MergeAuthorizationStore, authorizationIdentity, type MergeAuthorization, type MergeAuthorizationRecoveryProof } from "../../../../packages/control-plane/plugins/git-merge-policy/src/state.js";
 import { controlPlanePlugin } from "../../../../packages/control-plane/plugins/git-merge-policy/src/index.js";
 import { startControlPlanePlugins } from "@slop-lab/dim-control-plane-core";
 const roots: string[] = [];
@@ -28,9 +28,12 @@ it("persists exact approved evidence independently, preserving pending versus fi
     envelopeId: "c".repeat(64), policyDigest: "d".repeat(64), protectedRef: "refs/heads/main", proposalRef: `refs/heads/proposals/${randomUUID()}/change`,
     expectedCommit: "1".repeat(40), candidateCommit: "2".repeat(40), candidateTree: "3".repeat(40),
     approvals: [{ reviewerId: "owner", recordDigest: "e".repeat(64) }], attachments: [{ kind: "git-ci", id: "plan", digest: "f".repeat(64) }] };
+  const recoveryProof: MergeAuthorizationRecoveryProof = { expectedTree: "0".repeat(40), incarnationId: randomUUID(),
+    authorityEpoch: authorization.generationId, ownerPrincipalId: "repository-owner", refPolicyRevision: "9".repeat(64) };
   let store = new MergeAuthorizationStore(file);
-  const prepared = store.prepare(authorization); expect(prepared.sequence).toBeUndefined();
-  expect(store.prepare(authorization)).toEqual(prepared);
+  const prepared = store.prepare(authorization, recoveryProof); expect(prepared.sequence).toBeUndefined();
+  expect(prepared.recoveryProof).toEqual(recoveryProof);
+  expect(store.prepare(authorization, recoveryProof)).toEqual(prepared);
   store.close(); store = new MergeAuthorizationStore(file);
   expect(store.read()).toEqual([prepared]);
   store.finalize(prepared.authorizationId, 1); store.finalize(prepared.authorizationId, 1);
@@ -38,6 +41,7 @@ it("persists exact approved evidence independently, preserving pending versus fi
   expect(() => store.finalize("0".repeat(64), 1)).toThrow(/conflicts/);
   store.close(); store = new MergeAuthorizationStore(file);
   expect(store.read()[0]?.sequence).toBe(1);
+  expect(store.read()[0]?.recoveryProof).toEqual(recoveryProof);
   expect(authorizationIdentity({ ...authorization, policyDigest: "f".repeat(64) })).not.toEqual(authorizationIdentity(authorization));
   store.close();
 });

@@ -1,5 +1,13 @@
+import { createHash } from "node:crypto";
 import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin-api";
-export interface MergeEvidenceAttachment { readonly kind: string; readonly id: string; readonly digest: string }
+import {
+  assertRequiredMergeQualityGuards as assertGsRequiredMergeQualityGuards,
+  type MergeEvidenceAttachment,
+  type MergeQualityGuard as GsMergeQualityGuard,
+} from "@slop-lab/gs-merge-policy";
+
+export type { MergeEvidenceAttachment } from "@slop-lab/gs-merge-policy";
+
 export interface MergeQualityInput {
   readonly projectId: string;
   readonly repositoryId: string;
@@ -11,27 +19,70 @@ export interface MergeQualityInput {
   readonly policyDigest: string;
   readonly attachments: readonly MergeEvidenceAttachment[];
 }
+
 export interface MergeQualityGuard {
   readonly name: string;
-  /** The caller holds the repository authority serialization gate. Do not reenter it. */
+  readonly revision?: string;
   check(input: MergeQualityInput): Promise<readonly MergeEvidenceAttachment[]>;
 }
+
 export const MERGE_QUALITY_GUARD_EXTENSION = "dim.merge-policy.quality-guard";
+
 export function mergeQualityGuardExtension(guard: MergeQualityGuard): ControlPlaneExtension {
-  if (!/^[a-z][a-z0-9-]{0,63}$/.test(guard.name)) throw new Error("invalid merge quality guard name");
+  if (!/^[a-z][a-z0-9-]{0,63}$/.test(guard.name)) throw new MergeQualityGuardAdapterError("invalid merge quality guard name");
   return { kind: MERGE_QUALITY_GUARD_EXTENSION, name: guard.name, value: guard };
 }
+
 export function mergeQualityGuards(extensions: readonly ControlPlaneExtension[]): readonly MergeQualityGuard[] {
   return extensions.filter(({ kind }) => kind === MERGE_QUALITY_GUARD_EXTENSION).map(({ name, value }) => {
-    if (!("name" in value) || value.name !== name || !("check" in value) || typeof value.check !== "function") throw new Error(`invalid merge quality guard '${name}'`);
-    return value as MergeQualityGuard;
+    if (!isMergeQualityGuard(value) || value.name !== name) {
+      throw new MergeQualityGuardAdapterError(`invalid merge quality guard '${name}'`);
+    }
+    return value;
   });
 }
 
-export function assertRequiredMergeQualityGuards(policyExtensions: Readonly<Record<string, unknown>>, attachments: readonly MergeEvidenceAttachment[], guards: readonly MergeQualityGuard[], refPolicyNames: readonly string[] = [], integrationPolicyNames: readonly string[] = []): void {
-  const names = new Set(guards.map(({ name }) => name));
-  if (names.size !== guards.length) throw new Error("duplicate merge quality guard");
-  const required = new Set(attachments.map(({ kind }) => kind));
-  for (const name of Object.keys(policyExtensions)) if (name !== "code-review" && name !== "merge-policy" && !refPolicyNames.includes(name) && !integrationPolicyNames.includes(name)) required.add(name);
-  for (const name of required) if (!names.has(name)) throw new Error(`required merge quality guard '${name}' is unavailable`);
+export function toGsMergeQualityGuards(guards: readonly MergeQualityGuard[]): readonly GsMergeQualityGuard[] {
+  return guards.map((guard) => ({
+    name: guard.name,
+    revision: guard.revision ?? createHash("sha256")
+      .update("dim-merge-quality-guard-adapter-v1\0").update(guard.name).digest("hex"),
+    check: (input) => guard.check({
+      projectId: input.namespaceId,
+      repositoryId: input.repositoryId,
+      reviewId: input.reviewId,
+      repository: input.repository,
+      candidateCommit: input.candidateCommit,
+      candidateTree: input.candidateTree,
+      expectedProtectedHead: input.expectedProtectedHead,
+      policyDigest: input.policyDigest,
+      attachments: input.attachments,
+    }),
+  }));
+}
+
+export function assertRequiredMergeQualityGuards(
+  policyExtensions: Readonly<Record<string, unknown>>,
+  attachments: readonly MergeEvidenceAttachment[],
+  guards: readonly MergeQualityGuard[],
+  refPolicyNames: readonly string[] = [],
+  integrationPolicyNames: readonly string[] = [],
+): void {
+  assertGsRequiredMergeQualityGuards({
+    policyExtensions,
+    attachments,
+    guards: toGsMergeQualityGuards(guards),
+    refPolicyNames,
+    integrationPolicyNames,
+  });
+}
+
+function isMergeQualityGuard(value: unknown): value is MergeQualityGuard {
+  return typeof value === "object" && value !== null
+    && "name" in value && typeof value.name === "string"
+    && "check" in value && typeof value.check === "function";
+}
+
+export class MergeQualityGuardAdapterError extends Error {
+  readonly name = "MergeQualityGuardAdapterError";
 }

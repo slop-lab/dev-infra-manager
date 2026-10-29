@@ -5,6 +5,10 @@ plugin for promoting reviewed proposals to protected Git refs. Install it with
 `git-repositories` and `code-review`; repository hosting alone never grants
 workspaces protected-ref write access.
 
+`@slop-lab/gs-merge-policy` owns merge preparation, authorization storage,
+quality checks and promotion. This package retains DIM promoter credentials,
+HTTP/CLI and webhook integration plus format-12 receipt reconciliation.
+
 The plugin accepts a private configuration containing `hostPromoters`, an array
 of `{hostId, username, password}` credentials. Passwords must contain at least 32
 characters. An empty array grants no operator promotion authority. Credentials
