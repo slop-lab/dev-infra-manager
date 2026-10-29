@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { lstat, readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -38,7 +38,13 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
   if (state !== defaultState || (env.XDG_RUNTIME_DIR ?? systemdRuntime) !== systemdRuntime) return false;
   const unit = path.join(env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "systemd/user/dim-controller.service");
   try {
-    if ((await stat(unit)).uid !== uid || !(await readFile(unit, "utf8")).includes(`${path.resolve(runtimeDirectory)}${path.sep}`)) return false;
+    const metadata = await lstat(unit);
+    const args = systemdExecArguments(await readFile(unit, "utf8"));
+    const controller = args?.indexOf("controller") ?? -1;
+    const marker = args?.indexOf("--pid-file") ?? -1;
+    if (!metadata.isFile() || metadata.uid !== uid || (metadata.mode & 0o022) !== 0 || controller < 1
+      || args?.[controller - 1] !== path.join(path.resolve(runtimeDirectory), "node_modules/.bin/dim-host")
+      || args[controller + 1] !== "serve" || marker <= controller || args[marker + 1] !== pidPath) return false;
   } catch (error) {
     if (missingProcess(error)) return false;
     throw error;
@@ -47,6 +53,16 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
     execFile("systemctl", ["--user", "is-active", "--quiet", "dim-controller.service"],
       { env, timeout: 5_000 }, (error) => resolve(error === null));
   });
+}
+
+function systemdExecArguments(unit: string): string[] | undefined {
+  const line = unit.split("\n").find((candidate) => candidate.startsWith("ExecStart="));
+  if (!line) return undefined;
+  const encoded = line.slice("ExecStart=".length);
+  const quoted = /"((?:\\.|[^"])*)"/g;
+  const matches = [...encoded.matchAll(quoted)];
+  if (!matches.length || encoded.replace(quoted, "").trim()) return undefined;
+  return matches.map((match) => (match[1] ?? "").replaceAll("%%", "%").replace(/\\([\\"])/g, "$1"));
 }
 
 function missingProcess(error: unknown): boolean {
