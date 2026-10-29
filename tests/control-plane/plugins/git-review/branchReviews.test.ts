@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import * as decisionStore from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-decision-store.js";
 import * as freshness from "../../../../packages/control-plane/plugins/git-review/src/native-human-reviewer-freshness.js";
-import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision } from "@slop-lab/gs-repository-contracts";
 import { reviewChangeMatcherExtension } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-git-merge-policy";
 import { basic, fixture, generationId, git, record, reviewer, text, token } from "../git-repositories/optionalFeaturesFixture.js";

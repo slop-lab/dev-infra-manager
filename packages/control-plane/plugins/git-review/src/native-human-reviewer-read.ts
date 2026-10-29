@@ -23,7 +23,7 @@ import {
   sendJson,
   sendNotFound
 } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
+import { repositoryBranches as nativeRepositoryBranches } from "@slop-lab/gs-repository-contracts";
 
 export type ExactReview = {
   readonly target: Awaited<ReturnType<typeof resolveAuthoritativeNativeRepositoryTarget>>;
@@ -107,7 +107,7 @@ export async function inspectExactReview(
       return undefined;
     }
   }
-  const staleReasons = [...await nativeHumanReviewStaleReasons(runtime, target, envelope.review)];
+  const staleReasons = [...await nativeHumanReviewStaleReasons(runtime, target, envelope.review, envelope)];
   const preparationState = await proposalAcceptanceState(target.repository, input.runtime.expectedGenerationId, envelope);
   if (preparationState !== "none") staleReasons.push(`proposal-preparation-${preparationState}`);
   try {

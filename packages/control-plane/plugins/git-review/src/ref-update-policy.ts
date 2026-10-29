@@ -1,33 +1,69 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { refUpdatePolicyExtension, type RefUpdatePolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import { codeReviewPolicySchema } from "./policy.js";
-import { reviewChangeMatchers } from "./change-matchers.js";
-import { nativeHumanReviewStaleReasons } from "./native-human-reviewer-freshness.js";
-import { readAuthoritativeNativeReviewEnvelopes } from "./authoritative-native-review-store.js";
-import { readAuthoritativeNativeDecisions } from "./authoritative-native-decision-store.js";
-import { hasPendingProposalAcceptance } from "./proposal-acceptance.js";
+import type { ControlPlaneExtension } from "@slop-lab/dim-control-plane-core/plugin-api";
+import {
+  refUpdatePolicyExtension,
+  type AuthoritativeNativeRepositoryTarget,
+  type ProtectedRefChange,
+  type RepositoryExtensionContext,
+} from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { codeReviewPolicySchema } from "@slop-lab/gs-review";
+import type { DimGsReviewRuntime } from "./gs-review-runtime.js";
+import type { RepositoryTarget } from "@slop-lab/gs-repository-service";
 
-const revision = createHash("sha256").update(readFileSync(new URL(import.meta.url))).digest("hex");
-const policy: RefUpdatePolicy = {
-  name: "code-review", revision,
-  validate(options) { codeReviewPolicySchema.parse(options); },
-  async check({ context, target, change }) {
-    const runtime = { ...context.runtime, reviewChangeMatchers: reviewChangeMatchers(context.extensions) };
-    const reviews = await readAuthoritativeNativeReviewEnvelopes(target.repository);
-    for (const envelope of reviews) {
-      const { review } = envelope;
-      if (review.projectId !== change.projectId || review.repositoryId !== change.repositoryId
-        || review.proposalRef !== change.proposalRef || review.protectedRef !== target.currentHead.protectedRef
-        || review.expectedProtectedHead !== change.expectedCommit || review.candidateCommit !== change.candidateCommit
-        || review.candidateTree !== change.candidateTree || envelope.policyDigest !== target.imported.policyDigest) continue;
-      if (await hasPendingProposalAcceptance(target.repository, context.runtime.expectedGenerationId, envelope)) continue;
-      if ((await nativeHumanReviewStaleReasons(runtime, target, review)).length > 0) continue;
-      const decisions = await readAuthoritativeNativeDecisions(target.repository, review.reviewId);
-      const reviewers = decisions.activeApprovals.map(({ reviewerId }) => reviewerId).sort();
-      if (JSON.stringify(reviewers) === JSON.stringify(review.requiredReviewerIds)) return;
-    }
-    throw new Error("protected ref requires a current review and every required human approval");
+export function codeReviewRefUpdatePolicyExtension(
+  runtimeFor: (context: RepositoryExtensionContext) => DimGsReviewRuntime,
+): ControlPlaneExtension {
+  return refUpdatePolicyExtension({
+    name: "code-review",
+    revision: createHash("sha256").update("dim-gs-code-review-ref-policy-adapter-v1").digest("hex"),
+    validate(options) { codeReviewPolicySchema.parse(options); },
+    async check({ context, target, change }) {
+      const runtime = runtimeFor(context);
+      await runtime.adapter.withBorrowedRead({
+        namespaceId: change.projectId,
+        repositoryId: change.repositoryId,
+        protectedRef: target.currentHead.protectedRef,
+      }, async (access) => {
+        assertDimTarget(target, access.target);
+        await runtime.feature.refUpdatePolicy.authorize({
+          authority: access.authority,
+          change: toGsChange(change),
+          target: access.target,
+          policy: access.target.policy,
+        });
+      });
+    },
+  });
+}
+
+function assertDimTarget(
+  target: AuthoritativeNativeRepositoryTarget,
+  current: RepositoryTarget,
+): void {
+  if (target.repository !== current.repositoryPath || target.currentHead.sequence !== current.head.sequence
+    || target.currentHead.protectedRef !== current.head.protectedRef
+    || target.currentHead.commit !== current.head.commit || target.currentHead.tree !== current.head.tree
+    || target.imported.importNonce !== current.incarnationId
+    || target.imported.policyDigest !== current.policyDigest
+    || target.imported.ownerHostId !== current.ownerPrincipalId) {
+    throw new DimReviewRefPolicyError("DIM repository target changed during GS review authorization");
   }
-};
-export const codeReviewRefUpdatePolicyExtension = refUpdatePolicyExtension(policy);
+}
+
+function toGsChange(change: ProtectedRefChange) {
+  return {
+    namespaceId: change.projectId,
+    repositoryId: change.repositoryId,
+    ...(change.protectedRef === undefined ? {} : { protectedRef: change.protectedRef }),
+    proposalRef: change.proposalRef,
+    expectedCommit: change.expectedCommit,
+    candidateCommit: change.candidateCommit,
+    candidateTree: change.candidateTree,
+    authorizationId: change.authorizationId,
+    evidenceDigest: change.evidenceDigest,
+  };
+}
+
+export class DimReviewRefPolicyError extends Error {
+  readonly name = "DimReviewRefPolicyError";
+}

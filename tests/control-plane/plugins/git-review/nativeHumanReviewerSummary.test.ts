@@ -2,7 +2,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { reviewChangeMatcherExtension, parseAuthoritativeNativeReviewEnvelope } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
-import * as reviewGit from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-git.js";
+import * as reviewGit from "../../../../packages/gs/review/src/review-git.js";
 import { basic, fixture, generationId, git, record, reviewer } from "../git-repositories/optionalFeaturesFixture.js";
 
 it("lists immutable review evidence by its mutable tuple without rebuilding patches or executing project matchers", async () => {
@@ -18,7 +18,7 @@ it("lists immutable review evidence by its mutable tuple without rebuilding patc
     const resolved = await fetch(path + "/resolve", { method: "POST", headers, body: JSON.stringify({ schemaVersion: 1, proposalRef: f.proposalRef }) });
     expect(resolved.status).toBe(200);
     const envelope = parseAuthoritativeNativeReviewEnvelope(await resolved.json());
-    const before = matcherCalls, inspections = vi.spyOn(reviewGit, "inspectAuthoritativeNativeReviewGit");
+    const before = matcherCalls, inspections = vi.spyOn(reviewGit, "inspectAuthoritativeReviewGit");
     expect((await list()).find(({ reviewId }) => reviewId === envelope.review.reviewId)?.status).toBe("pending");
     expect(matcherCalls).toBe(before); expect(inspections).not.toHaveBeenCalled();
     const exact = await fetch(`${path}/${envelope.review.reviewId}`, { headers });
@@ -42,7 +42,7 @@ it("lists immutable review evidence by its mutable tuple without rebuilding patc
         && Reflect.get(candidate, "candidateCommit") === current);
       return job === undefined ? undefined : Reflect.get(job, "status");
     }).toBe("ready");
-    inspections.mockClear(); const refs = vi.spyOn(reviewGit, "readAuthoritativeNativeReviewRefs"), beforeDrift = matcherCalls;
+    inspections.mockClear(); const refs = vi.spyOn(reviewGit, "readAuthoritativeReviewRefs"), beforeDrift = matcherCalls;
     expect((await list()).find(({ reviewId }) => reviewId === envelope.review.reviewId)?.status).toBe("stale");
     expect(refs).toHaveBeenCalledTimes(1); expect(matcherCalls).toBe(beforeDrift); expect(inspections).not.toHaveBeenCalled();
   } finally { vi.restoreAllMocks(); await f.service.close(); await rm(f.root, { recursive: true, force: true }); }

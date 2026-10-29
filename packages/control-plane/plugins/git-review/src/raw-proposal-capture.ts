@@ -1,5 +1,5 @@
 import { dirname, join } from "node:path";
-import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
+import { repositoryBranches as nativeRepositoryBranches } from "@slop-lab/gs-repository-contracts";
 import { readEffectiveRepositoryPolicy, readNativeProjectRootImportsFromDatabase, readNativeProjectRegistrations,
   readNativeRepositoryHeadsFromDatabase, type NativeProjectRootImportInstalled } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { readAuthoritativeNativeReviewRefs } from "./authoritative-native-review-git.js";

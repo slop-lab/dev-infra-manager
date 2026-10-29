@@ -1,188 +1,112 @@
-import { defaultReviewChangeMatchers } from "./change-matchers.js";
-import { codeReviewPolicy, CodeReviewPolicyError } from "./policy.js";
-import type { CodeReviewRuntime, ReviewAttachment } from "./plugin-api.js";
-import { assertReviewInputsCurrent } from "./review-inputs.js";
+import type { RepositoryPolicy } from "@slop-lab/gs-repository-contracts";
+import type { RepositoryAccess, RepositoryTarget } from "@slop-lab/gs-repository-service";
+import {
+  createGitRepositoryReadService,
+  defaultReviewChangeMatchers,
+  reviewRequirementsForChanges as gsReviewRequirementsForChanges,
+} from "@slop-lab/gs-review";
+import type {
+  AuthoritativeNativeChangedPath,
+  AuthoritativeNativeReviewEnvelope,
+} from "@slop-lab/gs-review-contracts";
+import { isCandidateRef } from "@slop-lab/gs-repository-contracts";
 import { z } from "zod";
-import {
-  assertAuthoritativeNativeRepositoryTargetCurrent,
-  resolveAuthoritativeNativeRepositoryTarget,
-} from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import {
-  assertAuthoritativeNativeReviewRefs,
-  readAuthoritativeNativeCandidateFile,
-  readAuthoritativeNativeReviewBlob,
-  inspectAuthoritativeNativeReviewGit
-} from "./authoritative-native-review-git.js";
-import {
-  createAuthoritativeNativeReviewEnvelope,
-  type AuthoritativeNativeChangedPath,
-  type AuthoritativeNativeReviewEnvelope,
-  type AuthoritativeNativeReviewIdentity
-} from "./authoritative-native-review-schema.js";
-import { saveAuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-store.js";
-import type { NativeImportedRootPolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import { isNativeGitCandidateRef, nativeGitCandidateWorkspaceId, repositorySnapshotsSchema as executionInputsSchema } from "@slop-lab/dim-contracts-git";
+import { createDetachedGsReviewExecution } from "./gs-review-runtime.js";
+import type { CodeReviewRuntime } from "./plugin-api.js";
 
 const selectorSchema = z.object({
   projectId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
   repositoryId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
   protectedRef: z.string().startsWith("refs/heads/").optional(),
-  proposalRef: z.string().refine(isNativeGitCandidateRef)
-}).strict().readonly().transform((selector, context) => {
-  if (!isNativeGitCandidateRef(selector.proposalRef)) {
-    context.addIssue({ code: "custom", message: "candidate ref is invalid" });
-    return z.NEVER;
-  }
-  const candidateWorkspaceId = nativeGitCandidateWorkspaceId(selector.proposalRef);
-  return { ...selector, ...(candidateWorkspaceId === undefined ? {} : { workspaceId: candidateWorkspaceId }) };
-});
+  proposalRef: z.string().refine(isCandidateRef),
+}).strict().readonly();
 
 export type AuthoritativeNativeReviewHooks = {
   readonly beforeFinalVerification?: () => void | Promise<void>;
-  readonly beforePublication?: (input: { readonly repository: string; readonly envelope: AuthoritativeNativeReviewEnvelope }) => void | Promise<void>;
-  readonly publish?: (input: { readonly repository: string; readonly envelope: AuthoritativeNativeReviewEnvelope },
-    publish: () => Promise<AuthoritativeNativeReviewEnvelope>) => Promise<AuthoritativeNativeReviewEnvelope>;
+  readonly beforePublication?: (input: {
+    readonly repository: string;
+    readonly envelope: AuthoritativeNativeReviewEnvelope;
+  }) => void | Promise<void>;
+  readonly publish?: (
+    input: { readonly repository: string; readonly envelope: AuthoritativeNativeReviewEnvelope },
+    publish: () => Promise<AuthoritativeNativeReviewEnvelope>,
+  ) => Promise<AuthoritativeNativeReviewEnvelope>;
 };
 
 export async function createAuthoritativeNativeReview(
   runtime: CodeReviewRuntime,
   input: unknown,
-  hooks: AuthoritativeNativeReviewHooks = {}
+  hooks: AuthoritativeNativeReviewHooks = {},
 ): Promise<AuthoritativeNativeReviewEnvelope> {
   try {
-    const selector = selectorSchema.safeParse(input);
-    if (!selector.success) {
-      throw new AuthoritativeNativeReviewError("authoritative native review selector is invalid", {
-        cause: selector.error
-      });
-    }
-    const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId, ...(selector.data.protectedRef === undefined ? {} : { protectedRef: selector.data.protectedRef }) });
-    const signal = AbortSignal.timeout(30_000);
-    const evidence = await inspectAuthoritativeNativeReviewGit({
-      gitExecutable: runtime.gitExecutable,
-      gitIdentity: runtime.gitIdentity,
-      repository: target.repository,
-      signal,
-      protectedRef: target.currentHead.protectedRef,
-      expectedProtectedHead: target.currentHead.commit,
-      proposalRef: selector.data.proposalRef
-    });
-    const policy = target.imported.policy;
-    const requirements = await reviewRequirementsForChanges(runtime, policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead, target.currentHead.protectedRef);
-    let identity: AuthoritativeNativeReviewIdentity = {
-      schemaVersion: 2,
-      serviceId: "native-main",
-      projectId: selector.data.projectId,
-      repositoryId: selector.data.repositoryId,
-      inputs: { [selector.data.repositoryId]: { commit: evidence.candidateCommit, tree: evidence.candidateTree } },
-      protectedRef: target.currentHead.protectedRef,
-      proposalRef: selector.data.proposalRef,
-      ...evidence,
-      policyRevision: policy.policyRevision,
-      requiredReviewRevision: codeReviewPolicy(policy, runtime.reviewChangeMatchers, target.currentHead.protectedRef).requiredReviewRevision,
-       ...(selector.data.workspaceId === undefined ? {} : { workspaceId: selector.data.workspaceId }),
-      requiredReviewerIds: requirements.reviewerIds,
-      ...(requirements.evidence.length === 0 ? {} : { changeRuleEvidence: requirements.evidence })
-    };
-    const attachments: ReviewAttachment[] = [];
-    for (const preparation of runtime.reviewPreparations ?? []) {
-      const prepared = await preparation.prepare({ runtime, selector: selector.data, target, evidence, identity });
-      const combined = { ...identity.inputs };
-      for (const [id, snapshot] of Object.entries(prepared.inputs)) {
-        const previous = combined[id];
-        if (previous !== undefined && JSON.stringify(previous) !== JSON.stringify(snapshot)) throw new Error("review preparations returned conflicting repository snapshots");
-        combined[id] = snapshot;
-      }
-      identity = { ...identity, inputs: executionInputsSchema.parse(Object.fromEntries(Object.entries(combined).sort(([left], [right]) => left.localeCompare(right)))) };
-      if (prepared.attachment !== undefined) attachments.push(prepared.attachment);
-    }
-    const envelope = createAuthoritativeNativeReviewEnvelope({ identity,
-      policyDigest: target.imported.policyDigest, attachments, createdAt: new Date().toISOString() });
-    await hooks.beforeFinalVerification?.();
-    await assertAuthoritativeNativeRepositoryTargetCurrent({ runtime,
-      selector: { projectId: selector.data.projectId, repositoryId: selector.data.repositoryId, ...(selector.data.protectedRef === undefined ? {} : { protectedRef: selector.data.protectedRef }) }, target });
-    const current = target;
-    const currentRequirements = await reviewRequirementsForChanges(runtime, current.imported.policy, evidence.changes, target.repository, evidence.candidateCommit, evidence.expectedProtectedHead, target.currentHead.protectedRef);
-    if (codeReviewPolicy(current.imported.policy, runtime.reviewChangeMatchers, current.currentHead.protectedRef).requiredReviewRevision !== identity.requiredReviewRevision
-      || JSON.stringify(currentRequirements.reviewerIds) !== JSON.stringify(identity.requiredReviewerIds)
-      || JSON.stringify(currentRequirements.evidence) !== JSON.stringify(identity.changeRuleEvidence ?? [])) {
-      throw new AuthoritativeNativeReviewError("required review matcher changed during review creation");
-    }
-    await assertReviewInputsCurrent(runtime, identity);
-    for (const preparation of runtime.reviewPreparations ?? []) {
-      const attachment = attachments.find((entry) => entry.kind === preparation.name);
-      await preparation.assertCurrent?.({ runtime, review: identity, ...(attachment === undefined ? {} : { attachment }) });
-    }
-    await assertAuthoritativeNativeReviewRefs({
-      gitExecutable: runtime.gitExecutable,
-      gitIdentity: runtime.gitIdentity,
-      repository: target.repository,
-      signal,
-      protectedRef: identity.protectedRef,
-      proposalRef: identity.proposalRef,
-      expectedProtectedHead: identity.expectedProtectedHead,
-      candidateCommit: identity.candidateCommit,
-      candidateTree: identity.candidateTree
-    });
-    const publish = async () => {
-      await hooks.beforePublication?.({ repository: target.repository, envelope });
-      return saveAuthoritativeNativeReviewEnvelope(target.repository, envelope);
-    };
-    return hooks.publish === undefined ? publish() : hooks.publish({ repository: target.repository, envelope }, publish);
-  } catch (error) {
-    if (error instanceof AuthoritativeNativeReviewError || error instanceof CodeReviewPolicyError) throw error;
-    if (error instanceof Error && /changed during review creation/.test(error.message)) {
-      throw new AuthoritativeNativeReviewError("authoritative native refs changed during review creation", { cause: error });
-    }
-    throw new AuthoritativeNativeReviewError("authoritative native review could not be created", { cause: error });
+    const selector = selectorSchema.parse(input);
+    const execution = await createDetachedGsReviewExecution(runtime, {
+      namespaceId: selector.projectId,
+      repositoryId: selector.repositoryId,
+      ...(selector.protectedRef === undefined ? {} : { protectedRef: selector.protectedRef }),
+    }, hooks);
+    return execution.feature.createInTransaction(execution.access, {
+      namespaceId: selector.projectId,
+      repositoryId: selector.repositoryId,
+      proposalRef: selector.proposalRef,
+      ...(selector.protectedRef === undefined ? {} : { protectedRef: selector.protectedRef }),
+    }, false);
+  } catch (cause) {
+    if (cause instanceof AuthoritativeNativeReviewError) throw cause;
+    throw new AuthoritativeNativeReviewError("authoritative native review could not be created", { cause });
   }
-}
-
-function pathRequiredReviewers(
-  reviewed: ReturnType<typeof codeReviewPolicy>,
-  changes: readonly AuthoritativeNativeChangedPath[]
-): readonly string[] {
-  const reviewers = new Set(reviewed.requiredReviewerIds);
-  for (const rule of reviewed.pathReviewerRules) {
-    const prefix = Buffer.from(rule.pathPrefix, "utf8");
-    const matches = changes.some((change) => [change.oldPathBytes, change.newPathBytes]
-      .some((encoded) => Buffer.from(encoded, "base64").subarray(0, prefix.length).equals(prefix)));
-    if (matches) for (const reviewer of rule.reviewerIds) reviewers.add(reviewer);
-  }
-  return [...reviewers].sort();
 }
 
 export async function reviewRequirementsForChanges(
-  runtime: CodeReviewRuntime, policy: NativeImportedRootPolicy, changes: readonly AuthoritativeNativeChangedPath[],
-  repository: string, candidateCommit: string, baseCommit?: string, protectedRef?: string
-): Promise<{ readonly reviewerIds: readonly string[]; readonly evidence: readonly { readonly rule: number; readonly digest: string }[] }> {
-  const reviewed = codeReviewPolicy(policy, runtime.reviewChangeMatchers, protectedRef);
-  const reviewers = new Set(pathRequiredReviewers(reviewed, changes));
-  const objectIds = new Set(changes.flatMap(({ oldObjectId, newObjectId }) => [oldObjectId, newObjectId]).filter((id) => id !== "0"));
-  const blobs = new Map<string, Promise<Buffer>>();
-  const git = { gitExecutable: runtime.gitExecutable, gitIdentity: runtime.gitIdentity, repository, signal: AbortSignal.timeout(30_000) };
-  const readBlob = (objectId: string): Promise<Buffer> => {
-    if (!objectIds.has(objectId)) throw new Error("review matcher requested an object outside the authoritative change set");
-    let pending = blobs.get(objectId);
-    if (pending === undefined) { pending = readAuthoritativeNativeReviewBlob(git, objectId); blobs.set(objectId, pending); }
-    return pending.then((value) => Buffer.from(value));
+  runtime: CodeReviewRuntime,
+  policy: RepositoryPolicy,
+  changes: readonly AuthoritativeNativeChangedPath[],
+  repository: string,
+  candidateCommit: string,
+  baseCommit?: string,
+  protectedRef?: string,
+) {
+  const reader = createGitRepositoryReadService({
+    runtime: { gitExecutable: runtime.gitExecutable },
+    gitIdentity: runtime.gitIdentity,
+  });
+  const target = syntheticTarget(runtime, policy, repository, candidateCommit, protectedRef);
+  const access: RepositoryAccess = { principalId: target.ownerPrincipalId, target };
+  return gsReviewRequirementsForChanges({
+    reader,
+    access,
+    matchers: runtime.reviewChangeMatchers ?? defaultReviewChangeMatchers(),
+    policy,
+    changes,
+    candidateCommit,
+    ...(baseCommit === undefined ? {} : { baseCommit }),
+    ...(protectedRef === undefined ? {} : { protectedRef }),
+  });
+}
+
+function syntheticTarget(
+  runtime: CodeReviewRuntime,
+  policy: RepositoryPolicy,
+  repositoryPath: string,
+  commit: string,
+  protectedRef?: string,
+): RepositoryTarget {
+  return {
+    selector: { namespaceId: "dim-adapter", repositoryId: "review" },
+    repositoryPath,
+    head: {
+      sequence: 0,
+      protectedRef: protectedRef ?? policy.protectedRef,
+      commit,
+      tree: commit,
+    },
+    incarnationId: "dim-review-adapter",
+    authorityEpoch: runtime.expectedGenerationId,
+    policyDigest: policy.policyRevision,
+    ownerPrincipalId: "dim-review-adapter",
+    refPolicyRevision: "0".repeat(64),
+    policy,
   };
-  const evidence: { rule: number; digest: string }[] = [];
-  for (const [index, rule] of reviewed.changeReviewerRules.entries()) {
-    const matcher = (runtime.reviewChangeMatchers ?? defaultReviewChangeMatchers()).find(({ name }) => name === rule.matcher);
-    if (matcher === undefined) throw new Error(`required review change matcher '${rule.matcher}' is unavailable`);
-    const result = await matcher.matches({ options: rule.options, changes, readBlob,
-      readCandidateFile: (path) => readAuthoritativeNativeCandidateFile({ ...git, candidateCommit }, path),
-      ...(baseCommit === undefined ? {} : { readBaseFile: (path: string) => readAuthoritativeNativeCandidateFile({ ...git, candidateCommit: baseCommit }, path) }) });
-    const matches = typeof result === "boolean" ? result : result.matches;
-    if (typeof result !== "boolean") {
-      if (!/^[0-9a-f]{64}$/.test(result.evidenceDigest)) throw new Error("review change matcher returned invalid evidence digest");
-      evidence.push({ rule: index, digest: result.evidenceDigest });
-    }
-    if (typeof matches !== "boolean") throw new Error(`review change matcher '${matcher.name}' returned a non-boolean result`);
-    if (matches) for (const reviewer of rule.reviewerIds) reviewers.add(reviewer);
-  }
-  return { reviewerIds: [...reviewers].sort(), evidence };
 }
 
 export class AuthoritativeNativeReviewError extends Error {

@@ -146,7 +146,7 @@ export async function recoverProposalAcceptances(
         const target = await resolveAuthoritativeNativeRepositoryTarget(current, { projectId: registration.projectId,
           repositoryId: registration.repositoryId, protectedRef: envelope.review.protectedRef });
         if (envelope.policyDigest !== target.imported.policyDigest
-          || (await nativeHumanReviewStaleReasons(current, target, envelope.review)).length > 0) return;
+          || (await nativeHumanReviewStaleReasons(current, target, envelope.review, envelope)).length > 0) return;
         for (const preparation of current.reviewPreparations ?? []) {
           const attachment = envelope.attachments.find(({ kind }) => kind === preparation.name);
           await preparation.assertCurrent?.({ runtime: current, review: envelope.review,
@@ -165,7 +165,7 @@ export async function recoverProposalAcceptances(
             repositoryId: registration.repositoryId, protectedRef: envelope.review.protectedRef });
           const stored = await readAuthoritativeNativeReviewEnvelope(repository, envelope.review.reviewId);
           if (stored?.envelopeId !== envelope.envelopeId || envelope.policyDigest !== target.imported.policyDigest
-            || (await nativeHumanReviewStaleReasons(finalRuntime, target, envelope.review)).length > 0) return;
+            || (await nativeHumanReviewStaleReasons(finalRuntime, target, envelope.review, envelope)).length > 0) return;
           for (const preparation of finalRuntime.reviewPreparations ?? []) {
             const attachment = envelope.attachments.find(({ kind }) => kind === preparation.name);
             await preparation.assertCurrent?.({ runtime: finalRuntime, review: envelope.review,

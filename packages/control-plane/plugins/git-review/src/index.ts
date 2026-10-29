@@ -16,44 +16,68 @@ import { readAuthoritativeNativeDecisions } from "./authoritative-native-decisio
 import { completeProposalAcceptance, failProposalAcceptance, recoverProposalAcceptances, stageProposalAcceptance } from "./proposal-acceptance.js";
 import { captureRawProposalJobs, createRawProposalWorker } from "./raw-proposal-worker.js";
 import { completeMatchingRawProposalJob } from "./raw-proposal-journal.js";
+import { createDimGsReviewRuntime, type DimGsReviewRuntime } from "./gs-review-runtime.js";
+import { hasPendingProposalAcceptance } from "./proposal-acceptance.js";
 
 export * from "./config.js";
 export * from "./policy.js";
 export const controlPlanePlugin: ControlPlanePlugin = { apiVersion: 1, name: "code-review", configure(raw) { return prepareCodeReview(parseCodeReviewConfig(raw)); } };
 export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly review?: AuthoritativeNativeReviewHooks; readonly humanReviewer?: NativeHumanReviewerHooks } = {}): PreparedControlPlanePlugin {
     let attached: RepositoryExtensionContext | undefined;
-    const createInTransaction = async (context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined; readonly ownerRequestId?: string }) => {
-      const runtime: CodeReviewRuntime = { ...context.runtime, authoritativeTargetProofs: new Map(), reviewPreparations: reviewPreparations(context.extensions), reviewChangeMatchers: reviewChangeMatchers(context.extensions) };
-      const { ownerRequestId, ...selector } = input;
-      const envelope = await createAuthoritativeNativeReview(runtime, selector, {
-        ...hooks.review,
+    const gsRuntimes = new WeakMap<RepositoryExtensionContext, DimGsReviewRuntime>();
+    const gsRuntime = (context: RepositoryExtensionContext): DimGsReviewRuntime => {
+      const existing = gsRuntimes.get(context);
+      if (existing !== undefined) return existing;
+      const created = createDimGsReviewRuntime(context, {
+        ...(hooks.review?.beforeFinalVerification === undefined ? {} : {
+          beforeFinalVerification: hooks.review.beforeFinalVerification,
+        }),
         async beforePublication(publication) {
           await hooks.review?.beforePublication?.(publication);
-          await stageProposalAcceptance(publication.repository, runtime.expectedGenerationId, publication.envelope);
+          await stageProposalAcceptance(publication.repository, context.runtime.expectedGenerationId, publication.envelope);
+        },
+        ...(hooks.review?.publish === undefined ? {} : { publish: hooks.review.publish }),
+        promotionReady: async ({ target, envelope }) =>
+          !await hasPendingProposalAcceptance(target.repositoryPath, context.runtime.expectedGenerationId, envelope),
+        async acceptanceFailed({ target, envelope }) {
+          await failProposalAcceptance(target.repositoryPath, context.runtime.expectedGenerationId, envelope);
+        },
+        async acceptanceCompleted({ target, envelope }) {
+          await completeProposalAcceptance(target.repositoryPath, context.runtime.expectedGenerationId, envelope);
+          await completeMatchingRawProposalJob(target.repositoryPath, context.runtime.expectedGenerationId, envelope);
         }
       });
-      const repository = join(context.stateDirectory, input.projectId, `${input.repositoryId}.git`);
-      try {
-        await acceptReviewPreparations(runtime, envelope, ownerRequestId ?? `review:${envelope.review.reviewId}`);
-      } catch (error) {
-        await failProposalAcceptance(repository, runtime.expectedGenerationId, envelope);
-        throw error;
-      }
-      await completeProposalAcceptance(repository, runtime.expectedGenerationId, envelope);
-      await completeMatchingRawProposalJob(repository, runtime.expectedGenerationId, envelope);
-      return envelope;
+      gsRuntimes.set(context, created);
+      return created;
+    };
+    const refUpdatePolicy = codeReviewRefUpdatePolicyExtension(gsRuntime);
+    const createInTransaction = async (context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string | undefined; readonly ownerRequestId?: string }) => {
+      const runtime = gsRuntime(context);
+      return runtime.adapter.withBorrowedMutation({
+        namespaceId: input.projectId,
+        repositoryId: input.repositoryId,
+        ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }),
+      }, (access) => runtime.service.createInTransaction(access, {
+        namespaceId: input.projectId,
+        repositoryId: input.repositoryId,
+        proposalRef: input.proposalRef,
+        ...(input.protectedRef === undefined ? {} : { protectedRef: input.protectedRef }),
+        ...(input.ownerRequestId === undefined ? {} : { ownerRequestId: input.ownerRequestId }),
+      }));
     };
     const service = {
       name: "code-review" as const,
       createInTransaction,
       async create(context: RepositoryExtensionContext, input: { readonly projectId: string; readonly repositoryId: string; readonly proposalRef: string; readonly protectedRef?: string; readonly ownerRequestId?: string }) {
-        return context.mutate({ projectId: input.projectId, repositoryId: input.repositoryId }, () => createInTransaction(context, input));
-      }
+        return context.mutate({ projectId: input.projectId, repositoryId: input.repositoryId }, () =>
+          createInTransaction(context, input));
+      },
+      gs: gsRuntime
     };
     return {
       requiresExtensions: [{ kind: "dim.git-repositories.service", name: "default" }],
       extensions: [
-        codeReviewRefUpdatePolicyExtension,
+        refUpdatePolicy,
         { kind: "dim.git-repositories.access", name: "default", value: {
           async authorize(context: RepositoryExtensionContext, request: import("node:http").IncomingMessage, selector: { readonly projectId: string; readonly repositoryId: string; readonly protectedRef?: string }) {
             const reviewer = config.humanReviewers.find((candidate) => nativeBasicAuthorized(request, candidate));
@@ -88,6 +112,7 @@ export function prepareCodeReview(config: CodeReviewConfig, hooks: { readonly re
         repositoryExtension({ name: "code-review", policyName: "code-review", requiresRefUpdatePolicies: ["code-review"], credentials: config.humanReviewers,
           async attach(context) {
             attached = context;
+            gsRuntime(context);
             const runtime: CodeReviewRuntime = { ...context.runtime, reviewPreparations: reviewPreparations(context.extensions), reviewChangeMatchers: reviewChangeMatchers(context.extensions) };
             for (const registration of readNativeProjectRegistrations(runtime.state)) {
               const repository = join(context.stateDirectory, registration.projectId, `${registration.repositoryId}.git`);

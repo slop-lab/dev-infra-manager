@@ -70,7 +70,7 @@ export async function resolveCurrentEnvelope(
         && envelope.policyDigest === target.imported.policyDigest)
       .sort((left, right) => right.review.createdAt.localeCompare(left.review.createdAt));
     for (const envelope of envelopes) {
-      const staleReasons = await nativeHumanReviewStaleReasons(runtime, target, envelope.review);
+      const staleReasons = await nativeHumanReviewStaleReasons(runtime, target, envelope.review, envelope);
       if (staleReasons.includes("repository-inputs-changed")) {
         let refreshed;
         try {
@@ -153,7 +153,7 @@ export async function resolveCurrentEnvelope(
     }
     const stored = await readAuthoritativeNativeReviewEnvelope(target.repository, envelope.review.reviewId);
     if (stored?.envelopeId !== envelope.envelopeId || envelope.policyDigest !== target.imported.policyDigest
-      || (await nativeHumanReviewStaleReasons(runtime, target, envelope.review)).length > 0) {
+      || (await nativeHumanReviewStaleReasons(runtime, target, envelope.review, envelope)).length > 0) {
       sendJson(response, 409, { error: "review changed while acceptance completed" });
       return false;
     }

@@ -1,4 +1,4 @@
-import { nativeRepositoryBranches } from "@slop-lab/dim-contracts-git";
+import { repositoryBranches as nativeRepositoryBranches } from "@slop-lab/gs-repository-contracts";
 import { assertGitExecutableIdentity, resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";

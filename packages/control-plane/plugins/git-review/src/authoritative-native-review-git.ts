@@ -1,20 +1,15 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import type { AuthoritativeNativeChangedPath } from "./authoritative-native-review-schema.js";
-import { assertGitExecutableIdentity, type GitExecutableIdentity } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-
-const execute = promisify(execFile);
-const maximumOutputBytes = 128 * 1024 * 1024;
-const decoder = new TextDecoder("utf-8", { fatal: true });
-const gitEnvironment = {
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_NOSYSTEM: "1",
-  GIT_NO_REPLACE_OBJECTS: "1",
-  GIT_OPTIONAL_LOCKS: "0",
-  GIT_TERMINAL_PROMPT: "0",
-  HOME: "/dev/null",
-  LC_ALL: "C"
-} as const;
+import type { GitExecutableIdentity } from "@slop-lab/gs-repository";
+import type { RepositoryAccess, RepositoryTarget } from "@slop-lab/gs-repository-service";
+import {
+  assertAuthoritativeReviewRefs,
+  createGitRepositoryReadService,
+  inspectAuthoritativeReviewGit,
+  readAuthoritativeCandidateFile,
+  readAuthoritativeReviewRefs,
+  readReviewBlob,
+  AuthoritativeReviewGitError,
+  type AuthoritativeGitReviewEvidence,
+} from "@slop-lab/gs-review";
 
 type PinnedReviewGit = {
   readonly gitExecutable: string;
@@ -23,229 +18,108 @@ type PinnedReviewGit = {
   readonly signal: AbortSignal;
 };
 
-export type AuthoritativeNativeGitReviewEvidence = {
+export type AuthoritativeNativeGitReviewEvidence = AuthoritativeGitReviewEvidence;
+export { AuthoritativeReviewGitError as AuthoritativeNativeReviewGitError };
+
+export function inspectAuthoritativeNativeReviewGit(input: PinnedReviewGit & {
+  readonly protectedRef: string;
+  readonly expectedProtectedHead: string;
+  readonly proposalRef: string;
+}): Promise<AuthoritativeNativeGitReviewEvidence> {
+  const runtime = runtimeAccess(input);
+  return inspectAuthoritativeReviewGit({
+    reader: runtime.reader,
+    access: runtime.access,
+    protectedRef: input.protectedRef,
+    expectedProtectedHead: input.expectedProtectedHead,
+    proposalRef: input.proposalRef,
+    signal: input.signal,
+  });
+}
+
+export function assertAuthoritativeNativeReviewRefs(input: PinnedReviewGit & {
+  readonly protectedRef: string;
+  readonly proposalRef: string;
   readonly expectedProtectedHead: string;
   readonly candidateCommit: string;
   readonly candidateTree: string;
-  readonly changes: readonly AuthoritativeNativeChangedPath[];
-  readonly patch: string;
-  readonly patchBytes: string;
-};
-
-export async function inspectAuthoritativeNativeReviewGit(
-  input: PinnedReviewGit & {
-    readonly protectedRef: string;
-    readonly expectedProtectedHead: string;
-    readonly proposalRef: string;
-  }
-): Promise<AuthoritativeNativeGitReviewEvidence> {
-  const protectedHead = await resolveCommit(input, input.protectedRef);
-  if (protectedHead !== input.expectedProtectedHead) {
-    throw new AuthoritativeNativeReviewGitError("authoritative native protected ref changed before review creation");
-  }
-  const candidateCommit = await resolveCommit(input, input.proposalRef);
-  const candidateTree = await resolveObject(input, `${candidateCommit}^{tree}`);
-  if (candidateCommit.length !== protectedHead.length || candidateTree.length !== protectedHead.length) {
-    throw new AuthoritativeNativeReviewGitError("authoritative native review object format conflicts");
-  }
-  await runPinned(input, ["-c", "fsck.fullPathname=error", "fsck", "--strict", "--full",
-    "--no-reflogs", "--no-progress", candidateCommit]);
-  const raw = await runPinnedBuffer(input, [
-    "diff", "--raw", "-z", "--no-textconv", "--find-renames", "--find-copies", "--full-index", "--no-abbrev",
-    protectedHead, candidateCommit
-  ]);
-  const changes = await parseChanges(input, raw);
-  const patch = await runPinnedBuffer(input, [
-    "diff", "--binary", "--no-color", "--no-ext-diff", "--no-textconv", "--find-renames", "--find-copies",
-    "--full-index", protectedHead, candidateCommit
-  ]);
-  return {
-    expectedProtectedHead: protectedHead,
-    candidateCommit,
-    candidateTree,
-    changes,
-    patch: patch.toString("utf8"),
-    patchBytes: patch.toString("base64")
-  };
+}): Promise<void> {
+  const runtime = runtimeAccess(input);
+  return assertAuthoritativeReviewRefs({
+    reader: runtime.reader,
+    access: runtime.access,
+    protectedRef: input.protectedRef,
+    proposalRef: input.proposalRef,
+    expectedProtectedHead: input.expectedProtectedHead,
+    candidateCommit: input.candidateCommit,
+    candidateTree: input.candidateTree,
+    signal: input.signal,
+  });
 }
 
-export async function assertAuthoritativeNativeReviewRefs(
-  input: PinnedReviewGit & {
-    readonly protectedRef: string;
-    readonly proposalRef: string;
-    readonly expectedProtectedHead: string;
-    readonly candidateCommit: string;
-    readonly candidateTree: string;
-  }
-): Promise<void> {
-  const [protectedHead, candidateCommit] = await Promise.all([
-    resolveCommit(input, input.protectedRef),
-    resolveCommit(input, input.proposalRef)
-  ]);
-  const candidateTree = await resolveObject(input, `${candidateCommit}^{tree}`);
-  if (protectedHead !== input.expectedProtectedHead || candidateCommit !== input.candidateCommit
-    || candidateTree !== input.candidateTree) {
-    throw new AuthoritativeNativeReviewGitError("authoritative native refs changed during review creation");
-  }
+export function readAuthoritativeNativeReviewRefs(input: PinnedReviewGit & {
+  readonly protectedRef: string;
+  readonly proposalRef: string;
+}) {
+  const runtime = runtimeAccess(input);
+  return readAuthoritativeReviewRefs({
+    reader: runtime.reader,
+    access: runtime.access,
+    protectedRef: input.protectedRef,
+    proposalRef: input.proposalRef,
+    signal: input.signal,
+  });
 }
 
-export async function readAuthoritativeNativeReviewRefs(
-  input: PinnedReviewGit & { readonly protectedRef: string; readonly proposalRef: string }
-): Promise<{
-  readonly protectedHead: string;
-  readonly candidateCommit: string;
-  readonly candidateTree: string;
-}> {
-  const [protectedHead, candidateCommit] = await Promise.all([
-    resolveCommit(input, input.protectedRef),
-    resolveCommit(input, input.proposalRef)
-  ]);
-  return {
-    protectedHead,
-    candidateCommit,
-    candidateTree: await resolveObject(input, `${candidateCommit}^{tree}`)
-  };
-}
-
-async function parseChanges(input: PinnedReviewGit, output: Buffer): Promise<readonly AuthoritativeNativeChangedPath[]> {
-  const fields = splitNul(output);
-  const changes: AuthoritativeNativeChangedPath[] = [];
-  for (let index = 0; index < fields.length;) {
-    const metadata = fields[index];
-    const firstPath = fields[index + 1];
-    if (metadata === undefined || firstPath === undefined) throw new AuthoritativeNativeReviewGitError("Git raw diff is incomplete");
-    const parsed = parseMetadata(metadata.toString("ascii"));
-    const pair = parsed.status === "renamed" || parsed.status === "copied";
-    const secondPath = pair ? fields[index + 2] : undefined;
-    if (pair && secondPath === undefined) throw new AuthoritativeNativeReviewGitError("Git rename diff is incomplete");
-    const oldPath = parsed.status === "added" ? Buffer.alloc(0) : firstPath;
-    const newPath = parsed.status === "deleted" ? Buffer.alloc(0) : (secondPath ?? firstPath);
-    const oldTarget = parsed.oldMode === "120000" ? await readBlob(input, parsed.oldObjectId) : undefined;
-    const newTarget = parsed.newMode === "120000" ? await readBlob(input, parsed.newObjectId) : undefined;
-    changes.push({
-      ...parsed,
-      ...(oldPath.length === 0 ? {} : { oldPath: displayBytes(oldPath) }),
-      ...(newPath.length === 0 ? {} : { newPath: displayBytes(newPath) }),
-      oldPathBytes: oldPath.toString("base64"),
-      newPathBytes: newPath.toString("base64"),
-      ...(oldTarget === undefined ? {} : {
-        oldSymlinkTarget: displayBytes(oldTarget), oldSymlinkTargetBytes: oldTarget.toString("base64")
-      }),
-      ...(newTarget === undefined ? {} : {
-        newSymlinkTarget: displayBytes(newTarget), newSymlinkTargetBytes: newTarget.toString("base64")
-      })
-    });
-    index += pair ? 3 : 2;
-  }
-  return changes;
-}
-
-function parseMetadata(value: string): Omit<AuthoritativeNativeChangedPath,
-  "oldPath" | "newPath" | "oldPathBytes" | "newPathBytes" | "oldSymlinkTarget"
-  | "newSymlinkTarget" | "oldSymlinkTargetBytes" | "newSymlinkTargetBytes"> {
-  const match = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]+) ([0-9a-f]+) ([ADMTRC])([0-9]{1,3})?$/.exec(value);
-  if (match === null) throw new AuthoritativeNativeReviewGitError("Git raw diff metadata is unsupported");
-  const oldMode = match[1];
-  const newMode = match[2];
-  const oldObject = match[3];
-  const newObject = match[4];
-  const code = match[5];
-  if (oldMode === undefined || newMode === undefined || oldObject === undefined
-    || newObject === undefined || code === undefined) throw new AuthoritativeNativeReviewGitError("Git raw diff metadata is incomplete");
-  const status = code === "A" ? "added" : code === "D" ? "deleted" : code === "M" ? "modified"
-    : code === "R" ? "renamed" : code === "C" ? "copied" : "type-changed";
-  const score = match[6];
-  return {
-    status,
-    oldMode,
-    newMode,
-    oldObjectId: /^0+$/.test(oldObject) ? "0" : oldObject,
-    newObjectId: /^0+$/.test(newObject) ? "0" : newObject,
-    ...(score === undefined ? {} : { similarity: Number.parseInt(score, 10) })
-  };
-}
-
-function splitNul(value: Buffer): readonly Buffer[] {
-  const fields: Buffer[] = [];
-  let start = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    if (value[index] !== 0) continue;
-    fields.push(value.subarray(start, index));
-    start = index + 1;
-  }
-  if (start !== value.length) throw new AuthoritativeNativeReviewGitError("Git raw diff is not NUL terminated");
-  return fields;
-}
-
-function displayBytes(value: Buffer): string {
-  try {
-    return decoder.decode(value);
-  } catch (error) {
-    if (error instanceof TypeError) return `<base64:${value.toString("base64")}>`;
-    throw error;
-  }
-}
-
-/** Reads exact regular-file bytes from the immutable candidate tree, without checkout or filters. */
-export async function readAuthoritativeNativeCandidateFile(
-  input: PinnedReviewGit & { readonly candidateCommit: string }, path: string
+export function readAuthoritativeNativeCandidateFile(
+  input: PinnedReviewGit & { readonly candidateCommit: string },
+  path: string,
 ): Promise<Buffer | undefined> {
-  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(input.candidateCommit)) throw new AuthoritativeNativeReviewGitError("invalid candidate commit identity");
-  if (Buffer.byteLength(path, "utf8") > 1024 || path.length === 0 || path.startsWith("/") || path.includes("\0")
-    || path.includes("\\") || path.split("/").some((part) => part === "" || part === "." || part === "..")
-    || Buffer.from(path, "utf8").toString("utf8") !== path) throw new AuthoritativeNativeReviewGitError("candidate file path must be a normalized relative path");
-  const result = await runPinnedBuffer(input, ["ls-tree", "-z", "--full-tree", input.candidateCommit, "--", `:(literal)${path}`]);
-  if (result.length === 0) return undefined;
-  const entries = splitNul(result);
-  const entry = entries[0];
-  if (entries.length !== 1 || entry === undefined) throw new AuthoritativeNativeReviewGitError("candidate tree file identity is ambiguous");
-  const separator = entry.indexOf(9);
-  if (separator < 0 || !entry.subarray(separator + 1).equals(Buffer.from(path, "utf8"))) throw new AuthoritativeNativeReviewGitError("candidate tree file identity conflicts");
-  const metadata = /^(100644|100755) blob ([0-9a-f]{40}|[0-9a-f]{64})$/.exec(entry.subarray(0, separator).toString("ascii"));
-  if (metadata?.[2] === undefined) throw new AuthoritativeNativeReviewGitError("candidate matcher input must be a regular file");
-  return readAuthoritativeNativeReviewBlob(input, metadata[2]);
+  const runtime = runtimeAccess(input);
+  return readAuthoritativeCandidateFile({
+    reader: runtime.reader,
+    access: runtime.access,
+    candidateCommit: input.candidateCommit,
+    path,
+    signal: input.signal,
+  });
 }
 
-export async function readAuthoritativeNativeReviewBlob(input: PinnedReviewGit, objectId: string): Promise<Buffer> {
-  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(objectId)) throw new AuthoritativeNativeReviewGitError("invalid review blob identity");
-  const size = Number((await runPinned(input, ["cat-file", "-s", objectId])).stdout.trim());
-  if (!Number.isSafeInteger(size) || size < 0 || size > 1024 * 1024) throw new AuthoritativeNativeReviewGitError("review matcher blob exceeds 1 MiB");
-  return runPinnedBuffer(input, ["cat-file", "blob", objectId], 1024 * 1024);
+export function readAuthoritativeNativeReviewBlob(input: PinnedReviewGit, objectId: string): Promise<Buffer> {
+  const runtime = runtimeAccess(input);
+  return readReviewBlob({
+    reader: runtime.reader,
+    access: runtime.access,
+    objectId,
+    signal: input.signal,
+  });
 }
 
-async function readBlob(input: PinnedReviewGit, objectId: string): Promise<Buffer> {
-  return objectId === "0" ? Buffer.alloc(0) : runPinnedBuffer(input, ["cat-file", "blob", objectId]);
-}
-
-async function resolveCommit(input: PinnedReviewGit, ref: string): Promise<string> {
-  return resolveObject(input, `${ref}^{commit}`);
-}
-
-async function resolveObject(input: PinnedReviewGit, expression: string): Promise<string> {
-  return (await runPinned(input, ["rev-parse", "--verify", expression])).stdout.trim();
-}
-
-async function runPinned(input: PinnedReviewGit, arguments_: readonly string[]) {
-  await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
-  const result = await execute(input.gitExecutable,
-    ["--no-replace-objects", "--git-dir", input.repository, ...arguments_], {
-      env: gitEnvironment, maxBuffer: maximumOutputBytes, timeout: 30_000, signal: input.signal
-    });
-  await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
-  return result;
-}
-
-async function runPinnedBuffer(input: PinnedReviewGit, arguments_: readonly string[], maximumBytes = maximumOutputBytes): Promise<Buffer> {
-  await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
-  const result = await execute(input.gitExecutable,
-    ["--no-replace-objects", "--git-dir", input.repository, ...arguments_], {
-      encoding: "buffer", env: gitEnvironment, maxBuffer: maximumBytes, timeout: 30_000, signal: input.signal
-    });
-  await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
-  if (!Buffer.isBuffer(result.stdout)) throw new AuthoritativeNativeReviewGitError("Git returned non-buffer output");
-  return result.stdout;
-}
-
-export class AuthoritativeNativeReviewGitError extends Error {
-  readonly name = "AuthoritativeNativeReviewGitError";
+function runtimeAccess(input: PinnedReviewGit): {
+  readonly reader: ReturnType<typeof createGitRepositoryReadService>;
+  readonly access: RepositoryAccess;
+} {
+  const target: RepositoryTarget = {
+    selector: { namespaceId: "dim-adapter", repositoryId: "review" },
+    repositoryPath: input.repository,
+    head: { sequence: 0, protectedRef: "refs/heads/main", commit: "0".repeat(40), tree: "0".repeat(40) },
+    incarnationId: "dim-review-adapter",
+    authorityEpoch: "0".repeat(64),
+    policyDigest: "0".repeat(64),
+    ownerPrincipalId: "dim-review-adapter",
+    refPolicyRevision: "0".repeat(64),
+    policy: {
+      schemaVersion: 1,
+      protectedRef: "refs/heads/main",
+      policyRevision: "0".repeat(64),
+      extensions: {},
+    },
+  };
+  return {
+    reader: createGitRepositoryReadService({
+      runtime: { gitExecutable: input.gitExecutable },
+      gitIdentity: input.gitIdentity,
+    }),
+    access: { principalId: "dim-review-adapter", target },
+  };
 }

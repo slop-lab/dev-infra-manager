@@ -13,7 +13,7 @@ import {
   createAuthoritativeNativeReviewEnvelope,
   type AuthoritativeNativeReviewEnvelope
 } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-schema.js";
-import * as storage from "../../../../packages/control-plane/plugins/git-review/src/review-record-storage.js";
+import * as storage from "../../../../packages/gs/review/src/review-record-storage.js";
 import { installBodyReadCounter } from "./verifiedReviewSourceReadCounter.js";
 
 const roots: string[] = [];

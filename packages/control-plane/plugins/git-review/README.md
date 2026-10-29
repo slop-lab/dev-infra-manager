@@ -6,6 +6,11 @@ plugin. It starts no workspace or CI worker and does not require a workflow
 compiler. Installing or configuring it does not enable protected-ref promotion;
 the separately selected merge-policy plugin owns that operation.
 
+The canonical review contracts and engine are owned by
+`@slop-lab/gs-review-contracts` and `@slop-lab/gs-review`. This package is the
+DIM adapter for activation, credentials, HTTP/CLI, raw proposal acquisition and
+Project mapping; its persisted paths and digest bytes remain unchanged.
+
 Install with `dim installer install control-plane plugin
 @slop-lab/dim-control-plane-plugin-git-review`. Select it alongside the Git
 repositories plugin in the private control-plane runtime configuration. Its

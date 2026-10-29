@@ -62,8 +62,12 @@
     "access": "public"
   },
   "dependencies": {
+    "@slop-lab/gs-repository": "workspace:0.10.0",
+    "@slop-lab/gs-repository-contracts": "workspace:0.10.0",
+    "@slop-lab/gs-repository-service": "workspace:0.10.0",
+    "@slop-lab/gs-review-contracts": "workspace:0.10.0",
+    "@slop-lab/gs-review": "workspace:0.10.0",
     "zod": "4.6.6",
-    "@slop-lab/dim-contracts-git": "workspace:0.10.0",
     "jsonc-parser": "3.3.1"
   },
   "devDependencies": {

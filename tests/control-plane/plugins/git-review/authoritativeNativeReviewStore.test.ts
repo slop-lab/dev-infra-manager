@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createAuthoritativeNativeReviewEnvelope, type AuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-schema.js";
 import { assertAuthoritativeNativeReviewStore, readAuthoritativeNativeReviewEnvelopes, saveAuthoritativeNativeReviewEnvelope } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review-store.js";
-import * as storage from "../../../../packages/control-plane/plugins/git-review/src/review-record-storage.js";
+import * as storage from "../../../../packages/gs/review/src/review-record-storage.js";
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
