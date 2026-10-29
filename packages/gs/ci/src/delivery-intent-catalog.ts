@@ -63,6 +63,15 @@ export async function initializeCatalogDeliveryIntents(directory: string): Promi
   await refreshCatalog(catalog, false);
 }
 
+export function releaseCatalogDeliveryIntents(directory: string): void {
+  const key = resolve(directory), catalog = catalogs.get(key);
+  if (catalog === undefined) return;
+  for (const retained of catalog.retainedPublications.values()) retained.reservation.release();
+  catalogCapacity.remove(catalog.entries.size,
+    [...catalog.entries.values()].reduce((bytes, entry) => bytes + entry.bytes, 0));
+  catalogs.delete(key);
+}
+
 export function assertCatalogDeliveryIntentDirectoryCreation(directory: string): void {
   if (catalogs.has(resolve(directory))) {
     throw new DeliveryIntentCatalogError(

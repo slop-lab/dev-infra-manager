@@ -1,4 +1,5 @@
 import type { CiDeliveryPublicationFaults } from "./delivery-publication.js";
+import { join } from "node:path";
 import {
   acknowledgeAuthoritativeNativeDelivery,
   auditAuthoritativeNativeDeliveryOutbox,
@@ -7,6 +8,7 @@ import {
   type AuthoritativeNativePendingDelivery,
 } from "./authoritative-native-delivery-store.js";
 import { authoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
+import { releaseCatalogDeliveryIntents } from "./delivery-intent-catalog.js";
 
 export type CiDeliveryReceipt = {
   readonly serviceId: string;
@@ -55,14 +57,20 @@ export async function createCiDeliveryDispatcher(options: CiDeliveryDispatcherOp
     request: options.requestTimeoutMilliseconds ?? 5_000,
   };
   const binding = authoritativeNativeDeliveryBinding(options.serviceId, options.destination, options.eventCodec);
+  const ownedRepositories = new Set<string>();
+  const repositories = async (): Promise<readonly string[]> => {
+    const selected = await options.repositories();
+    for (const repository of selected) ownedRepositories.add(repository);
+    return selected;
+  };
   if (Object.values(timing).some((value) => !Number.isInteger(value) || value < 1 || value > 30_000)
     || timing.minimum > timing.maximum) {
     throw new CiDeliveryError("CI delivery timing is invalid");
   }
   await options.serialize(async () => {
-    await Promise.all((await options.repositories()).map((repository) =>
+    await Promise.all((await repositories()).map((repository) =>
       auditAuthoritativeNativeDeliveryOutbox(repository, binding, options.generationId)));
-    await pendingDelivery(options, binding);
+    await pendingDelivery(options, binding, await repositories());
   });
   const shutdown = new AbortController();
   let task: Promise<void> | undefined;
@@ -89,6 +97,9 @@ export async function createCiDeliveryDispatcher(options: CiDeliveryDispatcherOp
       shutdown.abort();
       wakeCurrent?.();
       await task;
+      for (const repository of ownedRepositories) {
+        releaseCatalogDeliveryIntents(join(repository, "dim-git-ci-deliveries", "intents"));
+      }
       if (failure !== undefined) throw failure;
     },
   };
@@ -97,7 +108,9 @@ export async function createCiDeliveryDispatcher(options: CiDeliveryDispatcherOp
     let retry = timing.minimum;
     while (!shutdown.signal.aborted) {
       try {
-        const pending = await options.serialize(() => pendingDelivery(options, binding));
+        const pending = await options.serialize(async () => pendingDelivery(
+          options, binding, await repositories(),
+        ));
         if (pending === undefined) {
           await wait(timing.idle);
           continue;
@@ -163,8 +176,9 @@ export async function createCiDeliveryDispatcher(options: CiDeliveryDispatcherOp
 async function pendingDelivery(
   options: CiDeliveryDispatcherOptions,
   binding: ReturnType<typeof authoritativeNativeDeliveryBinding>,
+  repositories: readonly string[],
 ): Promise<Pending | undefined> {
-  const candidates = await Promise.all((await options.repositories()).map(async (repository) => {
+  const candidates = await Promise.all(repositories.map(async (repository) => {
     const delivery = (await readPendingAuthoritativeNativeDeliveries(repository, 1, binding, options.generationId))[0];
     return delivery === undefined ? undefined : { repository, delivery };
   }));

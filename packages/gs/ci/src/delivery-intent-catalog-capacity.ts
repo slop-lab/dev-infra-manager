@@ -50,6 +50,14 @@ export class DeliveryIntentCatalogCapacity {
     this.#reservedBytes -= bytes;
   }
 
+  remove(entries: number, bytes: number): void {
+    if (entries < 0 || bytes < 0 || entries > this.#entries || bytes > this.#bytes) {
+      throw new DeliveryIntentCatalogCapacityError("delivery intent catalog removal is invalid");
+    }
+    this.#entries -= entries;
+    this.#bytes -= bytes;
+  }
+
   private assertWithinLimits(entries: number, bytes: number): void {
     if (entries > this.#maximumEntries || bytes > this.#maximumBytes) {
       throw new DeliveryIntentCatalogCapacityError(

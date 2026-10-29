@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { cp, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { dimDeliveryBinding as authoritativeNativeDeliveryBinding } from "../../../support/dimCi.js";
@@ -108,6 +108,9 @@ it("validates every small intent record before filtering inactive generations", 
   // Given
   const fixture = await nativeBundleReviewFixture("selective-intent-invalid-inactive");
   const repository = rootRepository(fixture.root);
+  expect(await readPendingAuthoritativeNativeDeliveries(
+    repository, 10, binding, generationId,
+  )).not.toEqual([]);
   await closeFinalizeService(fixture.service);
   const intentDirectory = join(repository, "dim-git-ci-deliveries", "intents");
   const intentName = (await readdir(intentDirectory)).sort()[0];
@@ -117,7 +120,14 @@ it("validates every small intent record before filtering inactive generations", 
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new SelectiveIntentFixtureError("intent fixture is invalid");
   }
+  const directoryBefore = await stat(intentDirectory, { bigint: true });
+  const recordBefore = await stat(intentPath, { bigint: true });
   await writeFile(intentPath, `${JSON.stringify({ ...value, serviceId: "INVALID" })}\n`, { mode: 0o600 });
+  const directoryAfter = await stat(intentDirectory, { bigint: true });
+  const recordAfter = await stat(intentPath, { bigint: true });
+  expect({ mtimeNs: directoryAfter.mtimeNs, ctimeNs: directoryAfter.ctimeNs })
+    .toEqual({ mtimeNs: directoryBefore.mtimeNs, ctimeNs: directoryBefore.ctimeNs });
+  expect(recordAfter.size).not.toBe(recordBefore.size);
 
   // When / Then
   await expect(readPendingAuthoritativeNativeDeliveries(
