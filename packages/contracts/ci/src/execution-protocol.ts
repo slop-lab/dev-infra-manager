@@ -1,8 +1,11 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
-import { candidateExecutionDescriptorSchema, executionProfileFields } from "./candidate-execution-schema.js";
-import { descriptorDigest } from "./candidate-execution.js";
-import { authoritativeNativeReviewEventSchema } from "./events.js";
+import {
+  candidateExecutionDescriptorDigest,
+  candidateExecutionDescriptorSchema,
+  executionProfileFields,
+  reviewJobAvailableEventSchema
+} from "@slop-lab/gs-ci-contracts";
 
 /** Ephemeral candidate reads allow a 30-second Git operation plus authority admission.
  * Workers refresh before half the lifetime remains; every HTTP request still
@@ -12,9 +15,9 @@ export const executionCandidateLeaseLifetimeMilliseconds = 120_000;
 export const executionCandidateLeaseMinimumRemainingMilliseconds = 60_000;
 
 export const executionDescriptorSchema = candidateExecutionDescriptorSchema;
-export const executionDescriptorDigest = descriptorDigest;
+export const executionDescriptorDigest = candidateExecutionDescriptorDigest;
 export type ExecutionDescriptor = z.infer<typeof executionDescriptorSchema>;
-export const executionEventSchema = authoritativeNativeReviewEventSchema;
+export const executionEventSchema = reviewJobAvailableEventSchema;
 export type ExecutionEvent = z.infer<typeof executionEventSchema>;
 export const executionProfileSchema = z.object({ runnerBaseImage: executionProfileFields.runnerBaseImage,
   jobBaseImage: executionProfileFields.jobBaseImage,
@@ -31,7 +34,7 @@ export const executionGrantSchema = executionGrantRequestSchema.unwrap().extend(
   descriptorDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/)
 }).strict().readonly().superRefine((grant, context) => {
   const descriptor = grant.descriptor;
-  if (grant.descriptorDigest !== descriptorDigest(descriptor)
+  if (grant.descriptorDigest !== candidateExecutionDescriptorDigest(descriptor)
     || descriptor.projectId !== grant.event.projectId || descriptor.repositoryId !== grant.event.repositoryId
     || !isDeepStrictEqual(descriptor.inputs, grant.event.inputs) || descriptor.jobName !== grant.event.jobName
     || descriptor.generationId !== grant.generationId

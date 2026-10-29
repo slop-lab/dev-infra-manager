@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { nativeImportedRootPolicySchema, nativeRepositoryPolicyRevision } from "./policy.js";
+import { repositoryPolicyRevision, repositoryPolicySchema } from "@slop-lab/gs-repository-contracts";
 
 export const nativeGitProjectCatalogMaximumProjects = 1_024;
 export const nativeGitProjectAttachmentMaximumRepositories = 64;
@@ -64,8 +64,8 @@ export const nativeGitProjectAttachmentSchema = z.object({
   repositories: z.array(z.object({
     repositoryId: identifier,
     importReceipt: nativeGitRootImportReceiptSchema,
-    importedPolicy: nativeImportedRootPolicySchema,
-    effectivePolicy: nativeImportedRootPolicySchema,
+    importedPolicy: repositoryPolicySchema,
+    effectivePolicy: repositoryPolicySchema,
     currentHead
   }).strict().readonly()).min(1).max(nativeGitProjectAttachmentMaximumRepositories).readonly()
 }).strict().superRefine((attachment, context) => {
@@ -91,8 +91,8 @@ export const nativeGitProjectAttachmentSchema = z.object({
     if (receipt.policyDigest !== importedDigest || head.policyDigest !== effectiveDigest) {
       context.addIssue({ code: "custom", message: "native Git Project attachment policy digest is inconsistent" });
     }
-    if (repository.importedPolicy.policyRevision !== nativeRepositoryPolicyRevision(repository.importedPolicy)
-      || repository.effectivePolicy.policyRevision !== nativeRepositoryPolicyRevision(repository.effectivePolicy)) {
+    if (repository.importedPolicy.policyRevision !== repositoryPolicyRevision(repository.importedPolicy)
+      || repository.effectivePolicy.policyRevision !== repositoryPolicyRevision(repository.effectivePolicy)) {
       context.addIssue({ code: "custom", message: "native Git Project attachment policy revision is inconsistent" });
     }
   }

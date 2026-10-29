@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { executionGrantSchema, type ExecutionEvent, type ExecutionGrant } from "../../../packages/contracts/ci/src/execution-protocol.js";
-import { descriptorDigest } from "../../../packages/contracts/ci/src/candidate-execution.js";
+import { candidateExecutionDescriptorDigest as descriptorDigest } from "../../../packages/gs/ci-contracts/src/index.js";
 import type { ExecutionAssignment, WorkerSlot } from "../../../packages/contracts/ci/src/aggregate.js";
 export const generation = "a".repeat(64);
 export const slot: WorkerSlot = { id: "primary", kind: "ordinary-sysbox", profile: {

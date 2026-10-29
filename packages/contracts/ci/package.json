@@ -26,15 +26,6 @@
       "import": "./dist/execution-protocol.js",
       "default": "./dist/execution-protocol.js"
     },
-    "./review-status": {
-      "dim-source": {
-        "types": "./src/review-status.ts",
-        "default": "./src/review-status.ts"
-      },
-      "types": "./dist/review-status.d.ts",
-      "import": "./dist/review-status.js",
-      "default": "./dist/review-status.js"
-    },
     "./aggregate": {
       "dim-source": {
         "types": "./src/aggregate.ts",
@@ -88,33 +79,6 @@
       "types": "./dist/workflow-plugin-api.d.ts",
       "import": "./dist/workflow-plugin-api.js",
       "default": "./dist/workflow-plugin-api.js"
-    },
-    "./descriptor": {
-      "dim-source": {
-        "types": "./src/candidate-execution-schema.ts",
-        "default": "./src/candidate-execution-schema.ts"
-      },
-      "types": "./dist/candidate-execution-schema.d.ts",
-      "import": "./dist/candidate-execution-schema.js",
-      "default": "./dist/candidate-execution-schema.js"
-    },
-    "./digest": {
-      "dim-source": {
-        "types": "./src/candidate-execution.ts",
-        "default": "./src/candidate-execution.ts"
-      },
-      "types": "./dist/candidate-execution.d.ts",
-      "import": "./dist/candidate-execution.js",
-      "default": "./dist/candidate-execution.js"
-    },
-    "./events": {
-      "dim-source": {
-        "types": "./src/events.ts",
-        "default": "./src/events.ts"
-      },
-      "types": "./dist/events.d.ts",
-      "import": "./dist/events.js",
-      "default": "./dist/events.js"
     }
   },
   "repository": {
@@ -133,6 +97,7 @@
     "node": "^24.0.0 || ^26.0.0"
   },
   "dependencies": {
+    "@slop-lab/gs-ci-contracts": "workspace:0.10.0",
     "zod": "4.6.6",
     "@slop-lab/dim-contracts-execution": "workspace:0.10.0"
   },

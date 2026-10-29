@@ -1,7 +1,7 @@
 {
   "name": "@slop-lab/dim-contracts-git",
   "version": "0.10.0",
-  "description": "Neutral repository selectors, snapshots and trusted import policy declarations",
+  "description": "DIM-owned Git Project attachment and admission HTTP contracts",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -48,6 +48,7 @@
     "typescript": "5.8.3"
   },
   "dependencies": {
+    "@slop-lab/gs-repository-contracts": "workspace:0.10.0",
     "zod": "4.6.6"
   }
 }

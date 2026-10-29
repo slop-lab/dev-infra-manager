@@ -1,8 +1,8 @@
-# DIM Git contracts
+# DIM Git integration contracts
 
-Shared immutable repository selectors, canonical trusted-policy digests and
-strict snapshot declarations. Feature policy sections belong to their plugins.
-The `/http` export provides bounded HTTP(S) transport for Git service clients.
+DIM-owned Project discovery/attachment DTOs and bounded HTTP(S) admission
+transport. Portable repository selectors, snapshots, policy digests and
+candidate-ref classification live in `@slop-lab/gs-repository-contracts`.
 This package starts no services and loads no feature implementations.
 
 Project discovery and attachment DTOs distinguish authority-owned repository
