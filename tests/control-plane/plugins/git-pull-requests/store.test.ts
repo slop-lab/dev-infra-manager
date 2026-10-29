@@ -2,12 +2,11 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, mkdir, symlink, stat, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { parsePullRequest } from "@slop-lab/gs-pull-requests";
-import * as repositorySdk from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
-import { PullRequestStore } from "../../../../packages/control-plane/plugins/git-pull-requests/src/store.js";
+import { PullRequestStore } from "@slop-lab/gs-pull-request-service";
 const roots: string[] = [];
-afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 async function directory() { const root = await mkdtemp(join(tmpdir(), "git-pr-store-")); roots.push(root); return root; }
 it("durably isolates repositories and rejects path or symlink escape", async () => {
   const root = await directory(); const store = new PullRequestStore(root);
@@ -47,15 +46,16 @@ it("rejects an oversized UTF-8 record before replacing the readable previous ver
   expect(await readdir(join(root, "project", "main"))).toEqual([`${record.id}.json`]);
 });
 it("publishes no owner record if an ancestor directory cannot be synced and safely retries", async () => {
-  const root = await directory(); const store = new PullRequestStore(root); const record = value();
-  const original = repositorySdk.syncDirectory;
-  const failure = vi.spyOn(repositorySdk, "syncDirectory").mockImplementation(async (path) => {
-    if (path === root) throw new Error("ancestor sync failed");
-    await original(path);
+  const root = await directory();
+  let failed = false;
+  const store = new PullRequestStore(root, async (path) => {
+    if (path === root && !failed) { failed = true; throw new Error("ancestor sync failed"); }
+    const handle = await import("node:fs/promises").then(({ open }) => open(path, "r"));
+    try { await handle.sync(); } finally { await handle.close(); }
   });
+  const record = value();
   await expect(store.save("project", "main", record)).rejects.toThrow(/ancestor sync/);
   expect(await store.list("project", "main")).toEqual([]);
-  failure.mockRestore();
   await store.save("project", "main", record);
   expect(await new PullRequestStore(root).read("project", "main", record.id)).toEqual(record);
 });

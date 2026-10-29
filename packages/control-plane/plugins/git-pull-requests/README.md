@@ -1,7 +1,8 @@
 # Git pull requests control-plane plugin
 
 Repository conversations, independent of immutable Git review and approval
-records. Requires Git repositories, repository access, and Git review services.
+records. Requires Git repositories and repository access. Git review is optional:
+the `/review` operation is available only when a review service is composed.
 The separate Git discussions plugin adds comment mutation routes.
 The initial access adapter reuses configured human reviewers and permits only
 repositories whose policy names that identity. Agent workspace credentials and
@@ -39,6 +40,9 @@ with those APIs for approve, revoke and merge; the PR service does not gain
 human-decision or promoter credentials. Zero-human-policy merge never fabricates
 approval and still requires successful current DIM CI when policy selects it.
 
+The lifecycle, durable store and pin algorithm are owned by
+`@slop-lab/gs-pull-request-service`; this package maps DIM authentication,
+transport, extension state and Project selectors to its neutral constructor.
 The plugin declares exact immutable revision refs under
 `refs/dim/extensions/git-pull-requests/`. It saves a durable owner record before
 creating each pin. Git repository proofs accept only the names and commits in

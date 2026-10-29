@@ -38,20 +38,22 @@
     "access": "public"
   },
   "dependencies": {
+    "@slop-lab/gs-repository-contracts": "workspace:0.10.0",
     "@slop-lab/gs-discussions": "workspace:0.10.0",
     "@slop-lab/gs-pull-requests": "workspace:0.10.0",
+    "@slop-lab/gs-pull-request-service": "workspace:0.10.0",
+    "@slop-lab/gs-repository-service": "workspace:0.10.0",
+    "@slop-lab/gs-review-contracts": "workspace:0.10.0",
     "zod": "4.6.6"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
     "typescript": "5.8.3",
     "@slop-lab/dim-control-plane-core": "workspace:0.10.0",
-    "@slop-lab/dim-control-plane-plugin-git-repositories": "workspace:0.10.0",
-    "@slop-lab/dim-control-plane-plugin-git-review": "workspace:0.10.0"
+    "@slop-lab/dim-control-plane-plugin-git-repositories": "workspace:0.10.0"
   },
   "peerDependencies": {
     "@slop-lab/dim-control-plane-core": "0.10.0",
-    "@slop-lab/dim-control-plane-plugin-git-repositories": "0.10.0",
-    "@slop-lab/dim-control-plane-plugin-git-review": "0.10.0"
+    "@slop-lab/dim-control-plane-plugin-git-repositories": "0.10.0"
   }
 }
