@@ -8,13 +8,14 @@ import { afterEach, expect, it } from "vitest";
 import { repositoryPolicyRevision } from "../../../packages/gs/repository-contracts/src/index.js";
 import { assertGitVersion, initializeRepository } from "../../../packages/gs/repository/src/index.js";
 import { openRepositoryAuthority } from "../../../packages/gs/repository-service/src/index.js";
-import { createGitRepositoryReadService } from "../../../packages/gs/review/src/index.js";
+import { createGitRepositoryReadService } from "../../../packages/gs/repository-service/src/index.js";
 import { createDiffService } from "../../../packages/gs/diff-service/src/index.js";
 import { createBlameService } from "../../../packages/gs/blame-service/src/index.js";
 import { openPullRequestService } from "../../../packages/gs/pull-request-service/src/index.js";
 import { createDiscussionsService } from "../../../packages/gs/discussions-service/src/index.js";
 import { createNodeGitSyncTransport, createSyncService, gitSyncPolicyOwner } from "../../../packages/gs/sync/src/index.js";
 import { currentRevision } from "../../../packages/gs/pull-requests/src/index.js";
+import { createReviewEnvelope } from "../../../packages/gs/review-contracts/src/index.js";
 
 const execute = promisify(execFile);
 const roots: string[] = [];
@@ -92,6 +93,78 @@ it("creates, edits, refreshes and discusses a pull request without review", asyn
   await authority.close();
 });
 
+it.each(["mismatch", "race"] as const)("rejects review when the provider returns a %s", async (mode) => {
+  // Given
+  const fixture = await repositoryFixture();
+  const authority = await registeredAuthority(fixture);
+  const reader = createGitRepositoryReadService({ runtime: fixture.runtime, gitIdentity: fixture.gitIdentity });
+  await writeFile(join(fixture.source, "README.md"), "raced\n");
+  await git(["-C", fixture.source, "commit", "-am", "raced"]);
+  const racedCommit = await git(["-C", fixture.source, "rev-parse", "HEAD"]);
+  const racedTree = await git(["-C", fixture.source, "rev-parse", "HEAD^{tree}"]);
+  await git(["--git-dir", fixture.repository, "fetch", fixture.source, `${racedCommit}:refs/heads/raced`]);
+  const principal = { principalId: "author", async authorize() {} };
+  const pullRequests = openPullRequestService({
+    stateDirectory: join(fixture.root, "review-pull-requests"), readGate: authority, mutationGate: authority, reader,
+    refWriter: { async ensure(input) { await git(["--git-dir", input.access.target.repositoryPath, "update-ref", input.ref, input.commit]); } },
+    reviewRequest: { async request({ request }) {
+      const candidateCommit = mode === "mismatch" ? racedCommit : fixture.headCommit;
+      const candidateTree = mode === "mismatch" ? racedTree : await git(["--git-dir", fixture.repository, "rev-parse", `${fixture.headCommit}^{tree}`]);
+      if (mode === "race") await git(["--git-dir", fixture.repository, "update-ref", "refs/heads/feature", racedCommit]);
+      return createReviewEnvelope({
+        identity: { schemaVersion: 1, namespaceId: request.namespaceId, repositoryId: request.repositoryId,
+          inputs: { [request.repositoryId]: { commit: candidateCommit, tree: candidateTree } }, protectedRef: request.protectedRef ?? "refs/heads/main",
+          proposalRef: request.proposalRef, expectedProtectedHead: fixture.baseCommit, candidateCommit, candidateTree,
+          policyRevision: fixture.policy.policyRevision, requiredReviewRevision: "a".repeat(64), requiredReviewerIds: [], changes: [], patch: "", patchBytes: "" },
+        policyDigest: "b".repeat(64), attachments: [], createdAt: new Date().toISOString(),
+      });
+    } },
+  });
+  const created = await pullRequests.create({ ...fixture.selector, principal, title: "Reviewed PR", sourceRef: "refs/heads/feature" });
+
+  // When
+  const review = pullRequests.requestReview({ ...fixture.selector, principal, requestId: created.id, expectedVersion: created.version });
+
+  // Then
+  await expect(review).rejects.toThrow(mode === "mismatch" ? /match/i : /stale/i);
+  await authority.close();
+});
+
+it("keeps release pull request review and merged refresh bound to release", async () => {
+  // Given
+  const fixture = await repositoryFixture({}, true);
+  const authority = await registeredAuthority(fixture, [], [{ name: "test-promotion", revision: "e".repeat(64), async authorize() {} }]);
+  const reader = createGitRepositoryReadService({ runtime: fixture.runtime, gitIdentity: fixture.gitIdentity });
+  const principal = { principalId: "author", async authorize() {} };
+  const pullRequests = openPullRequestService({
+    stateDirectory: join(fixture.root, "release-pull-requests"), readGate: authority, mutationGate: authority, reader,
+    refWriter: { async ensure(input) { await git(["--git-dir", input.access.target.repositoryPath, "update-ref", input.ref, input.commit]); } },
+    reviewRequest: { async request({ access, request }) {
+      const candidateTree = await reader.readCommitTree({ principalId: principal.principalId, target: access.target }, fixture.headCommit);
+      return createReviewEnvelope({ identity: { schemaVersion: 1, namespaceId: request.namespaceId, repositoryId: request.repositoryId,
+        inputs: { [request.repositoryId]: { commit: fixture.headCommit, tree: candidateTree } }, protectedRef: request.protectedRef ?? "refs/heads/main",
+        proposalRef: request.proposalRef, expectedProtectedHead: fixture.baseCommit, candidateCommit: fixture.headCommit, candidateTree,
+        policyRevision: fixture.policy.policyRevision, requiredReviewRevision: "a".repeat(64), requiredReviewerIds: [], changes: [], patch: "", patchBytes: "" },
+        policyDigest: "b".repeat(64), attachments: [], createdAt: new Date().toISOString() });
+    } },
+  });
+  const created = await pullRequests.create({ ...fixture.selector, principal, title: "Release PR", sourceRef: "refs/heads/feature", targetRef: "refs/heads/release" });
+
+  // When
+  const reviewed = await pullRequests.requestReview({ ...fixture.selector, principal, requestId: created.id, expectedVersion: created.version });
+  await authority.promote({ ...fixture.selector, protectedRef: "refs/heads/release", proposalRef: "refs/heads/feature",
+    expectedCommit: fixture.baseCommit, candidateCommit: fixture.headCommit, candidateTree: fixture.headTree,
+    authorizationId: "c".repeat(64), evidenceDigest: "d".repeat(64) });
+  const refreshed = await pullRequests.refresh({ ...fixture.selector, principal, requestId: created.id, expectedVersion: created.version });
+
+  // Then
+  expect(reviewed.review.review.protectedRef).toBe("refs/heads/release");
+  expect(refreshed.state).toBe("merged");
+  expect(await git(["--git-dir", fixture.repository, "rev-parse", "refs/heads/release"])).toBe(fixture.headCommit);
+  expect(await git(["--git-dir", fixture.repository, "rev-parse", "refs/heads/main"])).toBe(fixture.baseCommit);
+  await authority.close();
+});
+
 it("fetches, proposes and publishes without CI or review", async () => {
   // Given
   const root = await mkdtemp(join(tmpdir(), "gs-sync-service-"));
@@ -126,15 +199,16 @@ it("fetches, proposes and publishes without CI or review", async () => {
 });
 
 async function registeredAuthority(fixture: Awaited<ReturnType<typeof repositoryFixture>>,
-  policySectionOwners: Parameters<typeof openRepositoryAuthority>[0]["policySectionOwners"] = []) {
+  policySectionOwners: Parameters<typeof openRepositoryAuthority>[0]["policySectionOwners"] = [],
+  refUpdatePolicies: Parameters<typeof openRepositoryAuthority>[0]["refUpdatePolicies"] = []) {
   const authority = await openRepositoryAuthority({ statePath: join(fixture.root, "authority.sqlite3"), runtime: fixture.runtime,
-    gitIdentity: fixture.gitIdentity, refUpdatePolicies: [], policySectionOwners });
+    gitIdentity: fixture.gitIdentity, refUpdatePolicies, policySectionOwners });
   await authority.registerRepository({ selector: fixture.selector, ownerPrincipalId: "owner", policy: fixture.policy,
-    branches: [{ protectedRef: "refs/heads/main", commit: fixture.baseCommit, tree: fixture.baseTree }] });
+    branches: fixture.branches });
   return authority;
 }
 
-async function repositoryFixture(extensions: Readonly<Record<string, unknown>> = {}) {
+async function repositoryFixture(extensions: Readonly<Record<string, unknown>> = {}, multiBranch = false) {
   const root = await mkdtemp(join(tmpdir(), "gs-optional-services-"));
   roots.push(root);
   const storageRoot = join(root, "storage");
@@ -153,14 +227,19 @@ async function repositoryFixture(extensions: Readonly<Record<string, unknown>> =
   await writeFile(join(source, "README.md"), "head\n");
   await git(["-C", source, "commit", "-am", "head"]);
   const headCommit = await git(["-C", source, "rev-parse", "HEAD"]);
+  const headTree = await git(["-C", source, "rev-parse", "HEAD^{tree}"]);
   const gitVersion = (await git(["--version"])).replace(/^git version /, "");
   const runtime = { gitExecutable: "/usr/bin/git", gitVersion, storageRoot };
   await initializeRepository(runtime, selector);
-  await git(["--git-dir", repository, "fetch", source, `${baseCommit}:refs/heads/main`, `${headCommit}:refs/heads/feature`]);
-  const policyBase = { schemaVersion: 1 as const, protectedRef: "refs/heads/main", extensions };
+  await git(["--git-dir", repository, "fetch", source, `${baseCommit}:refs/heads/main`, `${baseCommit}:refs/heads/release`, `${headCommit}:refs/heads/feature`]);
+  const managedBranches = multiBranch ? { defaultRef: "refs/heads/main", branches: {
+    "refs/heads/main": { review: true }, "refs/heads/release": { review: true },
+  } } : {};
+  const policyBase = { schemaVersion: 1 as const, protectedRef: "refs/heads/main", ...managedBranches, extensions };
   return {
     root,
     source,
+    repository,
     selector,
     runtime,
     gitIdentity: await assertGitVersion(runtime),
@@ -168,6 +247,10 @@ async function repositoryFixture(extensions: Readonly<Record<string, unknown>> =
     baseCommit,
     baseTree,
     headCommit,
+    headTree,
+    branches: multiBranch
+      ? [{ protectedRef: "refs/heads/main", commit: baseCommit, tree: baseTree }, { protectedRef: "refs/heads/release", commit: baseCommit, tree: baseTree }]
+      : [{ protectedRef: "refs/heads/main", commit: baseCommit, tree: baseTree }],
   };
 }
 

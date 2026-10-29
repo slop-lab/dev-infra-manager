@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { IncomingMessage } from "node:http";
 import type { ControlPlanePlugin } from "@slop-lab/dim-control-plane-core/plugin-api";
 import type { BorrowedRepositoryMutationAccess } from "@slop-lab/gs-repository-service";
-import type { ReviewRequest } from "@slop-lab/gs-review-contracts";
+import type { ReviewEnvelope, ReviewRequest } from "@slop-lab/gs-review-contracts";
 import {
   createGsRepositoryServiceAdapter,
   gitBytes,
@@ -187,7 +187,7 @@ function required(service: PullRequestService | undefined): PullRequestService {
 }
 
 function optionalReviewService(context: RepositoryExtensionContext): {
-  createInTransaction(access: BorrowedRepositoryMutationAccess, request: ReviewRequest): Promise<unknown>;
+  createInTransaction(access: BorrowedRepositoryMutationAccess, request: ReviewRequest): Promise<ReviewEnvelope>;
 } | undefined {
   const entry = context.extensions.find((candidate) => candidate.kind === "dim.code-review.service" && candidate.name === "default");
   if (entry === undefined || !("gs" in entry.value) || typeof entry.value.gs !== "function") return undefined;
@@ -201,7 +201,7 @@ function optionalReviewService(context: RepositoryExtensionContext): {
 
 function isReviewRuntime(value: unknown): value is {
   readonly adapter: { withBorrowedMutation<Result>(selector: ReviewRequest, operation: (access: BorrowedRepositoryMutationAccess) => Promise<Result>): Promise<Result> };
-  readonly service: { createInTransaction(access: BorrowedRepositoryMutationAccess, request: ReviewRequest): Promise<unknown> };
+  readonly service: { createInTransaction(access: BorrowedRepositoryMutationAccess, request: ReviewRequest): Promise<ReviewEnvelope> };
 } {
   return typeof value === "object" && value !== null && "adapter" in value
     && typeof value.adapter === "object" && value.adapter !== null

@@ -182,3 +182,41 @@ it("preserves rewritten source history, repairs an interrupted pin and rejects u
     expect((await fetch(endpoint, { headers: headers() })).status).toBe(200);
   } finally { await restarted?.close(); await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
 });
+
+it("keeps a release-targeted pull request bound to release through review, promotion and merged refresh", { timeout: 30_000 }, async () => {
+  // Given
+  const prepared = await Promise.all([pullRequests.configure({}), discussions.configure({}), diff.configure({}), merge.configure({ hostPromoters: [promoter] })]);
+  const f = await fixture(true, prepared.flatMap((plugin) => plugin.extensions ?? []), undefined, [reviewer, foreign], {}, {
+    defaultRef: "refs/heads/main",
+    branches: { "refs/heads/main": { review: true }, "refs/heads/release": { review: true } },
+  });
+  try {
+    await writeFile(join(f.source, "README.md"), "release candidate\n");
+    const candidate = await f.commit();
+    await git("/usr/bin/git", ["-C", f.source, "push", "origin", `HEAD:${f.proposalRef}`]);
+    const endpoint = `${f.origin}/v1/projects/project/repositories/main/pull-requests`;
+    const created = await fetch(endpoint, { method: "POST", headers: headers(), body: JSON.stringify({
+      title: "Release PR", sourceRef: f.proposalRef, targetRef: "refs/heads/release",
+    }) });
+    expect(created.status, await created.clone().text()).toBe(201);
+    let pr = parsePullRequest(await created.json());
+
+    // When
+    const reviewResponse = await fetch(`${endpoint}/${pr.id}/review`, { method: "POST", headers: headers(),
+      body: JSON.stringify({ expectedVersion: pr.version }) });
+    const reviewId = text(record(record(record(await reviewResponse.json()).review).review), "reviewId");
+    const reviewEndpoint = `${f.origin}/v1/projects/project/repositories/main/reviews/${reviewId}`;
+    await fetch(`${reviewEndpoint}/approvals`, { method: "POST", headers: headers(), body: JSON.stringify({ requestId: randomUUID() }) });
+    const promoted = await fetch(`${reviewEndpoint}/promotions`, { method: "POST", headers: { ...headers(), authorization: basic(promoter) }, body: JSON.stringify({ schemaVersion: 1 }) });
+    const refreshed = await fetch(`${endpoint}/${pr.id}/refresh`, { method: "POST", headers: headers(), body: JSON.stringify({ expectedVersion: pr.version }) });
+    pr = parsePullRequest(await refreshed.json());
+
+    // Then
+    expect(reviewResponse.status).toBe(200);
+    expect(promoted.status, await promoted.clone().text()).toBe(201);
+    expect(pr.state).toBe("merged");
+    const repository = join(f.root, "state/project/main.git");
+    expect((await git("/usr/bin/git", ["--git-dir", repository, "rev-parse", "refs/heads/release"])).stdout.trim()).toBe(candidate);
+    expect((await git("/usr/bin/git", ["--git-dir", repository, "rev-parse", "refs/heads/main"])).stdout.trim()).toBe(f.initial);
+  } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
+});
