@@ -32,6 +32,7 @@
     "build": "node ../../../../scripts/packages/clean-package-dist.ts && tsc -p tsconfig.build.json && node scripts/build-publish-package.ts"
   },
   "dependencies": {
+    "@slop-lab/gs-sync": "workspace:0.10.0",
     "zod": "4.6.6"
   },
   "peerDependencies": {
