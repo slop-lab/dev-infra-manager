@@ -24,13 +24,13 @@ async function fixture() {
       XDG_RUNTIME_DIR: path.join(root, "run"), DIM_MANAGED_STATE_ROOT: path.join(root, ".local/state/dim/managed") } };
 }
 
-async function runningFixture() {
+async function runningFixture(nodeArgs: readonly string[] = []) {
   const result = await fixture();
   const { runtime, pidPath } = result;
   const script = path.join(runtime, "node_modules/.bin/dim-host");
   await mkdir(path.dirname(script), { recursive: true });
   await writeFile(script, 'import { writeFileSync } from "node:fs"; writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid)); console.log("ready"); setInterval(() => {}, 1000);');
-  const child: ChildProcess = spawn(process.execPath, [script, "controller", "serve", "--pid-file", pidPath], {
+  const child: ChildProcess = spawn(process.execPath, [...nodeArgs, script, "controller", "serve", "--pid-file", pidPath], {
     stdio: ["ignore", "pipe", "inherit"]
   });
   cleanup.push(async () => {
@@ -52,6 +52,13 @@ describe("existing managed controller activation", () => {
     const { runtime, env } = await runningFixture();
     expect(await managedControllerIsActive(runtime, env)).toBe(true);
     expect(await managedControllerIsActive(path.join(runtime, "another-install"), env)).toBe(false);
+  });
+
+  it("recognizes its own controller after supported Node runtime options", async () => {
+    const { runtime, env } = await runningFixture([
+      "--enable-source-maps", "--conditions=dim-source", "--import", "data:text/javascript,"
+    ]);
+    expect(await managedControllerIsActive(runtime, env)).toBe(true);
   });
 
   it("automatically restarts an active installation and restores its prior runtime when readiness fails", async () => {
@@ -154,7 +161,7 @@ describe("existing managed controller activation", () => {
     const bin = path.join(root, "bin");
     await mkdir(path.dirname(unit), { recursive: true });
     await mkdir(bin);
-    await writeFile(unit, `[Service]\nExecStart="/usr/bin/node" "${runtime}/node_modules/.bin/dim-host" "controller" "serve" "--pid-file" "${pidPath}"\n`);
+    await writeFile(unit, `[Service]\nExecStart="/usr/bin/node" "--enable-source-maps" "--conditions=dim-source" "--import" "data:text/javascript," "${runtime}/node_modules/.bin/dim-host" "controller" "serve" "--pid-file" "${pidPath}"\n`);
     await writeFile(path.join(bin, "systemctl"), '#!/bin/sh\n[ "$*" = "--user is-active --quiet dim-controller.service" ]\n');
     await chmod(path.join(bin, "systemctl"), 0o755);
     expect(await managedControllerIsActive(runtime, { ...env, XDG_RUNTIME_DIR: systemdRuntime,
@@ -170,6 +177,21 @@ describe("existing managed controller activation", () => {
     await mkdir(path.dirname(unit), { recursive: true });
     await mkdir(bin);
     await writeFile(unit, `[Service]\nExecStart="/usr/bin/node" "${runtime}/lookalike.mjs" "controller" "serve" "--pid-file" "${pidPath}"\n`);
+    await writeFile(path.join(bin, "systemctl"), "#!/bin/sh\nexit 0\n");
+    await chmod(path.join(bin, "systemctl"), 0o755);
+    expect(await managedControllerIsActive(runtime, { ...env, XDG_RUNTIME_DIR: systemdRuntime,
+      PATH: `${bin}:${process.env.PATH}` })).toBe(false);
+  });
+
+  it("rejects an active systemd unit that runs Node eval code before the expected entrypoint", async () => {
+    const { root, runtime, env } = await fixture();
+    const systemdRuntime = `/run/user/${process.getuid?.()}`;
+    const pidPath = path.join(systemdRuntime, "dim/managed/controller.pid");
+    const unit = path.join(env.XDG_CONFIG_HOME, "systemd/user/dim-controller.service");
+    const bin = path.join(root, "bin");
+    await mkdir(path.dirname(unit), { recursive: true });
+    await mkdir(bin);
+    await writeFile(unit, `[Service]\nExecStart="/usr/bin/node" "--eval=setInterval(() =%3E {}, 1000)" "${runtime}/node_modules/.bin/dim-host" "controller" "serve" "--pid-file" "${pidPath}"\n`);
     await writeFile(path.join(bin, "systemctl"), "#!/bin/sh\nexit 0\n");
     await chmod(path.join(bin, "systemctl"), 0o755);
     expect(await managedControllerIsActive(runtime, { ...env, XDG_RUNTIME_DIR: systemdRuntime,

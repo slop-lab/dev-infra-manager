@@ -4,6 +4,20 @@ import { lstat, readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+const nodeOptionsWithoutValues = new Set([
+  "--enable-source-maps", "--no-warnings", "--trace-warnings", "--inspect", "--inspect-brk",
+  "--preserve-symlinks", "--preserve-symlinks-main", "--experimental-strip-types",
+  "--experimental-transform-types", "--experimental-detect-module"
+]);
+const nodeOptionsWithValues = new Set([
+  "--conditions", "--import", "--require", "--loader", "--experimental-loader",
+  "--inspect-port", "--disable-warning"
+]);
+const nodeOptionsWithAttachedValues = [
+  "--conditions=", "--import=", "--require=", "--loader=", "--experimental-loader=",
+  "--inspect=", "--inspect-brk=", "--inspect-port=", "--disable-warning="
+] as const;
+
 /** Inspect existing activation only; installing packages must not create a service. */
 export async function managedControllerIsActive(runtimeDirectory: string, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
   const uid = process.getuid?.();
@@ -50,9 +64,24 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
 }
 
 function managedControllerCommand(args: readonly string[], entrypoint: string, pidPath: string): boolean {
-  if (args[1] !== entrypoint) return false;
-  const marker = args.indexOf("--pid-file", 4);
-  return args[2] === "controller" && args[3] === "serve" && marker > 3 && args[marker + 1] === pidPath;
+  let script = 1;
+  while (script < args.length && args[script] !== entrypoint) {
+    const option = args[script];
+    if (!option) return false;
+    if (nodeOptionsWithoutValues.has(option) || nodeOptionsWithAttachedValues.some((prefix) => option.startsWith(prefix))) {
+      script += 1;
+      continue;
+    }
+    if (nodeOptionsWithValues.has(option) && args[script + 1] !== undefined) {
+      script += 2;
+      continue;
+    }
+    return false;
+  }
+  if (args[script] !== entrypoint) return false;
+  const marker = args.indexOf("--pid-file", script + 3);
+  return args[script + 1] === "controller" && args[script + 2] === "serve"
+    && marker > script + 2 && args[marker + 1] === pidPath;
 }
 
 function systemdExecArguments(unit: string): string[] | undefined {
