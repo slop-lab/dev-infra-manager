@@ -59,6 +59,9 @@ is implied by these source changes.
   CLI or Web with independent host-local repository defaults. Preserve existing
   selections, workspaces and immutable import evidence without reimporting source,
   changing protected refs or granting cross-authority access.
+  Detect and restart an already active managed controller from its managed
+  state/runtime identity during host updates, while retaining the independently
+  selected CLI and reconnecting existing clients.
 
 - Split managed Git into independent repository, code-review, merge-policy,
   Git CI and webhook control-plane plugins. Repository hosting no longer
