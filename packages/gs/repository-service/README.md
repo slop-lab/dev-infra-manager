@@ -10,8 +10,10 @@ transaction before validating or recovering state. A second live process cannot
 recover or cancel the first owner's pending intent. Startup fails closed for
 missing or corrupt previously owned storage.
 
-Startup is the complete integrity boundary: schema/version and singleton
-metadata, `foreign_key_check`, every catalog/baseline/policy chain, repository
+Startup is the complete integrity boundary: schema version and every trusted
+table/index definition are compared with the canonical DDL used for creation,
+including columns, keys, checks, foreign keys, indexes and `STRICT` mode.
+Singleton metadata, `foreign_key_check`, every catalog/baseline/policy chain, repository
 sequence, branch predecessor, authority epoch and journal digest are validated.
 Managed branch sets in every policy update must exactly equal the durable
 baseline set; subsets and supersets both fail. Transition JSON/digest domains are
@@ -108,6 +110,9 @@ await authority.mutate(selector, async ({ authority: borrowed, target }) => {
 The mutation authority is the typed already-exclusive capability. It exposes
 repository authority reads plus protected promotion, drains operations started
 through it before releasing the barrier, and expires when the callback finishes.
+Admission is revoked synchronously at callback exit before waiting for already
+started operations, so an escaped handle cannot add reads or promotions during
+drain.
 It is not a caller-asserted flag or untyped context object. Existing DIM
 extensions continue to use their repository mutation queue and the inward
 adapter's equivalent already-exclusive binding.
