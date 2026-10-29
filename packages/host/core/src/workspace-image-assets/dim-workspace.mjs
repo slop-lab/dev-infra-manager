@@ -242,6 +242,11 @@ async function processIdentity(pid) {
     return fields[0] === "Z" ? undefined : fields[19];
   } catch (error) { if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined; throw error; }
 }
+/** @param {number} pid @param {NodeJS.Signals} signal */
+function signalProcess(pid, signal) {
+  try { process.kill(pid, signal); return true; }
+  catch (error) { if (error instanceof Error && "code" in error && error.code === "ESRCH") return false; throw error; }
+}
 /** @param {string} name */
 async function serviceOwner(name) {
   try {
@@ -267,12 +272,12 @@ async function serviceAlive(name) {
 async function stopService(name) {
   const owner = await serviceOwner(name);
   if (!owner || !await serviceAlive(name)) return;
-  process.kill(owner.pid, "SIGTERM");
+  if (!signalProcess(owner.pid, "SIGTERM")) return;
   const deadline = Date.now() + 3000;
   while (await serviceAlive(name) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 30));
   if (await serviceAlive(name)) {
-    if (owner.childTicks === await processIdentity(owner.child)) process.kill(owner.child, "SIGKILL");
-    if (owner.ticks === await processIdentity(owner.pid)) process.kill(owner.pid, "SIGKILL");
+    if (owner.childTicks === await processIdentity(owner.child)) signalProcess(owner.child, "SIGKILL");
+    if (owner.ticks === await processIdentity(owner.pid)) signalProcess(owner.pid, "SIGKILL");
   }
 }
 /** @param {string} name */

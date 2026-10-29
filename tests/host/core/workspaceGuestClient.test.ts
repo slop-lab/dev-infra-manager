@@ -133,6 +133,29 @@ it("parallel service resumes retain one kernel guard across stale metadata recov
   } finally { await run("service", "remove", "worker").catch(() => {}); await rm(home, { recursive: true, force: true }); }
 });
 
+it("service removal accepts a supervisor that exits between identity validation and signaling", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "dim-guest-service-remove-race-"));
+  const env = { ...process.env, HOME: home };
+  const run = (...args: string[]) => execute(process.execPath, [client, ...args], { cwd: home, env });
+  try {
+    await run("service", "register", "--name", "worker", "--", process.execPath, "-e", "setInterval(()=>{},1000)");
+    await run("service", "resume");
+    const preload = path.join(home, "exit-before-signal.cjs");
+    await writeFile(preload, `
+const originalKill = process.kill;
+process.kill = function(pid, signal) {
+  if (signal === 'SIGTERM') {
+    originalKill(pid, signal);
+    const error = new Error('no such process'); error.code = 'ESRCH'; throw error;
+  }
+  return originalKill(pid, signal);
+};
+`);
+    await execute(process.execPath, ["--require", preload, client, "service", "remove", "worker"], { cwd: home, env });
+    expect(JSON.parse((await run("service", "list")).stdout)).toEqual([]);
+  } finally { await run("service", "remove", "worker").catch(() => {}); await rm(home, { recursive: true, force: true }); }
+});
+
 it("service resume tolerates owner publication between opening metadata and checking its inode", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "dim-guest-owner-publication-"));
   const env = { ...process.env, HOME: home };
