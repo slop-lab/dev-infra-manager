@@ -5,7 +5,20 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 export const packageDirectories = [
+  "packages/gs/repository-contracts/dist",
+  "packages/gs/ci-contracts/dist",
   "packages/gs/repository/dist",
+  "packages/gs/repository-service/dist",
+  "packages/gs/review-contracts/dist",
+  "packages/gs/review/dist",
+  "packages/gs/merge-policy/dist",
+  "packages/gs/ci/dist",
+  "packages/gs/diff-service/dist",
+  "packages/gs/blame-service/dist",
+  "packages/gs/pull-request-service/dist",
+  "packages/gs/discussions-service/dist",
+  "packages/gs/sync/dist",
+  "packages/gs/client/dist",
   "packages/gs/diff/dist",
   "packages/gs/discussions/dist",
   "packages/gs/blame/dist",

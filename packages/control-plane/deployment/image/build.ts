@@ -3,7 +3,10 @@ import { buildServiceImage } from "../../../../scripts/packages/build-service-im
 
 const root = resolve(import.meta.dirname, "../../../..");
 const packages = [
-  "gs/repository",
+  "gs/repository-contracts", "gs/ci-contracts", "gs/repository", "gs/repository-service",
+  "gs/review-contracts", "gs/review", "gs/merge-policy", "gs/ci",
+  "gs/diff-service", "gs/blame-service", "gs/pull-request-service",
+  "gs/discussions-service", "gs/sync",
   "control-plane/core", "control-plane/admin", "control-plane/deployment",
   "control-plane/plugins/git-repositories", "control-plane/plugins/git-review",
   "control-plane/plugins/git-merge-policy", "control-plane/plugins/git-ci",

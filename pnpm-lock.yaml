@@ -32,6 +32,9 @@ importers:
       '@slop-lab/dim-contracts-execution':
         specifier: workspace:0.10.0
         version: link:../execution
+      '@slop-lab/gs-ci-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../gs/ci-contracts
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -79,6 +82,9 @@ importers:
 
   packages/contracts/git:
     dependencies:
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../gs/repository-contracts
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -293,12 +299,15 @@ importers:
 
   packages/control-plane/plugins/git-blame:
     dependencies:
-      '@slop-lab/dim-contracts-git':
-        specifier: workspace:0.10.0
-        version: link:../../../contracts/git
       '@slop-lab/gs-blame':
         specifier: workspace:0.10.0
         version: link:../../../gs/blame
+      '@slop-lab/gs-blame-service':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/blame-service
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-contracts
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -327,6 +336,18 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
+      '@slop-lab/gs-ci':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/ci
+      '@slop-lab/gs-ci-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/ci-contracts
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-service
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -349,12 +370,15 @@ importers:
 
   packages/control-plane/plugins/git-diff:
     dependencies:
-      '@slop-lab/dim-contracts-git':
-        specifier: workspace:0.10.0
-        version: link:../../../contracts/git
       '@slop-lab/gs-diff':
         specifier: workspace:0.10.0
         version: link:../../../gs/diff
+      '@slop-lab/gs-diff-service':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/diff-service
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-contracts
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -377,6 +401,12 @@ importers:
       '@slop-lab/gs-discussions':
         specifier: workspace:0.10.0
         version: link:../../../gs/discussions
+      '@slop-lab/gs-discussions-service':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/discussions-service
+      '@slop-lab/gs-pull-request-service':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/pull-request-service
       '@slop-lab/gs-pull-requests':
         specifier: workspace:0.10.0
         version: link:../../../gs/pull-requests
@@ -408,6 +438,21 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
+      '@slop-lab/gs-merge-policy':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/merge-policy
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-service
+      '@slop-lab/gs-review':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/review
+      '@slop-lab/gs-review-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/review-contracts
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -433,9 +478,21 @@ importers:
       '@slop-lab/gs-discussions':
         specifier: workspace:0.10.0
         version: link:../../../gs/discussions
+      '@slop-lab/gs-pull-request-service':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/pull-request-service
       '@slop-lab/gs-pull-requests':
         specifier: workspace:0.10.0
         version: link:../../../gs/pull-requests
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-service
+      '@slop-lab/gs-review-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/review-contracts
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -446,9 +503,6 @@ importers:
       '@slop-lab/dim-control-plane-plugin-git-repositories':
         specifier: workspace:0.10.0
         version: link:../git-repositories
-      '@slop-lab/dim-control-plane-plugin-git-review':
-        specifier: workspace:0.10.0
-        version: link:../git-review
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -464,6 +518,12 @@ importers:
       '@slop-lab/gs-repository':
         specifier: workspace:0.10.0
         version: link:../../../gs/repository
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-service
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -480,9 +540,21 @@ importers:
 
   packages/control-plane/plugins/git-review:
     dependencies:
-      '@slop-lab/dim-contracts-git':
+      '@slop-lab/gs-repository':
         specifier: workspace:0.10.0
-        version: link:../../../contracts/git
+        version: link:../../../gs/repository
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-service
+      '@slop-lab/gs-review':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/review
+      '@slop-lab/gs-review-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/review-contracts
       jsonc-parser:
         specifier: 3.3.1
         version: 3.3.1
@@ -568,6 +640,9 @@ importers:
 
   packages/control-plane/plugins/git-sync:
     dependencies:
+      '@slop-lab/gs-sync':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/sync
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -633,7 +708,129 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/gs/blame-service:
+    dependencies:
+      '@slop-lab/gs-blame':
+        specifier: workspace:0.10.0
+        version: link:../blame
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../repository-service
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/ci:
+    dependencies:
+      '@slop-lab/gs-ci-contracts':
+        specifier: workspace:0.10.0
+        version: link:../ci-contracts
+      '@slop-lab/gs-repository':
+        specifier: workspace:0.10.0
+        version: link:../repository
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../repository-service
+      '@slop-lab/gs-review':
+        specifier: workspace:0.10.0
+        version: link:../review
+      '@slop-lab/gs-review-contracts':
+        specifier: workspace:0.10.0
+        version: link:../review-contracts
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/ci-contracts:
+    dependencies:
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/client:
+    dependencies:
+      '@slop-lab/gs-blame':
+        specifier: workspace:0.10.0
+        version: link:../blame
+      '@slop-lab/gs-ci-contracts':
+        specifier: workspace:0.10.0
+        version: link:../ci-contracts
+      '@slop-lab/gs-diff':
+        specifier: workspace:0.10.0
+        version: link:../diff
+      '@slop-lab/gs-discussions':
+        specifier: workspace:0.10.0
+        version: link:../discussions
+      '@slop-lab/gs-pull-requests':
+        specifier: workspace:0.10.0
+        version: link:../pull-requests
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      '@slop-lab/gs-review-contracts':
+        specifier: workspace:0.10.0
+        version: link:../review-contracts
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/gs/diff:
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/diff-service:
+    dependencies:
+      '@slop-lab/gs-diff':
+        specifier: workspace:0.10.0
+        version: link:../diff
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../repository-service
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -647,6 +844,90 @@ importers:
       zod:
         specifier: 4.6.6
         version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/discussions-service:
+    dependencies:
+      '@slop-lab/gs-diff':
+        specifier: workspace:0.10.0
+        version: link:../diff
+      '@slop-lab/gs-diff-service':
+        specifier: workspace:0.10.0
+        version: link:../diff-service
+      '@slop-lab/gs-discussions':
+        specifier: workspace:0.10.0
+        version: link:../discussions
+      '@slop-lab/gs-pull-request-service':
+        specifier: workspace:0.10.0
+        version: link:../pull-request-service
+      '@slop-lab/gs-pull-requests':
+        specifier: workspace:0.10.0
+        version: link:../pull-requests
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../repository-service
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/merge-policy:
+    dependencies:
+      '@slop-lab/gs-repository':
+        specifier: workspace:0.10.0
+        version: link:../repository
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../repository-service
+      '@slop-lab/gs-review':
+        specifier: workspace:0.10.0
+        version: link:../review
+      '@slop-lab/gs-review-contracts':
+        specifier: workspace:0.10.0
+        version: link:../review-contracts
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/pull-request-service:
+    dependencies:
+      '@slop-lab/gs-discussions':
+        specifier: workspace:0.10.0
+        version: link:../discussions
+      '@slop-lab/gs-pull-requests':
+        specifier: workspace:0.10.0
+        version: link:../pull-requests
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../repository-service
+      '@slop-lab/gs-review-contracts':
+        specifier: workspace:0.10.0
+        version: link:../review-contracts
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -746,6 +1027,82 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/gs/repository-contracts:
+    dependencies:
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/repository-service:
+    dependencies:
+      '@slop-lab/gs-repository':
+        specifier: workspace:0.10.0
+        version: link:../repository
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/review:
+    dependencies:
+      '@slop-lab/gs-repository':
+        specifier: workspace:0.10.0
+        version: link:../repository
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../repository-service
+      '@slop-lab/gs-review-contracts':
+        specifier: workspace:0.10.0
+        version: link:../review-contracts
+      jsonc-parser:
+        specifier: 3.3.1
+        version: 3.3.1
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/review-contracts:
+    dependencies:
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/gs/review-tracing:
     devDependencies:
       '@types/node':
@@ -760,6 +1117,28 @@ importers:
       '@slop-lab/gs-review-tracing':
         specifier: workspace:0.10.0
         version: link:../review-tracing
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/gs/sync:
+    dependencies:
+      '@slop-lab/gs-repository':
+        specifier: workspace:0.10.0
+        version: link:../repository
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:0.10.0
+        version: link:../repository-service
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -962,6 +1341,9 @@ importers:
       '@slop-lab/gs-pull-requests':
         specifier: workspace:0.10.0
         version: link:../../../gs/pull-requests
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../../gs/repository-contracts
       commander:
         specifier: 14.0.0
         version: 14.0.0
@@ -1099,9 +1481,6 @@ importers:
 
   packages/service-clients/native-git:
     dependencies:
-      '@slop-lab/dim-contracts-ci':
-        specifier: workspace:0.10.0
-        version: link:../../contracts/ci
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../contracts/git
@@ -1111,15 +1490,18 @@ importers:
       '@slop-lab/gs-blame':
         specifier: workspace:0.10.0
         version: link:../../gs/blame
+      '@slop-lab/gs-client':
+        specifier: workspace:0.10.0
+        version: link:../../gs/client
       '@slop-lab/gs-diff':
         specifier: workspace:0.10.0
         version: link:../../gs/diff
-      '@slop-lab/gs-discussions':
-        specifier: workspace:0.10.0
-        version: link:../../gs/discussions
       '@slop-lab/gs-pull-requests':
         specifier: workspace:0.10.0
         version: link:../../gs/pull-requests
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:0.10.0
+        version: link:../../gs/repository-contracts
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -1409,12 +1791,33 @@ importers:
       '@slop-lab/gs-blame':
         specifier: workspace:*
         version: link:../packages/gs/blame
+      '@slop-lab/gs-blame-service':
+        specifier: workspace:*
+        version: link:../packages/gs/blame-service
+      '@slop-lab/gs-ci':
+        specifier: workspace:*
+        version: link:../packages/gs/ci
+      '@slop-lab/gs-ci-contracts':
+        specifier: workspace:*
+        version: link:../packages/gs/ci-contracts
       '@slop-lab/gs-diff':
         specifier: workspace:*
         version: link:../packages/gs/diff
+      '@slop-lab/gs-diff-service':
+        specifier: workspace:*
+        version: link:../packages/gs/diff-service
       '@slop-lab/gs-discussions':
         specifier: workspace:*
         version: link:../packages/gs/discussions
+      '@slop-lab/gs-discussions-service':
+        specifier: workspace:*
+        version: link:../packages/gs/discussions-service
+      '@slop-lab/gs-merge-policy':
+        specifier: workspace:*
+        version: link:../packages/gs/merge-policy
+      '@slop-lab/gs-pull-request-service':
+        specifier: workspace:*
+        version: link:../packages/gs/pull-request-service
       '@slop-lab/gs-pull-requests':
         specifier: workspace:*
         version: link:../packages/gs/pull-requests
@@ -1424,12 +1827,30 @@ importers:
       '@slop-lab/gs-react-pull-requests':
         specifier: workspace:*
         version: link:../packages/gs/react-pull-requests
+      '@slop-lab/gs-repository':
+        specifier: workspace:*
+        version: link:../packages/gs/repository
+      '@slop-lab/gs-repository-contracts':
+        specifier: workspace:*
+        version: link:../packages/gs/repository-contracts
+      '@slop-lab/gs-repository-service':
+        specifier: workspace:*
+        version: link:../packages/gs/repository-service
+      '@slop-lab/gs-review':
+        specifier: workspace:*
+        version: link:../packages/gs/review
+      '@slop-lab/gs-review-contracts':
+        specifier: workspace:*
+        version: link:../packages/gs/review-contracts
       '@slop-lab/gs-review-tracing':
         specifier: workspace:*
         version: link:../packages/gs/review-tracing
       '@slop-lab/gs-review-tracing-node':
         specifier: workspace:*
         version: link:../packages/gs/review-tracing-node
+      '@slop-lab/gs-sync':
+        specifier: workspace:*
+        version: link:../packages/gs/sync
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3

@@ -30,6 +30,19 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
   await writeFile(resolve(root, "pnpm-lock.yaml"), fixtureLockfile);
   await writeFile(resolve(root, ".head"), `${fixtureRootCommit}\n`);
   const productionPackageDirectories = [
+    "packages/gs/repository-contracts",
+    "packages/gs/ci-contracts",
+    "packages/gs/repository-service",
+    "packages/gs/review-contracts",
+    "packages/gs/review",
+    "packages/gs/merge-policy",
+    "packages/gs/ci",
+    "packages/gs/diff-service",
+    "packages/gs/blame-service",
+    "packages/gs/pull-request-service",
+    "packages/gs/discussions-service",
+    "packages/gs/sync",
+    "packages/gs/client",
     "packages/host/core",
     "packages/control-plane/core",
     "packages/contracts/ci",
