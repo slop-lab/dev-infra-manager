@@ -3,7 +3,7 @@ import { chmod, readFile, rename, rm, symlink, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
-import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision } from "@slop-lab/gs-repository-contracts";
 import { configuredNativeGitBundleServer } from "@slop-lab/dim-control-plane-plugin-git-repositories";
 import { compareAndSwapProtectedRef, refUpdatePolicyExtension, type RefUpdatePolicy } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { fixture, basic, generationId, git, record, reviewer, text, token } from "./optionalFeaturesFixture.js";

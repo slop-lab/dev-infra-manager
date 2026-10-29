@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import {
   compareAndSwapProtectedRef,
+  finalizedProtectedRef,
   recoverProtectedRefChanges,
   type ProtectedRefPorts,
 } from "../../../../packages/gs/repository/src/protected-ref.js";
@@ -13,8 +14,6 @@ import {
   portsFor,
   ref,
   repositoryFixture,
-  type Fence,
-  type Proof,
 } from "./protectedRefBoundaryFixture.js";
 
 afterEach(cleanupRepositories);
@@ -81,8 +80,8 @@ it("rejects a journal's foreign repository receipt even when the candidate and a
   await compareAndSwapProtectedRef(ports, fixture.change);
   const accepted = journal.finalized()[0];
   if (!accepted) throw new Error("accepted fixture receipt missing");
-  const foreign: ProtectedRefPorts<Fence, Proof> = { ...ports,
-    journal: { ...ports.journal, findFinalized: () => ({ ...accepted, namespaceId: "foreign" }) } };
+  const foreign: ProtectedRefPorts = { ...ports,
+    journal: { ...ports.journal, findFinalized: () => finalizedProtectedRef({ ...accepted, namespaceId: "foreign" }) } };
   events.length = 0;
   await expect(compareAndSwapProtectedRef(foreign, fixture.change)).rejects.toThrow(/head conflicts/);
   expect(events).toEqual(["exclusive"]); expect(journal.finalized()).toHaveLength(1);
@@ -98,7 +97,7 @@ it("rejects a recovery port path outside the pending intent selector before Git 
   const intent = intentFor(fixture.change, target);
   await journal.appendIntent(intent);
   events.length = 0;
-  const mismatched: ProtectedRefPorts<Fence, Proof> = {
+  const mismatched: ProtectedRefPorts = {
     ...ports,
     targets: {
       ...ports.targets,
@@ -137,7 +136,7 @@ it("revalidates the target after policy authorization and before persisting inte
   const events: string[] = [];
   const journal = memoryJournal(events);
   const ports = portsFor(fixture, journal, events);
-  const raced: ProtectedRefPorts<Fence, Proof> = {
+  const raced: ProtectedRefPorts = {
     ...ports,
     policy: {
       async authorize({ change, target }) {
@@ -183,7 +182,7 @@ it.each(["selector", "repository path"] as const)("rejects a target proof with a
   const journal = memoryJournal(events);
   const ports = portsFor(fixture, journal, events);
   const originalTargets = ports.targets;
-  const mismatched: ProtectedRefPorts<Fence, Proof> = {
+  const mismatched: ProtectedRefPorts = {
     ...ports,
     targets: {
       ...originalTargets,

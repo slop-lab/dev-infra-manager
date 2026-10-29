@@ -104,6 +104,12 @@ resource, then closes successfully attached features in reverse order and releas
 and storage owner even when cleanup fails. Repository code imports no concrete
 review, merge, CI or webhook implementation.
 
+`createGsRepositoryServiceAdapter` maps this existing DIM runtime inward to the
+neutral GS repository-service ports. It uses fresh target proofs, a private
+target `WeakMap`, cheap selector listing, independent admitted reads and typed
+already-held mutation capabilities; read callbacks cannot promote or acquire
+the global mutation fence.
+
 ## Trusted repository policy
 
 `@slop-lab/dim-contracts-git` defines the shared policy envelope:

@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { parseManagedGitServiceConfig } from "@slop-lab/dim-control-plane-admin/service-pair";
 import { configuredManagedGitFixture, type ManagedGitFixture } from "../../../support/managed-git-service.js";
 import type { NativeGitAdmissionHttpClient as AdmissionVerifierHttpClient } from "../../../../packages/contracts/git/src/http.js";
-import type { CiDeliveryPublicationFaults } from "../../../../packages/control-plane/plugins/git-ci/src/delivery-publication.js";
+import type { CiDeliveryPublicationFaults } from "../../../../packages/gs/ci/src/delivery-publication.js";
 import type { AuthoritativeNativeReviewHooks } from "../../../../packages/control-plane/plugins/git-review/src/authoritative-native-review.js";
 import type { NativeHumanReviewerHooks } from "../../../../packages/control-plane/plugins/git-review/src/native-human-reviewer-http.js";
 import { bundleSecrets, idleNativeConfig } from "./bundleConfigFixture.js";

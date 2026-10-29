@@ -102,3 +102,5 @@ export function repositoryAccessProvider(extensions: readonly ControlPlaneExtens
 export * from "./git-read.js";
 
 export * from "./extension-refs.js";
+
+export * from "./gs-service-adapter.js";

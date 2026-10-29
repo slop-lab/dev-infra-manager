@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision } from "@slop-lab/gs-repository-contracts";
 import { isExitError } from "../../../support/gitHelpers.js";
 import { publishedReviewNames } from "../git-ci/nativeBundleReviewFixture.js";
 import {

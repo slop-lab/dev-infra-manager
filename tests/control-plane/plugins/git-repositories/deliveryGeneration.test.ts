@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it } from "vitest";
 import { acknowledgeAuthoritativeNativeDelivery, readPendingAuthoritativeNativeDeliveries,
-  recordExplicitAuthoritativeNativeDeliveryIntent, supersedeAuthoritativeNativeDelivery } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-store.js";
-import { authoritativeNativeDeliveryBinding } from "../../../../packages/control-plane/plugins/git-ci/src/authoritative-native-delivery-binding.js";
+  recordExplicitAuthoritativeNativeDeliveryIntent, supersedeAuthoritativeNativeDelivery } from "../../../../packages/gs/ci/src/authoritative-native-delivery-store.js";
+import { authoritativeNativeDeliveryBinding } from "../../../../packages/gs/ci/src/authoritative-native-delivery-binding.js";
 import { nativeBundleReviewFixture, publishedReviewEnvelopes } from "../git-ci/nativeBundleReviewFixture.js";
 import { cleanupFinalizeFixtures, generationId, rootRepository } from "./nativeRootImportFinalizeFixture.js";
 afterEach(cleanupFinalizeFixtures);

@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { assertGitExecutableIdentity, type GitExecutableIdentity } from "./repository.js";
 import { NativeRootImportBundleError } from "./native-root-import-storage.js";
 import { conventionalProtectedRefs } from "./candidate-ref-policy.js";
-import { isNativeGitLegacyProposalRef, isNativeGitOrdinaryCandidateRef } from "@slop-lab/dim-contracts-git";
+import { isLegacyProposalRef as isNativeGitLegacyProposalRef, isOrdinaryCandidateRef as isNativeGitOrdinaryCandidateRef } from "@slop-lab/gs-repository-contracts";
 
 const execute = promisify(execFile);
 const gitOptions = {

@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 import { assertNativeProjectRootImportRows } from "./native-project-root-import-state.js";
 import { readNativeProjectRootImportsFromDatabase } from "./native-project-root-import-transitions.js";
-import { isNativeGitCandidateRef } from "@slop-lab/dim-contracts-git";
+import { isCandidateRef as isNativeGitCandidateRef } from "@slop-lab/gs-repository-contracts";
 const id = z.string().regex(/^[0-9a-f]{64}$/);
 const oid = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 export const repositoryRefTransitionSchema = `CREATE TABLE repository_ref_transition (project_id TEXT NOT NULL, repository_id TEXT NOT NULL, sequence INTEGER NOT NULL CHECK(sequence > 0), transition_id TEXT NOT NULL UNIQUE, record_json TEXT NOT NULL, finalized INTEGER NOT NULL CHECK(finalized IN (0,1)), PRIMARY KEY(project_id,repository_id,sequence), FOREIGN KEY(project_id,repository_id) REFERENCES native_project_root_import(project_id,repository_id)) STRICT`;

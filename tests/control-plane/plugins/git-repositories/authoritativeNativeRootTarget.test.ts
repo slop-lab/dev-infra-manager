@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { AuthoritativeRepositoryError } from "../../../../packages/control-plane/plugins/git-repositories/src/authoritative-native-root-target.js";
 import { assertAuthoritativeNativeRepositoryTargetCurrent, resolveAuthoritativeNativeRepositoryTarget } from "../../../../packages/control-plane/plugins/git-repositories/src/authoritative-native-root-target.js";
-import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision } from "@slop-lab/gs-repository-contracts";
 import {
   authoritativePolicy,
   candidateContext,

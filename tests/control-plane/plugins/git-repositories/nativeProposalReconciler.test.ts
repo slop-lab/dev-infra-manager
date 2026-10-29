@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision } from "@slop-lab/gs-repository-contracts";
 import * as rootProofGit from "../../../../packages/control-plane/plugins/git-repositories/src/native-root-import-proof-git.js";
 import { isCandidateAbsorbed, reconcileNativeProposalRefs, reconcileRegisteredNativeProposals } from "../../../../packages/control-plane/plugins/git-review/src/native-proposal-reconciler.js";
 import {

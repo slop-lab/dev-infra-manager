@@ -11,15 +11,17 @@ import type {
   ProtectedRefPorts,
   ProtectedRefTarget,
 } from "../../../../packages/gs/repository/src/protected-ref.js";
+import {
+  finalizedProtectedRef,
+  protectedRefIntentMatchesQuery,
+} from "../../../../packages/gs/repository/src/protected-ref.js";
 import { assertGitVersion } from "../../../../packages/gs/repository/src/repository.js";
 
 const execute = promisify(execFile);
 const cleanup: string[] = [];
 const selector = { namespaceId: "tenant", repositoryId: "main" } as const;
 
-export type Fence = { readonly generationId: string; readonly importNonce: string; readonly policyDigest: string };
-export type Proof = { readonly refPolicyRevision: string };
-type Intent = ProtectedRefIntent<Fence, Proof>;
+type Intent = ProtectedRefIntent;
 
 export async function cleanupRepositories(): Promise<void> {
   await Promise.all(cleanup.splice(0).map((path) => rm(path, { recursive: true, force: true })));
@@ -76,8 +78,7 @@ export function portsFor(
   fixture: Awaited<ReturnType<typeof repositoryFixture>>,
   journal: ReturnType<typeof memoryJournal>,
   events: string[],
-): ProtectedRefPorts<Fence, Proof> {
-  const fence = { generationId: "c".repeat(64), importNonce: "00000000-0000-4000-8000-000000000001", policyDigest: "d".repeat(64) };
+): ProtectedRefPorts {
   return {
     runtime: { gitExecutable: "/usr/bin/git", storageRoot: fixture.storageRoot },
     gitIdentity: fixture.gitIdentity,
@@ -91,8 +92,11 @@ export function portsFor(
           selector,
           repositoryPath: fixture.repository,
           head: { sequence: journal.finalized().length, protectedRef, commit: await ref(fixture.repository, protectedRef), tree: await commitTree(fixture.repository, await ref(fixture.repository, protectedRef)) },
-          fence,
-          authority: undefined,
+          incarnationId: "00000000-0000-4000-8000-000000000001",
+          authorityEpoch: "c".repeat(64),
+          policyDigest: "d".repeat(64),
+          ownerPrincipalId: "repository-owner",
+          refPolicyRevision: "e".repeat(64),
         };
       },
       async assertCurrent(target) {
@@ -104,15 +108,19 @@ export function portsFor(
   };
 }
 
-export function memoryJournal(events: string[]): JournalPort<Fence, Proof> & { finalized(): readonly Intent[] } {
+export function memoryJournal(events: string[]): JournalPort & { finalized(): readonly Intent[] } {
   const pending: Intent[] = [];
   const finalized: Intent[] = [];
   return {
     findFinalized(change, protectedRef) {
-      return finalized.find((intent) => intent.namespaceId === change.namespaceId
-        && intent.repositoryId === change.repositoryId
-        && intent.authorizationId === change.authorizationId
-        && intent.protectedRef === protectedRef);
+      const intent = finalized.find((entry) => entry.namespaceId === change.namespaceId
+        && entry.repositoryId === change.repositoryId && entry.authorizationId === change.authorizationId
+        && entry.protectedRef === protectedRef);
+      return intent === undefined ? undefined : finalizedProtectedRef(intent);
+    },
+    findFinalizedExact(query) {
+      const intent = finalized.find((entry) => protectedRefIntentMatchesQuery(entry, query));
+      return intent === undefined ? undefined : finalizedProtectedRef(intent);
     },
     appendIntent(intent) { events.push("append:old"); pending.push(intent); },
     finalize(intent) { events.push("finalize:new"); pending.splice(pending.indexOf(intent), 1); finalized.push(intent); },
@@ -122,7 +130,7 @@ export function memoryJournal(events: string[]): JournalPort<Fence, Proof> & { f
   };
 }
 
-export function intentFor(change: ProtectedRefChange, target: ProtectedRefTarget<Fence>): Intent {
+export function intentFor(change: ProtectedRefChange, target: ProtectedRefTarget): Intent {
   return {
     namespaceId: change.namespaceId,
     repositoryId: change.repositoryId,
@@ -135,8 +143,11 @@ export function intentFor(change: ProtectedRefChange, target: ProtectedRefTarget
     candidateTree: change.candidateTree,
     authorizationId: change.authorizationId,
     evidenceDigest: change.evidenceDigest,
-    fence: target.fence,
-    proof: { refPolicyRevision: "e".repeat(64) },
+    incarnationId: target.incarnationId,
+    authorityEpoch: target.authorityEpoch,
+    policyDigest: target.policyDigest,
+    ownerPrincipalId: target.ownerPrincipalId,
+    refPolicyRevision: "e".repeat(64),
   };
 }
 

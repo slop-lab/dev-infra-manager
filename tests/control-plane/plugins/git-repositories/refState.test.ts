@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 import { configuredNativeGitBundleServer } from "@slop-lab/dim-control-plane-plugin-git-repositories";
-import { atomicPromote, compareAndSwapProtectedRef, readNativeProjectRootCurrentHeadFromDatabase, readProtectedRefTransition, repositoryTransitionId, saveRepositoryRefIntent, type RepositoryRefTransition } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import { atomicPromote, compareAndSwapProtectedRef, findFinalizedProtectedRef, readNativeProjectRootCurrentHeadFromDatabase, readProtectedRefTransition, repositoryTransitionId, saveRepositoryRefIntent, type RepositoryRefTransition } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { fixture, git } from "./optionalFeaturesFixture.js";
 
 async function candidate(f: Awaited<ReturnType<typeof fixture>>) {
@@ -24,6 +24,23 @@ it("binds protected-ref CAS to exact repository/head/authorization and returns o
     const transition = readProtectedRefTransition(f.service.context.runtime, input.authorizationId);
     expect(transition).toMatchObject(input);
     if (transition === undefined) throw new Error("protected ref transition is missing");
+    expect(await findFinalizedProtectedRef(f.service.context.runtime, {
+      namespaceId: transition.projectId,
+      repositoryId: transition.repositoryId,
+      protectedRef: transition.protectedRef,
+      proposalRef: transition.proposalRef,
+      expectedCommit: transition.expectedCommit,
+      expectedTree: transition.expectedTree,
+      candidateCommit: transition.candidateCommit,
+      candidateTree: transition.candidateTree,
+      authorizationId: transition.authorizationId,
+      evidenceDigest: transition.evidenceDigest,
+      incarnationId: transition.importNonce,
+      authorityEpoch: transition.generationId,
+      policyDigest: transition.policyDigest,
+      ownerPrincipalId: "host-a",
+      refPolicyRevision: transition.refPolicyRevision,
+    })).toMatchObject({ intent: { sequence: 1 }, receipt: { outcome: "promoted", sequence: 1 } });
     expect(f.service.context.runtime.state.stateFormat).toBe(12);
     const database = new DatabaseSync(f.service.context.runtime.state.database, { readOnly: true });
     try {

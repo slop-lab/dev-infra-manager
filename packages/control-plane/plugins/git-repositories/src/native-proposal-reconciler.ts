@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 import { readNativeProjectRegistrations } from "./native-bundle-state.js";
 import { assertGitExecutableIdentity } from "./repository.js";
-import { isNativeGitLegacyProposalRef } from "@slop-lab/dim-contracts-git";
+import { isLegacyProposalRef as isNativeGitLegacyProposalRef } from "@slop-lab/gs-repository-contracts";
 
 const execute = promisify(execFile);
 const maximumProposalRefs = 10_000;

@@ -2,7 +2,7 @@ import type { RepositoryExtensionContext } from "./plugin-api.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { assertGitExecutableIdentity, type GitExecutableIdentity } from "./repository.js";
-import { isNativeGitOrdinaryCandidateRef } from "@slop-lab/dim-contracts-git";
+import { isOrdinaryCandidateRef as isNativeGitOrdinaryCandidateRef } from "@slop-lab/gs-repository-contracts";
 
 const execute = promisify(execFile);
 const maximumBytes = 4 * 1024 * 1024;

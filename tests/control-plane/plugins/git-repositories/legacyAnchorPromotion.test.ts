@@ -1,7 +1,7 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision } from "@slop-lab/gs-repository-contracts";
 import { controlPlanePlugin as mergePlugin } from "@slop-lab/dim-control-plane-plugin-git-merge-policy";
 import { readNativeProjectRootCurrentHeadFromDatabase } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
 import { basic, fixture, generationId, git, record, reviewer, text, token } from "./optionalFeaturesFixture.js";

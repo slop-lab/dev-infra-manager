@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nativeRepositoryPolicyRevision } from "@slop-lab/dim-contracts-git";
+import { repositoryPolicyRevision as nativeRepositoryPolicyRevision } from "@slop-lab/gs-repository-contracts";
 import { workspaceProtectedRefs } from "../../../../packages/control-plane/plugins/git-repositories/src/candidate-ref-policy.js";
 
 describe("native candidate ref protection", () => {
