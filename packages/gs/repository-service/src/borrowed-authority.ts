@@ -59,8 +59,8 @@ export class BorrowedRepositoryReadAuthorityHandle implements BorrowedRepository
   }
 
   async drainAndRevoke(): Promise<void> {
-    while (this.#pending.size > 0) await Promise.allSettled(this.#pending);
     this.#active = false;
+    while (this.#pending.size > 0) await Promise.allSettled(this.#pending);
   }
 
   protected track<Result>(start: () => Promise<Result>): Promise<Result> {
