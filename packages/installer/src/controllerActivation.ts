@@ -31,12 +31,14 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
   try {
     const pid = Number((await readFile(pidPath, "utf8")).trim());
     if (Number.isSafeInteger(pid) && pid > 1) {
-      const [metadata, command, snapshot] = await Promise.all([
-        stat(`/proc/${pid}`), readFile(`/proc/${pid}/cmdline`, "utf8"), readFile(`/proc/${pid}/stat`, "utf8")
+      const [metadata, command, snapshot, environment] = await Promise.all([
+        stat(`/proc/${pid}`), readFile(`/proc/${pid}/cmdline`, "utf8"), readFile(`/proc/${pid}/stat`, "utf8"),
+        readFile(`/proc/${pid}/environ`, "utf8")
       ]);
       const args = command.split("\0");
       const processState = snapshot.slice(snapshot.lastIndexOf(")") + 2).split(" ")[0];
-      if (metadata.uid === uid && processState !== "Z" && managedControllerCommand(args, entrypoint, pidPath)) return true;
+      if (metadata.uid === uid && processState !== "Z" && !nodeOptionsEnvironment(environment)
+        && managedControllerCommand(args, entrypoint, pidPath)) return true;
     }
   } catch (error) {
     if (!missingProcess(error)) throw error;
@@ -48,8 +50,10 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
   const unit = path.join(env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "systemd/user/dim-controller.service");
   try {
     const metadata = await lstat(unit);
-    const args = systemdExecArguments(await readFile(unit, "utf8"));
+    const unitText = await readFile(unit, "utf8");
+    const args = systemdExecArguments(unitText);
     if (!metadata.isFile() || metadata.uid !== uid || (metadata.mode & 0o022) !== 0
+      || !unitText.split("\n").includes("UnsetEnvironment=NODE_OPTIONS")
       || !args || !managedControllerCommand(args, entrypoint, pidPath)) return false;
   } catch (error) {
     if (missingProcess(error)) return false;
@@ -59,6 +63,10 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
     execFile("systemctl", ["--user", "is-active", "--quiet", "dim-controller.service"],
       { env, timeout: 5_000 }, (error) => resolve(error === null));
   });
+}
+
+function nodeOptionsEnvironment(environment: string): boolean {
+  return environment.split("\0").some((entry) => entry.startsWith("NODE_OPTIONS=") && entry.length > "NODE_OPTIONS=".length);
 }
 
 function managedControllerCommand(args: readonly string[], entrypoint: string, pidPath: string): boolean {
