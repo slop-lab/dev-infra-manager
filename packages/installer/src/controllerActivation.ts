@@ -39,7 +39,8 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
   const pidPath = path.join(directory, "controller.pid");
   const identity: ManagedControllerIdentity = { uid, nodeExecutable: await realpath(process.execPath),
     entrypoint: path.join(path.resolve(runtimeDirectory), "node_modules/.bin/dim-host"),
-    socketPath: path.join(directory, "workspace/controller.sock"), adminSocketPath: path.join(directory, "admin/controller.sock"), pidPath };
+    socketPath: env.DIM_CONTROLLER_SOCKET ?? path.join(directory, "workspace/controller.sock"),
+    adminSocketPath: env.DIM_ADMIN_CONTROLLER_SOCKET ?? path.join(directory, "admin/controller.sock"), pidPath };
   try {
     const pid = Number((await readFile(pidPath, "utf8")).trim());
     if (Number.isSafeInteger(pid) && pid > 1 && await managedControllerProcess(pid, identity)) return true;

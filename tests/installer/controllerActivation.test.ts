@@ -73,6 +73,26 @@ describe("existing managed controller activation", () => {
     expect(await managedControllerIsActive(runtime, env)).toBe(true);
   });
 
+  it("recognizes its own controller with configured socket paths", async () => {
+    const { root, runtime, pidPath, env } = await fixture();
+    const script = path.join(runtime, "node_modules/.bin/dim-host");
+    const socketPath = path.join(root, "sockets/workspace.sock");
+    const adminSocketPath = path.join(root, "sockets/admin.sock");
+    await mkdir(path.dirname(script), { recursive: true });
+    await writeFile(script, 'import { writeFileSync } from "node:fs"; writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid)); console.log("ready"); setInterval(() => {}, 1000);');
+    const args = controllerArgs(pidPath);
+    args[3] = socketPath; args[5] = adminSocketPath;
+    const child = spawn(process.execPath, [script, ...args], { env: controllerEnvironment(), stdio: ["ignore", "pipe", "inherit"] });
+    cleanup.push(async () => {
+      if (child.exitCode === null && child.signalCode === null) {
+        const exited = once(child, "exit"); child.kill(); await exited;
+      }
+    });
+    await once(child.stdout!, "data");
+    expect(await managedControllerIsActive(runtime, { ...env, DIM_CONTROLLER_SOCKET: socketPath,
+      DIM_ADMIN_CONTROLLER_SOCKET: adminSocketPath })).toBe(true);
+  });
+
   it.each([
     ["a wrong workspace socket", (pidPath: string) => {
       const args = controllerArgs(pidPath); args[3] = path.join(path.dirname(pidPath), "wrong.sock"); return args;
