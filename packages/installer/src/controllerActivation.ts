@@ -10,12 +10,10 @@ const nodeOptionsWithoutValues = new Set([
   "--experimental-transform-types", "--experimental-detect-module"
 ]);
 const nodeOptionsWithValues = new Set([
-  "--conditions", "--import", "--require", "--loader", "--experimental-loader",
-  "--inspect-port", "--disable-warning"
+  "--conditions", "--inspect-port", "--disable-warning"
 ]);
 const nodeOptionsWithAttachedValues = [
-  "--conditions=", "--import=", "--require=", "--loader=", "--experimental-loader=",
-  "--inspect=", "--inspect-brk=", "--inspect-port=", "--disable-warning="
+  "--conditions=", "--inspect=", "--inspect-brk=", "--inspect-port=", "--disable-warning="
 ] as const;
 
 /** Inspect existing activation only; installing packages must not create a service. */

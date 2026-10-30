@@ -56,7 +56,7 @@ describe("existing managed controller activation", () => {
 
   it("recognizes its own controller after supported Node runtime options", async () => {
     const { runtime, env } = await runningFixture([
-      "--enable-source-maps", "--conditions=dim-source", "--import", "data:text/javascript,"
+      "--enable-source-maps", "--conditions=dim-source", "--disable-warning=DEP0205"
     ]);
     expect(await managedControllerIsActive(runtime, env)).toBe(true);
   });
@@ -153,6 +153,27 @@ describe("existing managed controller activation", () => {
     expect(await managedControllerIsActive(runtime, env)).toBe(false);
   });
 
+  it("rejects an expected entrypoint after a Node preload blocks script execution", async () => {
+    const { runtime, pidPath, env } = await fixture();
+    const expected = path.join(runtime, "node_modules/.bin/dim-host");
+    const preload = `data:text/javascript,${encodeURIComponent(`
+      import { writeFileSync } from "node:fs";
+      writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid));
+      console.log("ready");
+      await new Promise(() => {});
+    `)}`;
+    const child = spawn(process.execPath, ["--import", preload, expected, "controller", "serve", "--pid-file", pidPath], {
+      stdio: ["ignore", "pipe", "inherit"]
+    });
+    cleanup.push(async () => {
+      if (child.exitCode === null && child.signalCode === null) {
+        const exited = once(child, "exit"); child.kill(); await exited;
+      }
+    });
+    await once(child.stdout!, "data");
+    expect(await managedControllerIsActive(runtime, env)).toBe(false);
+  });
+
   it("detects an already active owned systemd unit before its PID file appears", async () => {
     const { root, runtime, env } = await fixture();
     const systemdRuntime = `/run/user/${process.getuid?.()}`;
@@ -161,7 +182,7 @@ describe("existing managed controller activation", () => {
     const bin = path.join(root, "bin");
     await mkdir(path.dirname(unit), { recursive: true });
     await mkdir(bin);
-    await writeFile(unit, `[Service]\nExecStart="/usr/bin/node" "--enable-source-maps" "--conditions=dim-source" "--import" "data:text/javascript," "${runtime}/node_modules/.bin/dim-host" "controller" "serve" "--pid-file" "${pidPath}"\n`);
+    await writeFile(unit, `[Service]\nExecStart="/usr/bin/node" "--enable-source-maps" "--conditions=dim-source" "--disable-warning=DEP0205" "${runtime}/node_modules/.bin/dim-host" "controller" "serve" "--pid-file" "${pidPath}"\n`);
     await writeFile(path.join(bin, "systemctl"), '#!/bin/sh\n[ "$*" = "--user is-active --quiet dim-controller.service" ]\n');
     await chmod(path.join(bin, "systemctl"), 0o755);
     expect(await managedControllerIsActive(runtime, { ...env, XDG_RUNTIME_DIR: systemdRuntime,
@@ -192,6 +213,21 @@ describe("existing managed controller activation", () => {
     await mkdir(path.dirname(unit), { recursive: true });
     await mkdir(bin);
     await writeFile(unit, `[Service]\nExecStart="/usr/bin/node" "--eval=setInterval(() =%3E {}, 1000)" "${runtime}/node_modules/.bin/dim-host" "controller" "serve" "--pid-file" "${pidPath}"\n`);
+    await writeFile(path.join(bin, "systemctl"), "#!/bin/sh\nexit 0\n");
+    await chmod(path.join(bin, "systemctl"), 0o755);
+    expect(await managedControllerIsActive(runtime, { ...env, XDG_RUNTIME_DIR: systemdRuntime,
+      PATH: `${bin}:${process.env.PATH}` })).toBe(false);
+  });
+
+  it("rejects an active systemd unit with a preload before the expected entrypoint", async () => {
+    const { root, runtime, env } = await fixture();
+    const systemdRuntime = `/run/user/${process.getuid?.()}`;
+    const pidPath = path.join(systemdRuntime, "dim/managed/controller.pid");
+    const unit = path.join(env.XDG_CONFIG_HOME, "systemd/user/dim-controller.service");
+    const bin = path.join(root, "bin");
+    await mkdir(path.dirname(unit), { recursive: true });
+    await mkdir(bin);
+    await writeFile(unit, `[Service]\nExecStart="/usr/bin/node" "--import" "data:text/javascript,await%20new%20Promise(()%20=%3E%20{})" "${runtime}/node_modules/.bin/dim-host" "controller" "serve" "--pid-file" "${pidPath}"\n`);
     await writeFile(path.join(bin, "systemctl"), "#!/bin/sh\nexit 0\n");
     await chmod(path.join(bin, "systemctl"), 0o755);
     expect(await managedControllerIsActive(runtime, { ...env, XDG_RUNTIME_DIR: systemdRuntime,
