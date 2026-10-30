@@ -59,6 +59,7 @@ test("successful controller restart keeps the existing systemd command path", as
     assert.doesNotMatch(await readFile(fixture.commandLog, "utf8"), /journalctl|systemctl --user show/);
     const unit = await readFile(path.join(fixture.env.XDG_CONFIG_HOME!, "systemd/user/dim-controller.service"), "utf8");
     for (const name of nativeVariables) assert.ok(unit.includes(`${name}=${process.env[name]}`));
+    assert.match(unit, /^UnsetEnvironment=NODE_OPTIONS$/m);
   } finally {
     nativeVariables.forEach((name, index) => {
       if (previousNativeVariables[index] === undefined) delete process.env[name];

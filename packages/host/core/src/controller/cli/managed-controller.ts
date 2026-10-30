@@ -33,6 +33,8 @@ export async function ensureManagedController(options: LifecycleOptions): Promis
     const log = await open(path.join(runtimeDir, "controller.log"), "a", 0o600);
     const script = process.argv[1];
     if (!script) throw new UserError("cannot locate the DIM host entrypoint");
+    const environment = { ...process.env };
+    delete environment.NODE_OPTIONS;
     const child = spawn(process.execPath, [
       ...process.execArgv,
       script,
@@ -47,7 +49,7 @@ export async function ensureManagedController(options: LifecycleOptions): Promis
     ], {
       detached: true,
       stdio: ["ignore", log.fd, log.fd],
-      env: process.env
+      env: environment
     });
     let startupError: Error | undefined;
     child.once("error", (error) => { startupError = error; });

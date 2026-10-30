@@ -76,6 +76,7 @@ ExecStart=${command}
 Restart=on-failure
 RestartSec=1s
 KillMode=control-group
+UnsetEnvironment=NODE_OPTIONS
 RuntimeDirectory=dim/managed
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=restart
