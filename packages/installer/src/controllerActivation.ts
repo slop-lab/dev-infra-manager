@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, readFile, stat } from "node:fs/promises";
+import { lstat, readFile, readlink, realpath, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -28,16 +28,17 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
     : path.join(runtime, createHash("sha256").update(state).digest("hex").slice(0, 16));
   const pidPath = path.join(directory, "controller.pid");
   const entrypoint = path.join(path.resolve(runtimeDirectory), "node_modules/.bin/dim-host");
+  const nodeExecutable = await realpath(process.execPath);
   try {
     const pid = Number((await readFile(pidPath, "utf8")).trim());
     if (Number.isSafeInteger(pid) && pid > 1) {
-      const [metadata, command, snapshot, environment] = await Promise.all([
+      const [metadata, command, snapshot, environment, executable] = await Promise.all([
         stat(`/proc/${pid}`), readFile(`/proc/${pid}/cmdline`, "utf8"), readFile(`/proc/${pid}/stat`, "utf8"),
-        readFile(`/proc/${pid}/environ`, "utf8")
+        readFile(`/proc/${pid}/environ`, "utf8"), readlink(`/proc/${pid}/exe`)
       ]);
       const args = command.split("\0");
       const processState = snapshot.slice(snapshot.lastIndexOf(")") + 2).split(" ")[0];
-      if (metadata.uid === uid && processState !== "Z" && !nodeOptionsEnvironment(environment)
+      if (metadata.uid === uid && executable === nodeExecutable && processState !== "Z" && !nodeOptionsEnvironment(environment)
         && managedControllerCommand(args, entrypoint, pidPath)) return true;
     }
   } catch (error) {
@@ -54,7 +55,7 @@ export async function managedControllerIsActive(runtimeDirectory: string, env: N
     const args = systemdExecArguments(unitText);
     if (!metadata.isFile() || metadata.uid !== uid || (metadata.mode & 0o022) !== 0
       || !unitText.split("\n").includes("UnsetEnvironment=NODE_OPTIONS")
-      || !args || !managedControllerCommand(args, entrypoint, pidPath)) return false;
+      || !args || args[0] !== process.execPath || !managedControllerCommand(args, entrypoint, pidPath)) return false;
   } catch (error) {
     if (missingProcess(error)) return false;
     throw error;
@@ -91,7 +92,9 @@ function managedControllerCommand(args: readonly string[], entrypoint: string, p
 }
 
 function systemdExecArguments(unit: string): string[] | undefined {
-  const line = unit.split("\n").find((candidate) => candidate.startsWith("ExecStart="));
+  const lines = unit.split("\n").filter((candidate) => candidate.startsWith("ExecStart="));
+  if (lines.length !== 1) return undefined;
+  const line = lines[0];
   if (!line) return undefined;
   const encoded = line.slice("ExecStart=".length);
   const quoted = /"((?:\\.|[^"])*)"/g;

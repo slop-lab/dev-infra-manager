@@ -197,4 +197,21 @@ describe("existing managed controller activation", () => {
     expect(await managedControllerIsActive(runtime, env)).toBe(false);
   });
 
+  it("rejects a non-Node executable with exact controller arguments", async () => {
+    const { runtime, pidPath, env } = await fixture();
+    const expected = path.join(runtime, "node_modules/.bin/dim-host");
+    await mkdir(path.dirname(expected), { recursive: true });
+    await writeFile(expected, '#!/bin/sh\nprintf "%s" "$$" > "$4"\nprintf "ready\\n"\nwhile :; do sleep 1; done\n');
+    const child = spawn("/bin/sh", [expected, "controller", "serve", "--pid-file", pidPath], {
+      stdio: ["ignore", "pipe", "inherit"]
+    });
+    cleanup.push(async () => {
+      if (child.exitCode === null && child.signalCode === null) {
+        const exited = once(child, "exit"); child.kill(); await exited;
+      }
+    });
+    await once(child.stdout!, "data");
+    expect(await managedControllerIsActive(runtime, env)).toBe(false);
+  });
+
 });
