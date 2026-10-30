@@ -46,7 +46,7 @@ Both lanes completed all eight stages: prerequisites, strict checks, package
 build, ordinary tests, executable examples, privileged service fixtures,
 package packs and production dependency audit. Each lane reported:
 
-- unit: 2,036 passed, 5 skipped;
+- unit: 2,037 passed, 5 skipped;
 - CLI: 87 passed;
 - host commands: 12 passed;
 - scenarios: 536 passed, 19 skipped;
