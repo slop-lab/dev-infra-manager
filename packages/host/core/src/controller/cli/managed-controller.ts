@@ -34,7 +34,7 @@ export async function ensureManagedController(options: LifecycleOptions): Promis
     const script = process.argv[1];
     if (!script) throw new UserError("cannot locate the DIM host entrypoint");
     const environment = { ...process.env };
-    delete environment.NODE_OPTIONS;
+    for (const name of ["NODE_OPTIONS", "LD_PRELOAD", "LD_AUDIT", "LD_LIBRARY_PATH"]) delete environment[name];
     const child = spawn(process.execPath, [
       ...process.execArgv,
       script,
