@@ -59,3 +59,38 @@ require('node:module').syncBuiltinESMExports();
     await rm(home, { recursive: true, force: true });
   }
 });
+
+it("service removal treats ESRCH while reading a stopped supervisor identity as absence", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "dim-guest-service-remove-esrch-"));
+  const env = { ...process.env, HOME: home };
+  const run = (...args: string[]) => execute(process.execPath, [client, ...args], { cwd: home, env });
+  let supervisor = 0, child = 0;
+  try {
+    await run("service", "register", "--name", "worker", "--", process.execPath, "-e", "setInterval(()=>{},1000)");
+    await run("service", "resume");
+    ({ pid: supervisor, child } = JSON.parse(await readFile(path.join(home, ".local/state/dim/services/worker.lock/owner.json"), "utf8")));
+    process.kill(supervisor, "SIGKILL");
+    await expect.poll(() => processIsLive(supervisor)).toBe(false);
+    const preload = path.join(home, "proc-esrch.cjs");
+    await writeFile(preload, `
+const fs = require('node:fs/promises');
+const originalReadFile = fs.readFile;
+let injected = false;
+fs.readFile = async function(file, ...args) {
+  if (!injected && file === ${JSON.stringify(`/proc/${supervisor}/stat`)}) {
+    injected = true;
+    const error = new Error('no such process'); error.code = 'ESRCH'; throw error;
+  }
+  return originalReadFile.call(this, file, ...args);
+};
+require('node:module').syncBuiltinESMExports();
+`);
+    await execute(process.execPath, ["--require", preload, client, "service", "remove", "worker"], { cwd: home, env });
+    await expect.poll(() => processIsLive(child)).toBe(false);
+  } finally {
+    if (supervisor && await processIsLive(supervisor)) process.kill(supervisor, "SIGKILL");
+    if (child && await processIsLive(child)) process.kill(child, "SIGKILL");
+    await run("service", "remove", "worker").catch(() => {});
+    await rm(home, { recursive: true, force: true });
+  }
+});

@@ -241,7 +241,7 @@ async function processIdentity(pid) {
   try {
     const text = await readFile(`/proc/${pid}/stat`, "utf8"), fields = text.slice(text.lastIndexOf(")") + 2).trim().split(/\s+/);
     return fields[0] === "Z" ? undefined : fields[19];
-  } catch (error) { if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined; throw error; }
+  } catch (error) { if (error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ESRCH")) return undefined; throw error; }
 }
 /** @param {number} pid @param {NodeJS.Signals} signal */
 function signalProcess(pid, signal) {
