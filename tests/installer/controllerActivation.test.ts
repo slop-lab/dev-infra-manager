@@ -12,6 +12,18 @@ import { readFile } from "node:fs/promises";
 const cleanup: Array<() => Promise<unknown>> = [];
 afterEach(async () => { vi.unstubAllEnvs(); for (const release of cleanup.splice(0).reverse()) await release(); });
 
+function controllerEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const name of ["NODE_OPTIONS", "LD_PRELOAD", "LD_AUDIT", "LD_LIBRARY_PATH"]) delete env[name];
+  return env;
+}
+
+function controllerArgs(pidPath: string): string[] {
+  const directory = path.dirname(pidPath);
+  return ["controller", "serve", "--socket", path.join(directory, "workspace/controller.sock"),
+    "--admin-socket", path.join(directory, "admin/controller.sock"), "--pid-file", pidPath];
+}
+
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), "dim-installer-activation-"));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
@@ -24,14 +36,14 @@ async function fixture() {
       XDG_RUNTIME_DIR: path.join(root, "run"), DIM_MANAGED_STATE_ROOT: path.join(root, ".local/state/dim/managed") } };
 }
 
-async function runningFixture(nodeArgs: readonly string[] = []) {
+async function runningFixture(nodeArgs: readonly string[] = [], command: (pidPath: string) => readonly string[] = controllerArgs) {
   const result = await fixture();
   const { runtime, pidPath } = result;
   const script = path.join(runtime, "node_modules/.bin/dim-host");
   await mkdir(path.dirname(script), { recursive: true });
   await writeFile(script, 'import { writeFileSync } from "node:fs"; writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid)); console.log("ready"); setInterval(() => {}, 1000);');
-  const child: ChildProcess = spawn(process.execPath, [...nodeArgs, script, "controller", "serve", "--pid-file", pidPath], {
-    stdio: ["ignore", "pipe", "inherit"]
+  const child: ChildProcess = spawn(process.execPath, [...nodeArgs, script, ...command(pidPath)], {
+    env: controllerEnvironment(), stdio: ["ignore", "pipe", "inherit"]
   });
   cleanup.push(async () => {
     if (child.exitCode === null && child.signalCode === null) {
@@ -59,6 +71,16 @@ describe("existing managed controller activation", () => {
       "--enable-source-maps", "--conditions=dim-source", "--disable-warning=DEP0205"
     ]);
     expect(await managedControllerIsActive(runtime, env)).toBe(true);
+  });
+
+  it.each([
+    ["a wrong workspace socket", (pidPath: string) => {
+      const args = controllerArgs(pidPath); args[3] = path.join(path.dirname(pidPath), "wrong.sock"); return args;
+    }],
+    ["trailing transport arguments", (pidPath: string) => [...controllerArgs(pidPath), "--host", "127.0.0.1"]]
+  ])("rejects its own entrypoint with %s", async (_name, command) => {
+    const { runtime, env } = await runningFixture([], command);
+    expect(await managedControllerIsActive(runtime, env)).toBe(false);
   });
 
   it("automatically restarts an active installation and restores its prior runtime when readiness fails", async () => {
@@ -108,8 +130,8 @@ describe("existing managed controller activation", () => {
     const { runtime, pidPath, env } = await fixture();
     const script = path.join(runtime, "lookalike.mjs");
     await writeFile(script, 'import { writeFileSync } from "node:fs"; writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid)); console.log("ready"); setInterval(() => {}, 1000);');
-    const child = spawn(process.execPath, [script, "controller", "serve", "--pid-file", pidPath], {
-      stdio: ["ignore", "pipe", "inherit"]
+    const child = spawn(process.execPath, [script, ...controllerArgs(pidPath)], {
+      env: controllerEnvironment(), stdio: ["ignore", "pipe", "inherit"]
     });
     cleanup.push(async () => {
       if (child.exitCode === null && child.signalCode === null) {
@@ -125,8 +147,8 @@ describe("existing managed controller activation", () => {
     const script = path.join(runtime, "lookalike.mjs");
     const expected = path.join(runtime, "node_modules/.bin/dim-host");
     await writeFile(script, 'import { writeFileSync } from "node:fs"; writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid)); console.log("ready"); setInterval(() => {}, 1000);');
-    const child = spawn(process.execPath, [script, expected, "controller", "serve", "--pid-file", pidPath], {
-      stdio: ["ignore", "pipe", "inherit"]
+    const child = spawn(process.execPath, [script, expected, ...controllerArgs(pidPath)], {
+      env: controllerEnvironment(), stdio: ["ignore", "pipe", "inherit"]
     });
     cleanup.push(async () => {
       if (child.exitCode === null && child.signalCode === null) {
@@ -141,8 +163,8 @@ describe("existing managed controller activation", () => {
     const { runtime, pidPath, env } = await fixture();
     const expected = path.join(runtime, "node_modules/.bin/dim-host");
     const code = 'require("node:fs").writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid)); console.log("ready"); setInterval(() => {}, 1000);';
-    const child = spawn(process.execPath, [`--eval=${code}`, expected, "controller", "serve", "--pid-file", pidPath], {
-      stdio: ["ignore", "pipe", "inherit"]
+    const child = spawn(process.execPath, [`--eval=${code}`, expected, ...controllerArgs(pidPath)], {
+      env: controllerEnvironment(), stdio: ["ignore", "pipe", "inherit"]
     });
     cleanup.push(async () => {
       if (child.exitCode === null && child.signalCode === null) {
@@ -162,8 +184,8 @@ describe("existing managed controller activation", () => {
       console.log("ready");
       await new Promise(() => {});
     `)}`;
-    const child = spawn(process.execPath, ["--import", preload, expected, "controller", "serve", "--pid-file", pidPath], {
-      stdio: ["ignore", "pipe", "inherit"]
+    const child = spawn(process.execPath, ["--import", preload, expected, ...controllerArgs(pidPath)], {
+      env: controllerEnvironment(), stdio: ["ignore", "pipe", "inherit"]
     });
     cleanup.push(async () => {
       if (child.exitCode === null && child.signalCode === null) {
@@ -185,8 +207,25 @@ describe("existing managed controller activation", () => {
       console.log("ready");
       await new Promise(() => {});
     `)}`;
-    const child = spawn(process.execPath, [expected, "controller", "serve", "--pid-file", pidPath], {
-      env: { ...process.env, NODE_OPTIONS: `--import=${preload}` }, stdio: ["ignore", "pipe", "inherit"]
+    const child = spawn(process.execPath, [expected, ...controllerArgs(pidPath)], {
+      env: { ...controllerEnvironment(), NODE_OPTIONS: `--import=${preload}` }, stdio: ["ignore", "pipe", "inherit"]
+    });
+    cleanup.push(async () => {
+      if (child.exitCode === null && child.signalCode === null) {
+        const exited = once(child, "exit"); child.kill(); await exited;
+      }
+    });
+    await once(child.stdout!, "data");
+    expect(await managedControllerIsActive(runtime, env)).toBe(false);
+  });
+
+  it("rejects an expected entrypoint with dynamic-loader environment", async () => {
+    const { runtime, pidPath, env } = await fixture();
+    const expected = path.join(runtime, "node_modules/.bin/dim-host");
+    await mkdir(path.dirname(expected), { recursive: true });
+    await writeFile(expected, 'import { writeFileSync } from "node:fs"; writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid)); console.log("ready"); setInterval(() => {}, 1000);\n');
+    const child = spawn(process.execPath, [expected, ...controllerArgs(pidPath)], {
+      env: { ...controllerEnvironment(), LD_LIBRARY_PATH: "/tmp" }, stdio: ["ignore", "pipe", "inherit"]
     });
     cleanup.push(async () => {
       if (child.exitCode === null && child.signalCode === null) {
@@ -201,9 +240,9 @@ describe("existing managed controller activation", () => {
     const { runtime, pidPath, env } = await fixture();
     const expected = path.join(runtime, "node_modules/.bin/dim-host");
     await mkdir(path.dirname(expected), { recursive: true });
-    await writeFile(expected, '#!/bin/sh\nprintf "%s" "$$" > "$4"\nprintf "ready\\n"\nwhile :; do sleep 1; done\n');
-    const child = spawn("/bin/sh", [expected, "controller", "serve", "--pid-file", pidPath], {
-      stdio: ["ignore", "pipe", "inherit"]
+    await writeFile(expected, '#!/bin/sh\nprintf "%s" "$$" > "$8"\nprintf "ready\\n"\nwhile :; do sleep 1; done\n');
+    const child = spawn("/bin/sh", [expected, ...controllerArgs(pidPath)], {
+      env: controllerEnvironment(), stdio: ["ignore", "pipe", "inherit"]
     });
     cleanup.push(async () => {
       if (child.exitCode === null && child.signalCode === null) {
