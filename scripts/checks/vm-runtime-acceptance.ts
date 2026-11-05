@@ -35,6 +35,7 @@ const probe = await realpath(requestedProbe);
 if (!probeInfo.isFile() || probeInfo.isSymbolicLink() || probe !== requestedProbe || (probeInfo.mode & 0o111) === 0) {
   throw new Error("DIM_TEST_KVM_PROBE must be a reviewed executable regular file");
 }
+await run(probe, []);
 const status = await capture("git", ["status", "--porcelain=v1"]);
 if (status.trim()) throw new Error("vm-runtime-acceptance requires a clean exact source tree");
 const sourceSha = (await capture("git", ["rev-parse", "HEAD"])).trim(), sourceTree = (await capture("git", ["rev-parse", "HEAD^{tree}"])).trim();
@@ -47,7 +48,8 @@ await mkdir(path.dirname(receipt), { recursive: true, mode: 0o700 });
 await writeFile(receipt, `${JSON.stringify({ schemaVersion: 1, sourceSha, sourceTree, observedAt: new Date().toISOString(),
   kvm: { device: "/dev/kvm", deviceId: kvmDeviceId }, images: { kvm: values.DIM_TEST_KVM_IMAGE,
     multiRepository: values.DIM_NATIVE_MULTI_REPOSITORY_IMAGE, guestIntegration: values.DIM_GUEST_INTEGRATION_IMAGE },
-  stateParent: parent, probe, tests: { deterministic: deterministicTests, runtime: runtimeTests }, outcome: "passed" }, null, 2)}\n`, { mode: 0o600 });
+  stateParent: parent, probe: { path: probe, outcome: "passed" },
+  tests: { deterministic: deterministicTests, runtime: runtimeTests }, outcome: "passed" }, null, 2)}\n`, { mode: 0o600 });
 process.stdout.write(`vm-runtime-acceptance-ok receipt=${receipt}\n`);
 
 async function run(command: string, args: readonly string[]): Promise<void> {
