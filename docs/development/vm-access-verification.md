@@ -21,9 +21,10 @@
 - The heavy runner rechecks the deterministic VM-access tests before the three
   physical runtime tests, and privileged GitHub execution is limited to the
   reviewed merge queue, `main`/release pushes or explicit manual dispatch.
-- The reviewed static KVM ioctl probe is executed directly during preflight and
-  its passing path/outcome is retained in the acceptance receipt before the
-  same probe is copied into the disposable `container-kvm` workspace test.
+- The runner forces all three physical tests into required mode so missing
+  bindings fail instead of producing skips. The reviewed static KVM ioctl probe
+  executes only inside the disposable `container-kvm` workspace test; its
+  passing path/outcome is retained in the acceptance receipt.
 - Security review fixes included generation-pinned failed-delivery cleanup,
   lifecycle/revoke serialization and pre-resolution symlink rejection.
 
