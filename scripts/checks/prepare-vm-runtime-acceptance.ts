@@ -48,11 +48,13 @@ await writeFile(probeSource, `#include <fcntl.h>\n#include <linux/kvm.h>\n#inclu
 await run("cc", ["-O2", "-static", "-Wall", "-Wextra", "-Werror", "-o", probe, probeSource]);
 const probeSha256 = createHash("sha256").update(await readFile(probe)).digest("hex");
 const acceptanceReceipt = path.join(output, "acceptance.json");
+const preparation = path.join(output, "preparation.json");
 const bindings = { DIM_TEST_KVM_IMAGE: imageId, DIM_TEST_KVM_STATE_PARENT: stateParent, DIM_TEST_KVM_PROBE: probe,
   DIM_TEST_KVM_PROBE_SHA256: probeSha256, DIM_NATIVE_MULTI_REPOSITORY_IMAGE: imageId,
-  DIM_GUEST_INTEGRATION_IMAGE: imageId, DIM_VM_ACCEPTANCE_RECEIPT: acceptanceReceipt } as const;
+  DIM_GUEST_INTEGRATION_IMAGE: imageId, DIM_VM_ACCEPTANCE_RECEIPT: acceptanceReceipt,
+  DIM_VM_ACCEPTANCE_PREPARATION: preparation } as const;
 await writeFile(path.join(output, "bindings.env"), `${Object.entries(bindings).map(([name, value]) => `${name}=${value}`).join("\n")}\n`, { mode: 0o600, flag: "wx" });
-await writeFile(path.join(output, "preparation.json"), `${JSON.stringify({ schemaVersion: 1, sourceSha, sourceTree, preparedAt: new Date().toISOString(),
+await writeFile(preparation, `${JSON.stringify({ schemaVersion: 1, sourceSha, sourceTree, preparedAt: new Date().toISOString(),
   image: { tag: imageTag, id: imageId }, probe: { path: probe, sha256: probeSha256 }, stateParent, acceptanceReceipt }, null, 2)}\n`, { mode: 0o600, flag: "wx" });
 process.stdout.write(`vm-runtime-prepared root=${output} image=${imageId} probeSha256=${probeSha256}\n`);
 if (args[0] === "--run") await run(process.execPath, ["scripts/checks/vm-runtime-acceptance.ts"], { ...process.env, ...bindings });

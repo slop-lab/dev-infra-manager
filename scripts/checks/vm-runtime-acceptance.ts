@@ -10,7 +10,8 @@ const values = { DIM_TEST_KVM_IMAGE: requiredEnvironment("DIM_TEST_KVM_IMAGE"),
   DIM_TEST_KVM_PROBE: requiredEnvironment("DIM_TEST_KVM_PROBE"),
   DIM_TEST_KVM_PROBE_SHA256: requiredEnvironment("DIM_TEST_KVM_PROBE_SHA256"),
   DIM_NATIVE_MULTI_REPOSITORY_IMAGE: requiredEnvironment("DIM_NATIVE_MULTI_REPOSITORY_IMAGE"),
-  DIM_GUEST_INTEGRATION_IMAGE: requiredEnvironment("DIM_GUEST_INTEGRATION_IMAGE") };
+  DIM_GUEST_INTEGRATION_IMAGE: requiredEnvironment("DIM_GUEST_INTEGRATION_IMAGE"),
+  DIM_VM_ACCEPTANCE_PREPARATION: requiredEnvironment("DIM_VM_ACCEPTANCE_PREPARATION") };
 
 if (process.platform !== "linux" || process.arch !== "x64") throw new Error("vm-runtime-acceptance requires Linux x86-64");
 const kvm = await lstat("/dev/kvm");
@@ -44,6 +45,21 @@ if (!/^[a-f0-9]{64}$/.test(values.DIM_TEST_KVM_PROBE_SHA256) || probeSha256 !== 
 const status = await capture("git", ["status", "--porcelain=v1"]);
 if (status.trim()) throw new Error("vm-runtime-acceptance requires a clean exact source tree");
 const sourceSha = (await capture("git", ["rev-parse", "HEAD"])).trim(), sourceTree = (await capture("git", ["rev-parse", "HEAD^{tree}"])).trim();
+const preparationPath = path.resolve(values.DIM_VM_ACCEPTANCE_PREPARATION), preparationInfo = await lstat(preparationPath);
+const preparationRealPath = await realpath(preparationPath);
+if (!preparationInfo.isFile() || preparationInfo.isSymbolicLink() || preparationRealPath !== preparationPath
+  || preparationInfo.uid !== process.getuid?.() || (preparationInfo.mode & 0o777) !== 0o600) throw new Error("VM acceptance preparation must be a private canonical operator-owned file");
+const preparationBytes = await readFile(preparationPath), preparationSha256 = createHash("sha256").update(preparationBytes).digest("hex");
+const preparation: unknown = JSON.parse(preparationBytes.toString("utf8"));
+if (!record(preparation)) throw new Error("invalid VM acceptance preparation receipt");
+const preparedImage = preparation["image"], preparedProbe = preparation["probe"];
+if (preparation["schemaVersion"] !== 1 || preparation["sourceSha"] !== sourceSha || preparation["sourceTree"] !== sourceTree
+  || !record(preparedImage) || preparedImage["id"] !== values.DIM_TEST_KVM_IMAGE
+  || preparedImage["id"] !== values.DIM_NATIVE_MULTI_REPOSITORY_IMAGE || preparedImage["id"] !== values.DIM_GUEST_INTEGRATION_IMAGE
+  || !record(preparedProbe) || preparedProbe["path"] !== probe || preparedProbe["sha256"] !== probeSha256
+  || preparation["stateParent"] !== parent || preparation["acceptanceReceipt"] !== (process.env.DIM_VM_ACCEPTANCE_RECEIPT ?? path.join(root, ".local/verification", `vm-runtime-acceptance-${sourceSha}.json`))) {
+  throw new Error("VM acceptance bindings do not match the exact preparation receipt");
+}
 const deterministicTests = ["host/plugins/vm/grants.test.ts", "host/plugins/vm/access.test.ts", "host/plugins/vm/accessServer.test.ts",
   "host/plugins/vm/copyContainment.test.ts", "host/plugins/vm/guestClient.test.ts", "host/plugins/vm/workspaceIntegration.test.ts"];
 const runtimeTests = ["host/plugins/kvm/runtime.test.ts", "host/core/multiRepositoryWorkspaceRuntime.test.ts", "host/core/guestIntegrationRuntime.test.ts"];
@@ -55,6 +71,7 @@ await writeFile(receipt, `${JSON.stringify({ schemaVersion: 1, sourceSha, source
   kvm: { device: "/dev/kvm", deviceId: kvmDeviceId }, images: { kvm: values.DIM_TEST_KVM_IMAGE,
     multiRepository: values.DIM_NATIVE_MULTI_REPOSITORY_IMAGE, guestIntegration: values.DIM_GUEST_INTEGRATION_IMAGE },
   stateParent: parent, probe: { path: probe, sha256: probeSha256, outcome: "passed-in-container-kvm-test" },
+  preparation: { path: preparationPath, sha256: preparationSha256 },
   tests: { deterministic: deterministicTests, runtime: runtimeTests }, outcome: "passed" }, null, 2)}\n`, { mode: 0o600 });
 process.stdout.write(`vm-runtime-acceptance-ok receipt=${receipt}\n`);
 
@@ -68,3 +85,4 @@ async function capture(command: string, args: readonly string[]): Promise<string
 function requiredEnvironment(name: string): string {
   const value = process.env[name]; if (!value) throw new Error(`vm-runtime-acceptance requires ${name}`); return value;
 }
+function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }
