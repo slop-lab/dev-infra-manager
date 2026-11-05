@@ -107,7 +107,9 @@ try {
   await page.waitForURL(/#\/features\/llm-router\/projects\/example$/);
   await page.getByRole("heading", { name: "Project example", exact: true }).waitFor();
   assert.equal(await page.getByLabel("Requests per UTC day", { exact: true }).inputValue(), "79");
-  await evidence("current-project-focus", currentRequest);
+  const currentPolicy = page.getByRole("form", { name: "Routing policy for example", exact: true });
+  assert.equal(await currentPolicy.isVisible(), true);
+  await evidence("current-project-focus", currentPolicy);
 
   await page.getByRole("link", { name: "Traffic & access", exact: true }).click();
   page.once("dialog", (dialog) => dialog.dismiss());
