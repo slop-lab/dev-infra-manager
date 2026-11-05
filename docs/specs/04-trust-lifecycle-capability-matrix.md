@@ -17,6 +17,7 @@ and retired runtime layouts are not compatibility requirements.
 | Execution | Lease jobs, fence capacity, report candidate-bound results | No review, promotion, importer or general host authority |
 | Human reviewer | Inspect exact candidate evidence, approve or revoke | Approval binds the reviewed tuple and policy; CI is not approval |
 | Controller plugin | Serve explicitly enabled scoped routes and constrained inputs | Current core workspace UUID/state and target ownership checked at use |
+| VM access grant | Observe and use one operator-selected auxiliary VM with explicit console/exec/copy/lifecycle permissions | Current workspace UUID, VM UUID/name, grant ID/generation, token digest and live operation rechecks |
 | Installer facade | Acquire exact components, promote installation, activate and recover | No implicit workspace or protected-ref mutation |
 
 A workspace name is a display identifier. Creating the same name after discard
@@ -48,3 +49,10 @@ requested, one target in its private Docker daemon. Each new HTTP request,
 WebSocket upgrade or TCP connection revalidates workspace authority. Cached IPs
 and display-name reuse are not authentication. Host administration uses a
 separate private socket; there is no automatic host socket mount into agents.
+
+Auxiliary VM provisioning, image selection, discard, resource administration,
+root execution and Incus access remain host-operator authority. A workspace VM
+grant may expose status, ordinary guest commands, safe home-relative file
+transfer and start/stop only when each permission is present. Revoke, workspace
+stop/discard/name reuse, VM identity change or transport loss invalidates the
+grant and active streams; a VM display name alone is never authority.

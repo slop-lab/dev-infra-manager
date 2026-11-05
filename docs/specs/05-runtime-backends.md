@@ -48,3 +48,13 @@ the KVM API from the actual workspace user is the functional acceptance check.
 The optional VM host plugin supplies an Incus VM backend with explicit host
 configuration and resource admission. Its configuration and implementation
 belong to that plugin. See the [runtime guide](../guides/runtime-backends.md).
+
+The same plugin may attach an operator-created auxiliary VM to an ordinary
+running workspace through the generic guest capability channel. The attachment
+is not a workspace runtime and does not require `/dev/kvm` inside the current
+workspace. Discovery is grant-filtered. Host-owned transport checks the current
+workspace and VM UUIDs, grant ID/generation, permission, exact Incus ownership
+and running state. Exec runs as the VM's `dim` user; copy is limited to
+home-relative paths and the shared bounded DIMCP1 protocol. Lifecycle permission
+allows only start and stop. The workspace never receives the Incus socket,
+project, host filesystem, budget helper, operator token or provisioning API.

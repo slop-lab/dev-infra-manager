@@ -24,6 +24,15 @@ publication retries. Real Sysbox and real KVM mechanics are distinct evidence.
 Missing KVM is unavailable; mocks, TCG or ordinary containers cannot establish
 KVM behavior. Candidate-controlled results never establish human approval.
 
+Scoped auxiliary-VM acceptance additionally proves discovery without repository
+configuration, exact workspace/VM identity, stdin/stdout/stderr/exit and signal
+behavior, binary push/pull, unauthorized-workspace denial, revoke during active
+streams, stop/start reconnect, retained VM data and exact cleanup. Direct
+`container-kvm`, Incus VM workspaces and auxiliary VM attachments are separate
+claims. The required runtime runner must fail unavailable when its reviewed
+images, private state parent, KVM probe, Sysbox or real KVM device are missing;
+skipped tests are not successful required evidence.
+
 Use disposable names, directories, repositories and resources. Cleanup removes
 only exact run-owned resources. Never replace running host installations as a
 side effect of source checks. Full package builds and selected tarball install
