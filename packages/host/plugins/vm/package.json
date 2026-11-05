@@ -1,7 +1,7 @@
 {
   "name": "@slop-lab/dim-host-plugin-vm",
   "version": "0.10.0",
-  "description": "Persistent Incus VM workspaces and scoped browser consoles for DIM",
+  "description": "Persistent Incus VM workspaces and scoped auxiliary VM access for DIM",
   "private": true,
   "license": "MIT",
   "type": "module",

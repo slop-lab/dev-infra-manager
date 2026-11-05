@@ -2,7 +2,7 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { UserError } from "@slop-lab/dim-host-core/workspace";
+import { UserError, workspaceServiceEndpoint } from "@slop-lab/dim-host-core/workspace";
 import { type WorkspaceHostPlugin, type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-api";
 import { LinuxVmBudget } from "./budget.js";
 import { CommandVmBudget } from "./budget-helper.js";
@@ -12,6 +12,7 @@ import { IncusWorkspaceRuntime } from "./runtime.js";
 import { PersistentVmService } from "./store.js";
 import { importReviewedImage, type ReviewedImageDownload } from "./images.js";
 import { serveVmConsole } from "./console.js";
+import { deployVmAccess, inspectVmAccess, listVmAccess, vmCapabilities, vmWorkspaceServices } from "./workspaceAccess.js";
 
 export { CommandVmBudget } from "./budget-helper.js";
 export { LinuxVmBudget, budgetValues, type VmBudget } from "./budget.js";
@@ -20,6 +21,8 @@ export { IncusMachines, type VmIdentity, type VmInspection } from "./incus.js";
 export { IncusWorkspaceRuntime } from "./runtime.js";
 export { PersistentVmService, parsePersistentVm, type PersistentVm } from "./store.js";
 export { serveVmConsole } from "./console.js";
+export { VmAccessService } from "./access.js";
+export { serveVmAccess } from "./accessServer.js";
 
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "vm",
@@ -30,6 +33,15 @@ export const hostPlugin: WorkspaceHostPlugin = {
       const config = readVmHostConfig(context.stateRoot);
       return new IncusWorkspaceRuntime(new IncusMachines(config, context.runner, configuredBudget(config, context.runner), context.cleanupRunner));
     }
+  },
+  workspaceReady: deployVmAccess,
+  workspaceCapabilities: vmCapabilities,
+  workspaceServices: vmWorkspaceServices,
+  guest: {
+    description: "Operator-granted auxiliary VM discovery, guest execution, safe file transfer, console and bounded lifecycle access",
+    commands: [{ name: "dim-vm", description: "Use auxiliary VMs explicitly granted to this workspace" }],
+    operations: [{ name: "list", description: "List auxiliary VMs and operations granted to this workspace", handle: listVmAccess }],
+    inspect: inspectVmAccess
   },
   commands: [{ name: "vm", description: "Manage persistent auxiliary VMs and scoped browser consoles" }],
   async run(args, context) { await runVmCommand(args.slice(1), context); }
@@ -110,18 +122,22 @@ async function runVmCommand(args: string[], context: WorkspaceHostPluginContext)
       process.stdout.write(`${JSON.stringify({ name, resources: record.resources, recreated: false })}\n`); return;
     }
     case "grant": {
-      if (!name || !argument || args.length !== 3) throw new UserError("usage: dim vm grant VM WORKSPACE");
-      const token = await service.grant(name, argument);
+      if (!name || !argument || args.length > 4 || (args[3] !== undefined && args[3] !== "--lifecycle")) {
+        throw new UserError("usage: dim vm grant VM WORKSPACE [--lifecycle]");
+      }
+      const credential = await service.grantAccess(name, argument, ["console", "copy", "discover", "exec", "status",
+        ...(args[3] === "--lifecycle" ? ["lifecycle" as const] : [])]);
       // Deliberately scoped credential, never an Incus or host operator token.
       const endpoint = config.console ?? { address: "127.0.0.1", port: 8089 };
-      const payload = JSON.stringify({ vm: name, token, consoleUrl: `http://${endpoint.address}:${endpoint.port}` });
+      const payload = JSON.stringify({ schemaVersion: 2, ...credential, endpoint: workspaceServiceEndpoint("vm"),
+        consoleUrl: `http://${endpoint.address}:${endpoint.port}` });
       const { Readable } = await import("node:stream");
-      const code = `const fs=require('node:fs'),os=require('node:os'),p=require('node:path');let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const d=p.join(os.homedir(),'.config/dim/vms');fs.mkdirSync(d,{recursive:true,mode:0o700});const v=JSON.parse(s);fs.writeFileSync(p.join(d,v.vm+'.json'),s+'\\n',{mode:0o600});});`;
-      if (await context.service.exec(argument, ["node", "-e", code], { stdin: Readable.from([payload]), signal: context.signal }) !== 0) {
-        await service.revoke(name, (await context.store.read(argument)).id);
+      const code = `const fs=require('node:fs'),os=require('node:os'),p=require('node:path');let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const d=p.join(os.homedir(),'.config/dim/vms');fs.mkdirSync(d,{recursive:true,mode:0o700});const v=JSON.parse(s);fs.writeFileSync(p.join(d,v.vmName+'.json'),s+'\\n',{mode:0o600});});`;
+      if (await context.service.exec(argument, ["node", "-e", code], { stdin: Readable.from([payload]), workspaceId: credential.workspaceId, signal: context.signal }) !== 0) {
+        await service.revokeGrant(name, { workspaceId: credential.workspaceId, grantId: credential.grantId, generation: credential.generation });
         throw new UserError("could not deliver scoped VM credential to the workspace");
       }
-      process.stdout.write(`VM console access granted to '${argument}'. Its scoped credential is ~/.config/dim/vms/${name}.json inside the workspace.\n`); return;
+      process.stdout.write(`VM access granted to '${argument}'. Its scoped credential is ~/.config/dim/vms/${name}.json inside the workspace.\n`); return;
     }
     case "revoke": {
       if (!name || !argument || args.length !== 3) throw new UserError("usage: dim vm revoke VM WORKSPACE_UUID");
@@ -146,7 +162,7 @@ async function runVmCommand(args: string[], context: WorkspaceHostPluginContext)
       process.stdout.write(`VM browser console: http://${endpoint.address}:${port}; private owner token: ${tokenFile}. Use an SSH local forward for a remote host.\n`);
       await once(server, "close"); return;
     }
-    default: throw new UserError("usage: dim vm configure FILE | ls | create NAME FINGERPRINT | start NAME | stop NAME | discard NAME | grant VM WORKSPACE | revoke VM WORKSPACE_UUID | console PORT");
+    default: throw new UserError("usage: dim vm configure FILE | ls | create NAME FINGERPRINT | start NAME | stop NAME | discard NAME | grant VM WORKSPACE [--lifecycle] | revoke VM WORKSPACE_UUID | console PORT");
   }
 }
 
