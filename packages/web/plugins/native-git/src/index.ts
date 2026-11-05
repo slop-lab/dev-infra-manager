@@ -16,8 +16,9 @@ const file = z.string().refine(isAbsolute);
 const configSchema = z.object({ reviewerConnection: file, promoterConnection: file.optional(), syncConnection: file.optional(),
   projects: z.array(z.object({ projectId: identifier, name: z.string().min(1).max(128).optional(), repositoryIds: z.array(identifier).min(1).max(64)
     .refine((ids) => new Set(ids).size === ids.length) }).strict()).min(1).max(1000).refine((projects) => new Set(projects.map(({ projectId }) => projectId)).size === projects.length) }).strict();
+const catalogInputSchema = z.object({ controllerId: controllerId.optional() }).strict();
 const catalogOperation: Operation = { name: "projects.list", description: "Discover controllers, projects and repositories", access: "read",
-  parseInput: (input) => z.object({}).strict().default({}).parse(input), parseOutput: (output) => z.object({ controllers: z.array(controllerSchema).max(64) }).strict().parse(output) };
+  parseInput: (input) => catalogInputSchema.default({}).parse(input), parseOutput: (output) => z.object({ controllers: z.array(controllerSchema).max(64) }).strict().parse(output) };
 function wrapped(operation: Operation): Operation {
   return { ...operation, parseInput(value) {
     const { controllerId: selected, ...input } = z.record(z.string(), z.unknown()).parse(value);
@@ -32,12 +33,12 @@ function selectedInput(input: unknown) {
   return { controllerId: controllerId.parse(selected), value };
 }
 async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
-  type ControllerState = { readonly controller: WebPluginContext["controllers"][number]; catalog: z.infer<typeof controllerSchema>; generation?: string; discovery?: Promise<void>; observed: boolean };
+  type ControllerState = { readonly controller: WebPluginContext["controllers"][number]; catalog: z.infer<typeof controllerSchema>; generation?: string; discovery?: Promise<void>; observed: boolean; revision: number; catalogRevision: number };
   const unavailable = (id: string): z.infer<typeof controllerSchema> => ({ id, controllerKey: id, title: id, status: "unavailable", projects: [], operations: [] });
-  const states: ControllerState[] = context.controllers.map((controller) => ({ controller, catalog: unavailable(controller.id), observed: false }));
+  const states: ControllerState[] = context.controllers.map((controller) => ({ controller, catalog: unavailable(controller.id), observed: false, revision: 0, catalogRevision: 0 }));
   function beginDiscovery(state: ControllerState): Promise<void> {
     if (state.discovery) return state.discovery;
-    const expected = state.generation;
+    const expected = state.generation, revision = state.revision;
     const discovery = (async () => {
       try {
         const description = discoverySchema.parse(await state.controller.run(["project", "console", "describe", ...(expected ? ["--expected-generation", expected] : [])], { timeoutMilliseconds: 120_000 }));
@@ -47,13 +48,22 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
         state.generation = description.generationId;
         state.observed = false;
       } catch { state.catalog = unavailable(state.controller.id); }
+      finally { state.catalogRevision = revision; }
     })();
     state.discovery = discovery;
     void discovery.finally(() => { if (state.discovery === discovery) delete state.discovery; });
     return discovery;
   }
-  async function discover() {
+  async function discover(input: unknown) {
+    const selected = catalogInputSchema.parse(input).controllerId;
+    if (selected !== undefined && !states.some((state) => state.controller.id === selected)) throw new Error("Controller is unavailable");
     for (const state of states) if (!state.discovery && (state.catalog.status !== "ready" || state.observed)) beginDiscovery(state);
+    // Accepted catalog writes must be observed before an unrelated ready controller
+    // can make this read return. Ordinary discovery still serves the first ready host.
+    await Promise.all(states.filter((state) => state.controller.id === selected).map(async (state) => {
+      const requiredRevision = state.revision;
+      while (state.catalogRevision < requiredRevision) await beginDiscovery(state);
+    }));
     if (!states.some(({ catalog, observed }) => catalog.status === "ready" && !observed)) {
       const pending = states.flatMap((state) => state.discovery ? [state.discovery.then(() => state.catalog.status === "ready")] : []);
       if (pending.length > 0) await new Promise<void>((resolve) => {
@@ -69,7 +79,7 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
   return {
     operations,
     async invoke(name, input) {
-      if (name === "projects.list") return discover();
+      if (name === "projects.list") return discover(input);
       const selected = selectedInput(input), controller = context.controllers.find(({ id }) => id === selected.controllerId);
       const state = states.find(({ controller }) => controller.id === selected.controllerId);
       if (!controller || !state) throw new Error("Controller operation is unavailable");
@@ -98,7 +108,9 @@ async function automatic(context: WebPluginContext): Promise<WebPluginRuntime> {
       const parsed = operation.parseInput(selected.value);
        const generation = state.generation;
       if (!generation) throw new Error("Controller serving generation has not been attested");
-       return operation.parseOutput(await controller.run(["project", "console", "invoke", name, "--expected-generation", generation, "--input", JSON.stringify(parsed)], (name === "repositories.import" || name === "repositories.import-manifest") ? { timeoutMilliseconds: 180_000 } : name === "projects.attach" || /^(?:reviews|merges|sync|pull-requests)\./.test(name) ? { timeoutMilliseconds: 120_000 } : undefined));
+       const result = await controller.run(["project", "console", "invoke", name, "--expected-generation", generation, "--input", JSON.stringify(parsed)], (name === "repositories.import" || name === "repositories.import-manifest") ? { timeoutMilliseconds: 180_000 } : name === "projects.attach" || /^(?:reviews|merges|sync|pull-requests)\./.test(name) ? { timeoutMilliseconds: 120_000 } : undefined);
+       if (["projects.create", "projects.attach", "repositories.import", "repositories.import-manifest"].includes(name)) state.revision++;
+       return operation.parseOutput(result);
     }
   };
 }
@@ -122,6 +134,8 @@ export const webPlugin: WebPlugin = {
       operations: [catalogOperation, ...available.filter(({ name }) => name !== "projects.list").map(wrapped)],
       async invoke(name, input) {
         if (name === "projects.list") {
+          const selected = catalogInputSchema.parse(input).controllerId;
+          if (selected !== undefined && selected !== "direct") throw new Error("Controller is unavailable");
           const catalog = z.object({ reviewerId: identifier, projects: projectsSchema }).strict().parse(await operator.invoke(name, {}));
           return { controllers: [{ id: "direct", title: "Direct connection", status: "ready", ...catalog,
             operations: available.map(({ name, description, access }) => ({ name, description, access })) }] };

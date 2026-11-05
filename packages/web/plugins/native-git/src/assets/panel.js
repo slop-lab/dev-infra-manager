@@ -222,7 +222,7 @@ export function mount(container, context) {
   /** @param {{controllerId:string,projectId:string,repositoryId?:string}} [preferred] */
   async function refreshCatalog(preferred) {
     const version = ++catalogVersion, before = scope(), previous = preferred ? { ...preferred, repositoryId: preferred.repositoryId ?? "" } : before; saveDraft();
-    const value = /** @type {{controllers:Controller[]}} */ (await context.invoke("projects.list", {}, { timeoutMilliseconds: 125_000 })); if (!current() || version !== catalogVersion) return;
+    const value = /** @type {{controllers:Controller[]}} */ (await context.invoke("projects.list", previous.controllerId ? { controllerId: previous.controllerId } : {}, { timeoutMilliseconds: 125_000 })); if (!current() || version !== catalogVersion) return;
     controllers = value.controllers; availability.replaceChildren();
     for (const entry of controllers.filter(({ status }) => status === "unavailable")) availability.append(element("p", `${entry.title}: project discovery is unavailable. Ask the operator to repair this Git connection, then refresh projects. Other Git connections remain usable.`));
     options(host.control, controllers.map(({ id, title, status }) => ({ id, title: status === "unavailable" ? `${title} (unavailable)` : title })), previous.controllerId); host.field.hidden = controllers.length === 1 && controllers[0]?.status === "ready";

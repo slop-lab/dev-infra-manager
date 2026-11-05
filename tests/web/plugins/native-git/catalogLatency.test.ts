@@ -153,3 +153,37 @@ it("serves a fresh fast-controller catalog over authenticated HTTP while another
   await expect(access(gate)).resolves.toBeUndefined();
   await unlink(gate);
 });
+
+
+it("refreshes a mutated controller before another ready catalog can complete the read", async () => {
+  let releaseOther = () => {}, otherFinished = () => {}, releaseRefresh = () => {}, refreshStarted = () => {};
+  const otherGate = new Promise<void>((resolve) => { releaseOther = resolve; });
+  const otherDone = new Promise<void>((resolve) => { otherFinished = resolve; });
+  const refreshGate = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+  const refreshing = new Promise<void>((resolve) => { refreshStarted = resolve; });
+  let created = false, describes = 0;
+  const descriptors = operations.filter(({ name }) => ["projects.list", "projects.create"].includes(name)).map(({ name, description, access }) => ({ name, description, access }));
+  const description = (projects: Array<{ projectId: string; name: string; repositoryIds: string[] }>) => ({ schemaVersion: 1, generationId: "a".repeat(64), projects, operations: descriptors });
+  const runtime = await webPlugin.autoConnect!({ controllers: [
+    { id: "selected", async run(args) {
+      if (args[2] === "describe") {
+        describes++;
+        if (describes > 1) { refreshStarted(); await refreshGate; }
+        return description(created ? [{ projectId: "created", name: "created", repositoryIds: [] }] : []);
+      }
+      created = true;
+      return { projectId: "created", name: "created", repositoryIds: [] };
+    } },
+    { id: "other", async run() { await otherGate; otherFinished(); return description([]); } }
+  ] });
+  await expect(runtime.invoke("projects.list", {})).resolves.toMatchObject({ controllers: [{ id: "selected", status: "ready" }, { id: "other", status: "unavailable" }] });
+  releaseOther(); await otherDone; await new Promise<void>((resolve) => setImmediate(resolve));
+  await expect(runtime.invoke("projects.create", { controllerId: "selected", projectId: "created" })).resolves.toMatchObject({ projectId: "created" });
+  // Reading another controller stays fast even though the mutated controller's refresh is blocked.
+  const unrelated = runtime.invoke("projects.list", { controllerId: "other" });
+  await expect(Promise.race([unrelated.then(() => "returned"), new Promise<string>((resolve) => setImmediate(() => resolve("pending")))])).resolves.toBe("returned");
+  const catalog = runtime.invoke("projects.list", { controllerId: "selected" }); await refreshing;
+  await expect(Promise.race([catalog.then(() => "returned"), new Promise<string>((resolve) => setImmediate(() => resolve("pending")))])).resolves.toBe("pending");
+  releaseRefresh();
+  await expect(catalog).resolves.toMatchObject({ controllers: [{ id: "selected", projects: [{ projectId: "created", repositoryIds: [] }] }, { id: "other", status: "ready" }] });
+});
