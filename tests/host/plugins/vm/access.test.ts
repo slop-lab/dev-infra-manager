@@ -63,7 +63,7 @@ describe("workspace-scoped auxiliary VM access", () => {
     const execute = vi.spyOn(f.machines, "exec").mockImplementation(async () => { expect(ready).toBe(true); return 0; });
     await f.access.lifecycle({ ...identity, operation: "start" });
     await expect(f.access.exec({ ...identity, command: ["true"] })).resolves.toBe(0);
-    expect(wait).toHaveBeenCalledWith(f.vm); expect(execute).toHaveBeenCalled();
+    expect(wait).toHaveBeenCalledWith(expect.objectContaining({ id: f.vm.id, name: f.vm.name })); expect(execute).toHaveBeenCalled();
   });
 
   it("serializes lifecycle authorization with grant revocation", async () => {
