@@ -13,7 +13,10 @@ browser. Adding projects or repositories appears on **Refresh projects**; one
 unavailable or slow controller does not delay catalogs from a freshly attested
 ready controller. Automatic discovery starts without delaying Web plugin startup,
 coalesces concurrent catalog reads, and keeps a previously successful catalog
-visible for presentation while that controller refreshes. Initial discovery and
+visible for presentation while that controller refreshes. After an accepted Project
+creation, attachment or repository import, a catalog read scoped to that controller
+waits for a description covering the accepted write. Unrelated controllers remain
+independently readable. Initial discovery and
 completed failures remain unavailable. Presentation is not authorization: an
 operation joins an in-flight describe, or discovers an unavailable controller,
 but does not repeat a completed description for an already ready controller.

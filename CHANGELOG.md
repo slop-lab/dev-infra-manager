@@ -129,6 +129,8 @@ is implied by these source changes.
   assuming a source branch. Keep exact reviews and upstream sync under Advanced.
   Carry large review results through a bounded 32 MiB host response budget;
   distinguish an unavailable mutation result from an authoritative rejection.
+  Refresh the selected Git connection after accepted Project creation, attachment
+  and repository import without blocking catalogs from unrelated connections.
 
 - Manage independent Git repositories in one Project with separate imports,
   repository-scoped credentials, reviews and protected-ref promotion. Allow
