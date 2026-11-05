@@ -18,8 +18,12 @@ async function fixture() {
   await mkdir(credentialDirectory, { recursive: true, mode: 0o700 });
   const requests: Array<{ readonly path: string; readonly body: Buffer }> = [];
   const server = createServer((request, response) => { void (async () => {
+    const url = request.url ?? "";
+    if (url.includes("reject%2Fresult.bin")) {
+      request.once("data", () => { request.resume(); response.writeHead(403); response.end("rejected"); }); return;
+    }
     const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk));
-    const body = Buffer.concat(chunks), url = request.url ?? ""; requests.push({ path: url, body });
+    const body = Buffer.concat(chunks); requests.push({ path: url, body });
     if (url.endsWith("/status")) { response.setHeader("content-type", "application/json"); response.end('{"vmId":"12345678-1234-4234-8234-123456789abc","vmName":"desktop","running":true,"permissions":["copy","exec","status"]}'); return; }
     if (url.endsWith("/exec")) { response.write(frame(1, Buffer.from(`stdout:${body}`))); response.write(frame(2, Buffer.from("stderr"))); response.end(frame(3, Buffer.from("7"))); return; }
     if (url.includes("direction=pull")) { response.end(archive(Buffer.from("artifact"))); return; }
@@ -74,6 +78,21 @@ it("pushes and pulls files with the shared DIMCP1 helper", async () => {
     expect(f.requests.find(({ path }) => path.includes("direction=push"))?.body.subarray(0, 7).toString("ascii")).toBe("DIMCP1\0");
     expect((await run(f.home, ["pull", "desktop", "outputs/result.bin", target])).code).toBe(0);
     expect(await readFile(target, "utf8")).toBe("artifact"); expect((await stat(target)).isFile()).toBe(true);
+  } finally { f.server.close(); await once(f.server, "close"); }
+});
+
+it("terminates the local copy helper when a push request fails", async () => {
+  const f = await fixture();
+  try {
+    const marker = path.join(f.home, "copy-helper-terminated");
+    await writeFile(path.join(f.home, ".local/share/dim-vm/copy.cjs"), `
+      const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
+      process.on("SIGTERM", () => { fs.writeFileSync(path.join(os.homedir(), "copy-helper-terminated"), "yes"); process.exit(0); });
+      process.stdout.write("DIMCP1\\0payload"); setTimeout(() => process.exit(0), 2000);
+    `, { mode: 0o700 });
+    const source = path.join(f.root, "source.bin"); await writeFile(source, "payload");
+    expect((await run(f.home, ["push", "desktop", source, "reject/result.bin"])).code).toBe(2);
+    expect(await readFile(marker, "utf8")).toBe("yes");
   } finally { f.server.close(); await once(f.server, "close"); }
 });
 

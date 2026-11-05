@@ -53,8 +53,14 @@ async function main(args) {
     if (command === "push") {
       const child = spawn(process.execPath, [helper, "send", source, recursive ? "1" : "0", overwrite ? "1" : "0", "dim-workspace-copy", "helper", randomUUID()], { stdio: ["ignore", "pipe", "inherit"] });
       if (!child.stdout) throw new Error("copy helper has no output");
-      const response = await streamRequest(copyUrl(target, "push", destination, recursive, overwrite), { method: "POST", headers, body: child.stdout });
-      response.resume(); await once(response, "end"); process.exitCode = await closed(child); return;
+      const completion = closed(child);
+      try {
+        const response = await streamRequest(copyUrl(target, "push", destination, recursive, overwrite), { method: "POST", headers, body: child.stdout });
+        response.resume(); await once(response, "end"); process.exitCode = await completion; return;
+      } catch (error) {
+        if (child.exitCode === null && child.signalCode === null) child.kill();
+        await completion.then(() => undefined, () => undefined); throw error;
+      }
     }
     const response = await streamRequest(copyUrl(target, "pull", source, recursive, overwrite), { method: "POST", headers });
     const child = spawn(process.execPath, [helper, "receive", destination, recursive ? "1" : "0", overwrite ? "1" : "0", "dim-workspace-copy", "helper", randomUUID()], { stdio: ["pipe", "inherit", "inherit"] });
