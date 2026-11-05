@@ -1,3 +1,4 @@
+import { workspaceRecord } from "../../support/workspaceFixture.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -74,6 +75,8 @@ it("retains only the selected edge TLS volumes and restores its original deploym
   }
   await writeFile(join(directory, "Caddyfile"), "reviewed TLS edge with private DNS credential", { mode: 0o600 });
   await writeFile(join(f.paths.configuration, "shared-ingress/edge.json"), JSON.stringify({ schemaVersion: 1, ingressName: "https-ts" }), { mode: 0o600 });
+  await mkdir(join(f.paths.state, "workspaces"), { recursive: true });
+  await writeFile(join(f.paths.state, "workspaces/kvm.json"), JSON.stringify(workspaceRecord("kvm", { id: "11111111-1111-4111-8111-111111111111", runtime: "container-kvm" })), { mode: 0o600 });
   const { collectHostClaims } = await import("../../../scripts/local-uninstall/host-resources.ts");
   const { retainedPersistentData } = await import("../../../scripts/local-uninstall/persistent-data.ts");
   const claims = await collectHostClaims(f.paths);

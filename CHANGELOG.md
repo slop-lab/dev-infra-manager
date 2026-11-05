@@ -50,6 +50,10 @@ is implied by these source changes.
   accounts, refresh managed Web CLI connections, checkpoint service data before
   local updates and reconnect the new generation automatically. Keep the writable development image registry separate
   from package mirrors and honor cache-data retention during clean reinstall.
+  Resolve retained optional-service plugins through the matching installer facade,
+  recognize owned KVM containers during ingress restoration, and bound local
+  package installation with descendant cleanup on timeout or cancellation. Prefer
+  cached npm metadata without forcing offline resolution or changing user configuration.
   Support host-only installation from existing control-plane role connections,
   optional owned SSH forwarding, generation attestation and retained reconnect
   settings without deploying services on the new host. Add a dependencies-only

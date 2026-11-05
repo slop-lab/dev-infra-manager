@@ -6,7 +6,7 @@ import { installLocalRuntime, localArtifacts, type InstallCommand } from "./loca
 import { checked, command, type Command } from "./local-uninstall/command.ts";
 import { metadata, object } from "./local-uninstall/files.ts";
 import { removalPaths } from "./local-uninstall/paths.ts";
-import type { installPlugins as InstallerInstallPlugins } from "../packages/installer/src/pluginInstall.js";
+import { installSelectedPlugins } from "./local-installer-facade.ts";
 import { selectedSharedIngressEdge } from "./local-uninstall/shared-ingress-edge.ts";
 import { collectHostClaims } from "./local-uninstall/host-resources.ts";
 import { sharedIngressUnitPath, ownedSharedIngressUnit } from "./local-uninstall/shared-ingress-unit.ts";
@@ -14,10 +14,8 @@ import { sharedIngressUnitPath, ownedSharedIngressUnit } from "./local-uninstall
 export const sharedIngressArtifacts = (manifest: unknown) => localArtifacts(manifest, ["@slop-lab/dim-control-plane-plugin-external-urls"]);
 const hostPackage = "@slop-lab/dim-host-plugin-external-urls";
 type InstallHost = (input: { home: string; version: string; files: string[] }) => Promise<void>;
-const installHost: InstallHost = async ({ home, version, files }) => {
-  const entry = new URL("../packages/installer/dist/pluginInstall.js", import.meta.url);
-  const { installPlugins } = await import(entry.href) as { installPlugins: typeof InstallerInstallPlugins };
-  await installPlugins([`${hostPackage}@${version}`], { pluginHome: home, pluginNames: [hostPackage], packageSpecifiers: files, restartController: true });
+const installHost = async (env: NodeJS.ProcessEnv, { home, version, files }: Parameters<InstallHost>[0]): Promise<void> => {
+  await installSelectedPlugins(env, [`${hostPackage}@${version}`], { pluginHome: home, pluginNames: [hostPackage], packageSpecifiers: files, restartController: true });
 };
 const quote = (value: string) => JSON.stringify(value.replaceAll("%", "%%"));
 async function privateDirectory(directory: string): Promise<void> {
@@ -25,7 +23,7 @@ async function privateDirectory(directory: string): Promise<void> {
   if (!stat) { await privateDirectory(dirname(directory)); await mkdir(directory, { mode: 0o700 }); return; }
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() || (stat.mode & 0o022) !== 0) throw new Error(`unsafe local shared ingress unit directory: ${directory}`);
 }
-export async function restoreLocalSharedIngress(bundle: string, env: NodeJS.ProcessEnv = process.env, run: Command = command, install?: InstallCommand, hostInstall: InstallHost = installHost): Promise<string | undefined> {
+export async function restoreLocalSharedIngress(bundle: string, env: NodeJS.ProcessEnv = process.env, run: Command = command, install?: InstallCommand, hostInstall?: InstallHost): Promise<string | undefined> {
   const paths = removalPaths(env), configuration = join(paths.configuration, "shared-ingress/services.json");
   const configStat = await metadata(configuration);
   if (!configStat) return;
@@ -39,7 +37,7 @@ export async function restoreLocalSharedIngress(bundle: string, env: NodeJS.Proc
   if (hostConfig) {
     if (!hostConfig.isFile() || hostConfig.isSymbolicLink() || hostConfig.nlink !== 1 || hostConfig.uid !== process.getuid?.() || (hostConfig.mode & 0o077) !== 0) throw new Error("unsafe retained external URL configuration");
     const artifacts = localArtifacts(JSON.parse(await readFile(join(bundle, "packages.json"), "utf8")), [hostPackage]);
-    await hostInstall({ home: paths.hostPlugins, version: artifacts.find(({ name }) => name === hostPackage)!.version, files: artifacts.map(({ file }) => join(bundle, file)) });
+    await (hostInstall ?? ((input) => installHost(env, input)))({ home: paths.hostPlugins, version: artifacts.find(({ name }) => name === hostPackage)!.version, files: artifacts.map(({ file }) => join(bundle, file)) });
   }
   let systemd = false;
   try { systemd = (await run("systemctl", ["--user", "show-environment"])).status === 0; } catch { /* A manual listener remains possible without systemd. */ }

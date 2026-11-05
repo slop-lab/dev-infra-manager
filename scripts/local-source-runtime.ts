@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { createInstallCommand } from "./local-uninstall/command.ts";
 import { lstat, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, isAbsolute, join, sep } from "node:path";
 
@@ -42,17 +42,16 @@ async function ownedDirectory(directory: string): Promise<void> {
   const metadata = await lstat(directory);
   if (!metadata.isDirectory() || metadata.isSymbolicLink() || metadata.uid !== process.getuid?.()) throw new Error(`unsafe local source runtime directory: ${directory}`);
 }
-export type InstallCommand = (arguments_: readonly string[]) => void;
+export type InstallCommand = (arguments_: readonly string[]) => void | Promise<void>;
 export async function installLocalRuntime(bundle: string, dataHome: string, options: {
   readonly component: "web" | "llm-operator" | "shared-ingress";
   readonly packages: readonly string[];
   readonly executable: string;
   readonly install?: InstallCommand;
 }): Promise<string> {
-  const install = options.install ?? ((arguments_: readonly string[]) => {
-    const result = spawnSync("npm", [...arguments_], { stdio: "inherit" });
-    if (result.error) throw result.error;
-    if (result.status !== 0) throw new Error(`local source npm installation failed (${result.status})`);
+  const install = options.install ?? (async (arguments_: readonly string[]) => {
+    const result = await createInstallCommand(process.env)("npm", arguments_);
+    if (result.status !== 0) throw new Error(`local source npm installation failed (${result.status}): ${result.stderr.trim().slice(0, 1000)}`);
   });
   const markerName = `.dim-source-${options.component}`;
   if (!isAbsolute(bundle) || !isAbsolute(dataHome)) throw new Error("local source installation requires absolute paths");
@@ -72,7 +71,7 @@ export async function installLocalRuntime(bundle: string, dataHome: string, opti
     const stage = join(runtime, `.install-${randomUUID()}`);
     await ownedDirectory(stage);
     try {
-      install(["install", "--prefix", stage, "--no-save", "--no-fund", "--no-audit", "--ignore-scripts", "--omit=dev", ...artifacts.map(({ file }) => join(bundle, file))]);
+      await install(["install", "--prefix", stage, "--no-save", "--no-fund", "--no-audit", "--ignore-scripts", "--omit=dev", ...artifacts.map(({ file }) => join(bundle, file))]);
       const executable = await realpath(join(stage, "node_modules/.bin", options.executable));
       if (!executable.startsWith(`${stage}${sep}`)) throw new Error("local source executable escapes its runtime");
       await writeFile(join(stage, markerName), identity, { flag: "wx", mode: 0o600 });

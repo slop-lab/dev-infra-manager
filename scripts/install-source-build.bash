@@ -130,6 +130,7 @@ else
   npm_command=(npm)
   dim_command=("$staged_installer/node_modules/.bin/dim")
 fi
+export npm_config_prefer_offline="${npm_config_prefer_offline:-${NPM_CONFIG_PREFER_OFFLINE:-true}}"
 "${npm_command[@]}" install --prefix "$staged_installer" --no-save --no-fund --no-audit "${installer_tarballs[0]}"
 
 echo "[host] install package bundle"
@@ -189,9 +190,9 @@ node "$repo_root/scripts/install-local-web.ts" "$package_root"
 if ((${#connection_args[@]} == 0)); then
   node "$repo_root/scripts/install-local-llm-operator.ts" "$package_root"
 fi
-node "$repo_root/scripts/install-local-llm-gateway.ts" "$package_root"
+DIM_LOCAL_INSTALLER="$facade" node "$repo_root/scripts/install-local-llm-gateway.ts" "$package_root"
 if ((${#connection_args[@]} == 0)); then
-  node "$repo_root/scripts/install-local-shared-ingress.ts" "$package_root"
+  DIM_LOCAL_INSTALLER="$facade" node "$repo_root/scripts/install-local-shared-ingress.ts" "$package_root"
 fi
 "${dim_command[@]}" controller restart
 node "$repo_root/scripts/configure-local-web.ts"

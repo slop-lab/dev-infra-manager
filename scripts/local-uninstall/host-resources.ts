@@ -35,7 +35,7 @@ async function records(root: string): Promise<Record<string, unknown>[]> {
     const record = object(await readJson(file));
     if (record.schemaVersion !== 10 || basename(file) !== `${text(record.name)}.json`) throw new Error(`unsupported workspace state: ${file}`);
     uuid(record.id);
-    if (record.runtime !== "container" && record.runtime !== "vm") throw new Error(`uninstall cannot safely remove workspace runtime '${text(record.runtime)}' in ${file}`);
+    if (record.runtime !== "container" && record.runtime !== "container-kvm" && record.runtime !== "vm") throw new Error(`uninstall cannot safely remove workspace runtime '${text(record.runtime)}' in ${file}`);
     result.push(record);
   }
   return result;

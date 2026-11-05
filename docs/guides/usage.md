@@ -278,6 +278,15 @@ administration endpoint. `dim host use local` restores the default context.
 
 The repository provides local maintenance tools; these are not published DIM
 commands. Run them from this source checkout with the supported Node.js runtime.
+Local package installs have a ten-minute subprocess budget; other maintenance
+commands retain their two-minute budget. Timeout or cancellation stops owned
+installer descendants, including detached npm processes. Installs prefer cached
+npm metadata and permit registry fallback; an explicit
+`npm_config_prefer_offline=false` preserves online metadata checks. No user npm
+configuration is rewritten. Source installation supplies the matching facade to
+optional-service restoration; when invoking those helpers directly, set
+`DIM_LOCAL_INSTALLER` to that selected facade executable.
+
 Inspect the removal plan first:
 
 ```bash

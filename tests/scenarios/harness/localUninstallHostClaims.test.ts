@@ -1,3 +1,4 @@
+import { workspaceRecord } from "../../support/workspaceFixture.js";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,10 +17,12 @@ async function fixture() {
 const id = "11111111-1111-1111-1111-111111111111";
 it("claims only recorded workspace identities and rejects unsupported runtimes", async () => {
   const f = await fixture(), file = join(f.paths.state, "workspaces/dev.json");
-  await f.json(file, { schemaVersion: 10, id, name: "dev", runtime: "container" });
+  await f.json(file, workspaceRecord("dev", { id, runtime: "container" }));
   const claims = await collectHostClaims(f.paths);
   expect(claims).toHaveLength(6);
   expect(claims[0]).toMatchObject({ name: `dim-workspace-${createHash("sha256").update(id).digest("hex").slice(0, 24)}`, labels: { "dim.workspace-id": id, "dim.workspace-schema": "10" } });
+  await f.json(file, workspaceRecord("dev", { id, runtime: "container-kvm" }));
+  expect(await collectHostClaims(f.paths)).toEqual(claims);
   await f.json(file, { schemaVersion: 10, id, name: "dev", runtime: "foreign" });
   await expect(collectHostClaims(f.paths)).rejects.toThrow("cannot safely remove workspace runtime");
 });
