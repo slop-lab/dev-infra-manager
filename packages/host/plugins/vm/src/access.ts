@@ -71,13 +71,13 @@ export class VmAccessService {
     let failure: unknown;
     try {
       exitCode = await this.records.machines.exec(access.vm, ["node", "--input-type=commonjs", "-e", workspaceCopyGuest,
-        direction, target, input.recursive ? "1" : "0", input.overwrite ? "1" : "0", workspaceCopyMarker, "helper", token], input.options);
+        direction, target, input.recursive ? "1" : "0", input.overwrite ? "1" : "0", workspaceCopyMarker, "helper", token, "/home/dim"], input.options);
       return exitCode;
     } catch (error) { failure = error; throw error; }
     finally {
       if (exitCode !== 0 || input.options?.signal?.aborted || failure !== undefined) {
         const cleanup = await this.records.machines.exec(access.vm, ["node", "--input-type=commonjs", "-e", workspaceCopyCleanup,
-          target, workspaceCopyMarker, "cleanup", token], { signal: AbortSignal.timeout(3000) });
+          target, workspaceCopyMarker, "cleanup", token, "/home/dim"], { signal: AbortSignal.timeout(3000) });
         if (cleanup !== 0) throw new UserError("VM copy cleanup could not be confirmed");
       }
     }

@@ -58,7 +58,7 @@ export class PersistentVmService {
     });
   }
   async start(name: string, expectedId?: string): Promise<void> { await this.lock(name, async () => {
-    const record = await this.read(name); requireVmIdentity(record, expectedId); await this.machines.start(record);
+    const record = await this.read(name); requireVmIdentity(record, expectedId); await this.startReady(record);
   }); }
   async stop(name: string, expectedId?: string): Promise<void> { await this.lock(name, async () => {
     const record = await this.read(name); requireVmIdentity(record, expectedId); await this.machines.stop(record);
@@ -123,7 +123,7 @@ export class PersistentVmService {
       const access = await this.authorizeAccess(input.vmName, input.token, { permission: "lifecycle", vmId: input.vmId,
         workspaceId: input.workspaceId, grantId: input.grantId, generation: input.generation });
       if (!access) throw new UserError("VM access denied or expired");
-      await this.machines[input.operation](access.vm);
+      if (input.operation === "start") await this.startReady(access.vm); else await this.machines.stop(access.vm);
     });
   }
   async authorize(name: string, token: string): Promise<PersistentVm | undefined> {
@@ -151,6 +151,12 @@ export class PersistentVmService {
     return undefined;
   }
   private file(name: string): string { return path.join(this.directory, `${validName(name)}.json`); }
+  private async startReady(record: PersistentVm): Promise<void> {
+    await this.machines.start(record); await this.machines.waitForAgent(record);
+    const ready = await this.machines.exec(record, ["sh", "-eu", "-c",
+      'test -d /workspace && test ! -L /workspace && test -w /workspace && test -d /mnt/dim-tmp && test ! -L /mnt/dim-tmp && test -w /mnt/dim-tmp && test "$(stat -c %a /mnt/dim-tmp)" = 700']);
+    if (ready !== 0) throw new UserError("auxiliary VM image must provide writable /workspace and private mode-0700 /mnt/dim-tmp for user dim");
+  }
   private async write(record: PersistentVm): Promise<void> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const temporary = `${this.file(record.name)}.${randomUUID()}.tmp`;

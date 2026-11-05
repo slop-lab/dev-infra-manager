@@ -55,6 +55,17 @@ describe("workspace-scoped auxiliary VM access", () => {
     expect((await allowed.machines.inspect(allowed.vm))?.running).toBe(true);
   });
 
+  it("waits for auxiliary guest readiness before a successful start returns", async () => {
+    const f = await fixture(["discover", "status", "exec", "lifecycle"]), identity = request(f);
+    await f.access.lifecycle({ ...identity, operation: "stop" });
+    let ready = false;
+    const wait = vi.spyOn(f.machines, "waitForAgent").mockImplementation(async () => { ready = true; });
+    const execute = vi.spyOn(f.machines, "exec").mockImplementation(async () => { expect(ready).toBe(true); return 0; });
+    await f.access.lifecycle({ ...identity, operation: "start" });
+    await expect(f.access.exec({ ...identity, command: ["true"] })).resolves.toBe(0);
+    expect(wait).toHaveBeenCalledWith(f.vm); expect(execute).toHaveBeenCalled();
+  });
+
   it("serializes lifecycle authorization with grant revocation", async () => {
     const f = await fixture(["discover", "status", "lifecycle"]), identity = request(f);
     const originalAuthorize = f.records.authorizeAccess.bind(f.records), originalStop = f.machines.stop.bind(f.machines);
@@ -81,7 +92,7 @@ describe("workspace-scoped auxiliary VM access", () => {
       overwrite: true })).resolves.toBe(0);
     expect(f.runner.calls.at(-1)).toEqual(expect.arrayContaining(["exec", expect.any(String), "--", "runuser", "--user", "dim",
       "--preserve-environment", "--", "node", "--input-type=commonjs", "-e", expect.stringContaining("DIMCP1"),
-      "receive", "/home/dim/artifacts/result.bin", "0", "1"]));
+      "receive", "/home/dim/artifacts/result.bin", "0", "1", "dim-workspace-copy", "helper", expect.any(String), "/home/dim"]));
     await expect(f.access.copy({ ...identity, path: "../escape", direction: "pull", recursive: false,
       overwrite: false })).rejects.toThrow(/path/);
   });
