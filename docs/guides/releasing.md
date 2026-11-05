@@ -171,6 +171,10 @@ Manual dispatch does not install or register a runner. Before dispatching:
   Missing/offline runners leave a job queued, not passed. Use only disposable
   test hosts; do not expose production DIM state, credentials, or protected
   host verification services to GitHub jobs.
+- The privileged `vm-runtime-acceptance` job runs automatically only for the
+  reviewed merge queue, `main` pushes and release tags. Pull-request source does
+  not execute automatically on the KVM/Docker runner; manual dispatch requires
+  the same reviewed candidate and disposable runner prerequisites.
 
 See GitHub's [manual workflow documentation](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
 for the default-branch requirement. In the UI, select **Actions → workflow →

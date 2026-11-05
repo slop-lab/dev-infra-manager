@@ -18,6 +18,9 @@
   authenticated status returns the grant-filtered target.
 - Runtime runner negative preflight: missing exact image bindings fails rather
   than skipping or reporting success.
+- The heavy runner rechecks the deterministic VM-access tests before the three
+  physical runtime tests, and privileged GitHub execution is limited to the
+  reviewed merge queue, `main`/release pushes or explicit manual dispatch.
 - Security review fixes included generation-pinned failed-delivery cleanup,
   lifecycle/revoke serialization and pre-resolution symlink rejection.
 
