@@ -4,6 +4,7 @@ import { IncusWorkspaceRuntime } from "../../../../packages/host/plugins/vm/src/
 import { budgetValues, type VmBudget } from "../../../../packages/host/plugins/vm/src/budget.js";
 import { config, FakeIncus, workspace } from "./fixture.js";
 import { parseVmHostConfig } from "../../../../packages/host/plugins/vm/src/config.js";
+import type { StreamingCommandRunner } from "../../../../packages/host/core/src/types.js";
 
 const id = "12345678-1234-1234-1234-123456789abc";
 function fixture(budget: VmBudget = { apply: async () => {}, verify: async () => {} }) {
@@ -37,6 +38,7 @@ describe("Incus VM workspace runtime", () => {
   it("fails closed on foreign identities before start or delete", async () => {
     const { runner, machines } = fixture(); runner.exists = true; runner.foreign = true;
     await expect(machines.start(workspace())).rejects.toThrow("not owned");
+    await expect(machines.abortStart(workspace())).rejects.toThrow("not owned");
     await expect(machines.remove(workspace(), { keepData: false })).rejects.toThrow("not owned");
     expect(runner.calls.every((call) => call[0] === "query")).toBe(true);
   });
@@ -48,6 +50,42 @@ describe("Incus VM workspace runtime", () => {
     expect(calls).toEqual([[{ instance: `dim-${id}`, pid: 123 }, workspace().resources]]);
     expect(runner.running).toBe(false);
     expect(runner.calls).toContainEqual(["stop", `dim-${id}`, "--force"]);
+  });
+  it("confirms force-stop state before releasing a failed-start budget", async () => {
+    const releases: string[] = [];
+    const runner = new FakeIncus(); runner.exists = true; runner.running = true;
+    const machines = new IncusMachines(config, runner, { apply: async () => {}, verify: async () => {},
+      release: async (instance) => { expect(runner.running).toBe(false); releases.push(instance); } });
+    await machines.abortStart(workspace());
+    expect(releases).toEqual([`dim-${id}`]);
+  });
+  it("uses independent cleanup inspection and budget release after the operation runner is cancelled", async () => {
+    const cleanup = new FakeIncus(); cleanup.exists = true; cleanup.running = true;
+    const cancelled: StreamingCommandRunner = {
+      async run() { throw new DOMException("operation cancelled", "AbortError"); },
+      async runStreaming() { throw new DOMException("operation cancelled", "AbortError"); }
+    };
+    const releases: string[] = [];
+    const machines = new IncusMachines(config, cancelled, { apply: async () => {}, verify: async () => {} }, cleanup,
+      { apply: async () => {}, verify: async () => {}, release: async (instance) => { expect(cleanup.running).toBe(false); releases.push(instance); } });
+    await machines.abortStart(workspace());
+    expect(cleanup.calls).toContainEqual(["stop", `dim-${id}`, "--force"]);
+    expect(releases).toEqual([`dim-${id}`]);
+  });
+  it("fails rollback when Incus reports force-stop success but the VM remains running", async () => {
+    class IgnoredForceStop extends FakeIncus {
+      override async run(command: string, args: string[], options?: import("../../../../packages/host/core/src/types.js").RunOptions) {
+        if (args.includes("stop") && args.includes("--force")) {
+          this.calls.push(args.slice(2)); return { command, args, stdout: "", stderr: "", exitCode: 0 };
+        }
+        return super.run(command, args, options);
+      }
+    }
+    let released = false;
+    const runner = new IgnoredForceStop(); runner.exists = true; runner.running = true;
+    const machines = new IncusMachines(config, runner, { apply: async () => {}, verify: async () => {}, release: async () => { released = true; } });
+    await expect(machines.abortStart(workspace())).rejects.toThrow("still running");
+    expect(released).toBe(false);
   });
   it("rejects live guest allocation changes before Incus can partially apply unsupported memory hotplug", async () => {
     const { runner, machines } = fixture(); await machines.create(workspace()); await machines.start(workspace());

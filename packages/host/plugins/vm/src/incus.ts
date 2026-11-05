@@ -11,12 +11,12 @@ export interface VmInspection { running: boolean; pid: number }
 /** Incus owns the durable root disk and machine definition; DIM owns the UUID labels and admission. */
 export class IncusMachines {
   constructor(readonly config: VmHostConfig, readonly runner: StreamingCommandRunner, private readonly budget: VmBudget,
-    private readonly cleanupRunner: CommandRunner = runner) {}
+    private readonly cleanupRunner: CommandRunner = runner, private readonly cleanupBudget: VmBudget = budget) {}
 
   name(record: Pick<VmIdentity, "id">): string { return `dim-${uuid(record.id)}`; }
-  async inspect(record: VmIdentity): Promise<VmInspection | undefined> {
+  async inspect(record: VmIdentity, runner: CommandRunner = this.runner, options?: RunOptions): Promise<VmInspection | undefined> {
     const name = this.name(record);
-    const result = await this.runner.run("incus", this.args(["query", `/1.0/instances/${name}`]));
+    const result = await runner.run("incus", this.args(["query", `/1.0/instances/${name}`]), options);
     if (result.exitCode !== 0) {
       if (/not found|does not exist/i.test(result.stderr)) return undefined;
       throw new UserError(`cannot inspect Incus VM: ${result.stderr.trim()}`);
@@ -27,7 +27,7 @@ export class IncusMachines {
       || config["user.dim.owner"] !== "dim-vm-v1" || config["user.dim.image"] !== fingerprint(record.image) || config["volatile.base_image"] !== record.image) {
       throw new UserError(`Incus instance '${name}' is not owned by this DIM VM record`);
     }
-    const state = object(await this.query(`/1.0/instances/${name}/state`));
+    const state = object(await this.query(`/1.0/instances/${name}/state`, runner, options));
     const running = state.status_code === 103;
     if (typeof state.pid !== "number" || !Number.isSafeInteger(state.pid) || state.pid < 0 || (running && state.pid === 0)) throw new UserError("Incus returned invalid QEMU process state");
     return { running, pid: state.pid };
@@ -59,12 +59,18 @@ export class IncusMachines {
       await this.budget.apply({ instance: this.name(record), pid: running.pid }, record.resources);
     } catch (error) {
       // A VM without confirmed host ceilings must not remain running.
-      try {
-        const failed = await this.inspect(record);
-        if (failed?.running) await this.checked(["stop", this.name(record), "--force"], this.cleanupRunner);
-      } catch (cleanupError) { throw new AggregateError([error, cleanupError], "VM start failed and stopping the unbounded VM could not be confirmed"); }
+      try { await this.abortStart(record); }
+      catch (cleanupError) { throw new AggregateError([error, cleanupError], "VM start failed and stopping the unbounded VM could not be confirmed"); }
       throw error;
     }
+  }
+  async abortStart(record: VmIdentity): Promise<void> {
+    const options = { signal: AbortSignal.timeout(30_000) };
+    const actual = await this.inspect(record, this.cleanupRunner, options);
+    if (actual?.running) await this.checked(["stop", this.name(record), "--force"], this.cleanupRunner, options);
+    const stopped = await this.inspect(record, this.cleanupRunner, options);
+    if (stopped?.running) throw new UserError("force-stopped VM is still running");
+    await this.cleanupBudget.release?.(this.name(record));
   }
   async stop(record: VmIdentity): Promise<void> {
     const actual = await this.inspect(record);
@@ -165,8 +171,8 @@ export class IncusMachines {
     if (gateway === undefined || gateway.split(".").some((part) => Number(part) > 255)) throw new UserError("invalid Incus bridge gateway");
     return gateway;
   }
-  async query(endpoint: string): Promise<unknown> {
-    const result = await this.checked(["query", endpoint]);
+  async query(endpoint: string, runner: CommandRunner = this.runner, options?: RunOptions): Promise<unknown> {
+    const result = await this.checked(["query", endpoint], runner, options);
     return JSON.parse(result);
   }
   async checked(args: string[], runner: CommandRunner = this.runner, options?: RunOptions): Promise<string> {
