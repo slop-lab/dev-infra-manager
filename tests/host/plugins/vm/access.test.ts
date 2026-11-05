@@ -74,6 +74,22 @@ describe("workspace-scoped auxiliary VM access", () => {
     expect((await f.machines.inspect(f.vm))?.running).toBe(false);
   });
 
+  it("preserves an already-running auxiliary VM when readiness fails", async () => {
+    const f = await fixture(["discover", "status", "lifecycle"]), identity = request(f);
+    vi.spyOn(f.machines, "waitForAgent").mockRejectedValue(new Error("guest image not ready"));
+    await expect(f.access.lifecycle({ ...identity, operation: "start" })).rejects.toThrow("guest image not ready");
+    expect((await f.machines.inspect(f.vm))?.running).toBe(true);
+  });
+
+  it("reports readiness and rollback failures when a newly started VM cannot stop", async () => {
+    const f = await fixture(["discover", "status", "lifecycle"]), identity = request(f);
+    await f.access.lifecycle({ ...identity, operation: "stop" });
+    vi.spyOn(f.machines, "waitForAgent").mockRejectedValue(new Error("guest agent unavailable"));
+    vi.spyOn(f.machines, "stop").mockRejectedValue(new Error("stop failed"));
+    await expect(f.access.lifecycle({ ...identity, operation: "start" }))
+      .rejects.toThrow("auxiliary VM readiness failed and the started VM could not be stopped");
+  });
+
   it("serializes lifecycle authorization with grant revocation", async () => {
     const f = await fixture(["discover", "status", "lifecycle"]), identity = request(f);
     const originalAuthorize = f.records.authorizeAccess.bind(f.records), originalStop = f.machines.stop.bind(f.machines);

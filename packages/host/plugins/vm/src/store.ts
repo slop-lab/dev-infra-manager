@@ -152,6 +152,7 @@ export class PersistentVmService {
   }
   private file(name: string): string { return path.join(this.directory, `${validName(name)}.json`); }
   private async startReady(record: PersistentVm): Promise<void> {
+    const before = await this.machines.inspect(record), started = before?.running !== true;
     await this.machines.start(record);
     try {
       await this.machines.waitForAgent(record);
@@ -159,6 +160,7 @@ export class PersistentVmService {
         'test -d /workspace && test ! -L /workspace && test -w /workspace && test -d /mnt/dim-tmp && test ! -L /mnt/dim-tmp && test -w /mnt/dim-tmp && test "$(stat -c %a /mnt/dim-tmp)" = 700']);
       if (ready !== 0) throw new UserError("auxiliary VM image must provide writable /workspace and private mode-0700 /mnt/dim-tmp for user dim");
     } catch (error) {
+      if (!started) throw error;
       try { await this.machines.stop(record); }
       catch (stopError) { throw new AggregateError([error, stopError], "auxiliary VM readiness failed and the started VM could not be stopped"); }
       throw error;
