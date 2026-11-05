@@ -382,7 +382,12 @@ is implied by these source changes.
   and separately granted start/stop operations. Bind every operation to current
   workspace/VM identities and grant generation; keep provisioning, resources,
   Incus access and host authority operator-only. Require a hard-fail real
-  KVM/Sysbox runtime acceptance job for main and release candidates.
+  KVM/Sysbox runtime acceptance job for main and release candidates. Fence
+  home-relative copy through held no-follow directory ancestry, dispatch exec
+  requests before interactive stdin produces bytes, detach stdin after response,
+  and wait for auxiliary guest/image readiness after start. Prepare exact local
+  images, private fixture state and a SHA-256-attested KVM probe from the reviewed
+  candidate instead of relying on undefined runner variables.
   Connect multiple Codex accounts through device authorization and multiple
   OpenAI-compatible or Anthropic-compatible API accounts from Web or the operator
   CLI. Start Codex sign-in directly from Web without entering an account ID or

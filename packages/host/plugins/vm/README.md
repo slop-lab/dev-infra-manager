@@ -8,8 +8,10 @@ KVM, this package, its WebSocket dependency or graphical console assets.
 The trusted host needs Incus, its guest-agent-capable reviewed VM image, an
 existing private Incus project, a storage pool, a managed IPv4 bridge and a
 writable cgroup-v2 delegation with CPU, memory and PID controllers enabled. The
-VM guest image must provide UID/GID 1000 `dim`, `/home/dim`, Git, Node.js 24 or 26 and
-Docker, util-linux `runuser` and a boot service for Docker. Saved agent sessions
+VM guest image must provide UID/GID 1000 `dim`, `/home/dim`, a writable
+non-symlink `/workspace`, a writable non-symlink `/mnt/dim-tmp` owned by `dim`
+with mode `0700`, Git, Node.js 24 or 26 and Docker, util-linux `runuser` and a
+boot service for Docker. Saved agent sessions
 resume through DIM-owned persistent guest systemd units, including guest-initiated reboots; workspace SSH additionally needs OpenSSH and
 passwordless sudo inside the guest. Install Docker **inside the guest**. Do not expose the Incus socket,
 host Docker socket, host filesystem or host operator credentials to it.
@@ -146,6 +148,11 @@ An existing browser, exec or copy stream is closed when its grant or workspace
 becomes invalid. The credential grants discovery, status, console, ordinary
 guest exec and safe home-relative copy. `--lifecycle` additionally grants start
 and stop. Inside the workspace use `dim-vm list|status|exec|push|pull|start|stop`.
+Successful start waits for the guest agent and verifies the supported auxiliary
+image's `/workspace` and private temporary-directory contract before returning.
+Copy resolves existing home-relative ancestors through held no-follow directory
+descriptors, so an intermediate symlink cannot redirect read or write authority
+outside `/home/dim`.
 The credential does not expose the Incus API or permit create, discard, image
 import, resource changes, allocation, root exec or host management. Stop/revoke
 a grant before handing a workspace to another operator.
