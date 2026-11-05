@@ -1,4 +1,4 @@
-import { createServer, type RequestListener } from "node:http";
+import { createServer, request, type RequestListener } from "node:http";
 import { randomBytes } from "node:crypto";
 import { EventEmitter, once } from "node:events";
 import { runInNewContext } from "node:vm";
@@ -43,6 +43,39 @@ it("streams guest HTTP upload and SSE over the host-initiated stdio channel", as
   expect(response.status).toBe(200);
   expect(await response.text()).toBe("data: first\n\ndata: last\n\n");
   expect(Buffer.concat(fx.received).toString()).toBe(body);
+});
+
+it("dispatches upstream headers while the guest request body remains open", async () => {
+  let receivedRequest: () => void = () => {};
+  const requestSeen = new Promise<void>((resolve) => { receivedRequest = resolve; });
+  const fx = await fixture((_request, response) => { receivedRequest(); response.end("ready"); });
+  const response = new Promise<string>((resolve, reject) => {
+    const outgoing = request(`${fx.endpoint}/services/fixture/idle`, { method: "POST" }, (incoming) => {
+      const chunks: Buffer[] = []; incoming.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      incoming.once("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    });
+    outgoing.once("error", reject); outgoing.flushHeaders(); cleanup.push(async () => { outgoing.destroy(); });
+  });
+  await requestSeen;
+  await expect(response).resolves.toBe("ready");
+});
+
+it("streams early upstream output before delayed guest input and EOF", async () => {
+  const fx = await fixture(async (incoming, response) => {
+    response.write("ready:"); const chunks: Buffer[] = [];
+    for await (const chunk of incoming) chunks.push(Buffer.from(chunk)); response.end(Buffer.concat(chunks));
+  });
+  const result = new Promise<{ readonly first: string; readonly complete: string }>((resolve, reject) => {
+    const outgoing = request(`${fx.endpoint}/services/fixture/full-duplex`, { method: "POST" }, (incoming) => {
+      const chunks: Buffer[] = []; incoming.on("data", (chunk) => {
+        chunks.push(Buffer.from(chunk));
+        if (chunks.length === 1) { outgoing.end("answer"); }
+      });
+      incoming.once("end", () => resolve({ first: chunks[0]?.toString("utf8") ?? "", complete: Buffer.concat(chunks).toString("utf8") }));
+    });
+    outgoing.once("error", reject); outgoing.flushHeaders(); cleanup.push(async () => { outgoing.destroy(); });
+  });
+  await expect(result).resolves.toEqual({ first: "ready:", complete: "ready:answer" });
 });
 
 it("rejects unknown service names without exposing arbitrary host targets", async () => {

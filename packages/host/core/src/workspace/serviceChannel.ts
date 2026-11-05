@@ -64,6 +64,7 @@ export function openWorkspaceServiceChannel(options: WorkspaceServiceChannelOpti
       });
       upstream.on("error", () => { if (!stream.headersSent) deny(503); else stream.destroy(new UserError("workspace upstream stream failed")); });
       stream.once("close", () => upstream.destroy());
+      upstream.flushHeaders();
       stream.pipe(upstream);
     })().catch(() => { if (!stream.headersSent) deny(503); else stream.destroy(new UserError("workspace service stream failed")); });
   });
