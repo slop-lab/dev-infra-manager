@@ -1,8 +1,7 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { NativeBasicCredential } from "./native-basic-auth.js";
+import { createNativeSignedLease } from "./native-signed-lease.js";
 
 const leaseLifetimeMilliseconds = 30_000;
-const maximumLiveLeases = 16;
 
 export type WorkspaceWriteLeaseScope = {
   readonly generationId: string;
@@ -15,60 +14,28 @@ export type IssuedWorkspaceWriteLease = NativeBasicCredential & WorkspaceWriteLe
   readonly issuedAt: number;
   readonly expiresAt: number;
 };
-type StoredWorkspaceWriteLease = WorkspaceWriteLeaseScope & {
-  readonly expiresAt: number;
-  readonly passwordDigest: Buffer;
-};
-
 export type WorkspaceWriteLeaseRegistry = {
   authenticate(credential: NativeBasicCredential): WorkspaceWriteLeaseScope | undefined;
   clear(): void;
-  issue(scope: WorkspaceWriteLeaseScope): IssuedWorkspaceWriteLease | undefined;
+  issue(scope: WorkspaceWriteLeaseScope): IssuedWorkspaceWriteLease;
 };
 
 export function createWorkspaceWriteLeaseRegistry(now: () => number): WorkspaceWriteLeaseRegistry {
-  const leases = new Map<string, StoredWorkspaceWriteLease>();
-  const pruneExpired = (): void => {
-    const currentTime = now();
-    for (const [key, lease] of leases) {
-      if (currentTime >= lease.expiresAt) leases.delete(key);
-    }
-  };
+  const leases = createNativeSignedLease("workspace-write-", leaseLifetimeMilliseconds, now);
   return {
     authenticate(credential) {
-      pruneExpired();
-      const lease = leases.get(digest(credential.username));
-      if (lease === undefined || !timingSafeEqual(lease.passwordDigest, digestBuffer(credential.password))) {
-        return undefined;
-      }
-      return {
-        generationId: lease.generationId,
-        ownerHostId: lease.ownerHostId,
-        projectId: lease.projectId,
-        repositoryId: lease.repositoryId,
-        workspaceId: lease.workspaceId
-      };
+      const scope = leases.authenticate(credential);
+      if (!fiveStrings(scope)) return;
+      const [generationId, ownerHostId, projectId, repositoryId, workspaceId] = scope;
+      return { generationId, ownerHostId, projectId, repositoryId, workspaceId };
     },
-    clear() {
-      leases.clear();
-    },
+    clear: leases.clear,
     issue(scope) {
-      pruneExpired();
-      if (leases.size >= maximumLiveLeases) return undefined;
-      const username = `workspace-write-${randomBytes(18).toString("base64url")}`;
-      const password = randomBytes(32).toString("base64url");
-      const issuedAt = now();
-      const expiresAt = issuedAt + leaseLifetimeMilliseconds;
-      leases.set(digest(username), { ...scope, expiresAt, passwordDigest: digestBuffer(password) });
-      return { ...scope, username, password, issuedAt, expiresAt };
+      return { ...scope, ...leases.issue([scope.generationId, scope.ownerHostId, scope.projectId, scope.repositoryId, scope.workspaceId]) };
     }
   };
 }
 
-function digest(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
-}
-
-function digestBuffer(value: string): Buffer {
-  return createHash("sha256").update(value, "utf8").digest();
+function fiveStrings(value: readonly unknown[] | undefined): value is readonly [string, string, string, string, string] {
+  return value?.length === 5 && value.every((entry) => typeof entry === "string");
 }

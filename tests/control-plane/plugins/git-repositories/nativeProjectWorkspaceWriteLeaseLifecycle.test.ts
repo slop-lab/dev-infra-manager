@@ -24,6 +24,15 @@ const workspaceId = Buffer.alloc(32, 60).toString("base64url");
 afterEach(cleanupFinalizeFixtures);
 
 describe("native Project workspace write lease lifecycle", () => {
+  it("issues more than sixteen distinct workspace scopes without a live-identity quota", async () => {
+    const fixture = await finalizedFixture("workspace-write-distinct-scopes", {});
+    const responses: number[] = [];
+    for (let index = 0; index < maximumActiveOperations * 2; index++) {
+      responses.push((await requestWriteLease(fixture.origin, Buffer.alloc(32, index + 1).toString("base64url"))).status);
+    }
+    expect(responses).toEqual(Array(maximumActiveOperations * 2).fill(201));
+  });
+
   it("shares the sixteen-operation cap with root read lease issuance", async () => {
     // Given
     const barrier = verificationBarrier();
@@ -81,11 +90,11 @@ async function finalizedFixture(
   return { service, origin: service.origin };
 }
 
-function requestWriteLease(origin: string): Promise<Response> {
+function requestWriteLease(origin: string, selectedWorkspaceId = workspaceId): Promise<Response> {
   return fetch(`${origin}/v1/projects/project-a/repositories/root/workspace-write-leases`, {
     method: "POST",
     headers: { authorization: workspaceWriteIssuerAuthorization, "content-type": "application/json" },
-    body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "root", workspaceId })
+    body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "root", workspaceId: selectedWorkspaceId })
   });
 }
 

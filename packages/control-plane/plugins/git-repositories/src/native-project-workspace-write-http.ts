@@ -175,10 +175,6 @@ export function createNativeProjectWorkspaceWriteService(
           repositoryId: leaseRequest.repositoryId,
           workspaceId: leaseRequest.workspaceId
         });
-        if (lease === undefined) {
-          sendJson(response, 503, { error: "native Git workspace write lease capacity is exhausted" });
-          return true;
-        }
         sendJson(response, 201, {
           schemaVersion: 2,
           serviceId: "native-main",
