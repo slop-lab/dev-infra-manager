@@ -91,10 +91,11 @@ returned for the exact committed candidate.
 
 The delegated verifier needs two distinct journeys:
 
-1. Run `just verify vm-runtime-acceptance` in the operator-created
-   `container-kvm` workspace with all five exact environment bindings. This
-   executes the existing KVM, multi-repository Sysbox and guest-integration
-   runtime tests and writes `DIM_VM_ACCEPTANCE_RECEIPT`.
+1. Run `just verify vm-runtime-prepare --run` in the operator-created
+   `container-kvm` workspace or trusted disposable GitHub runner. Preparation
+   builds and inspects the exact workspace image, compiles and hashes the fixed
+   KVM probe, selects private device-enabled state and passes explicit bindings
+   to the existing KVM, multi-repository Sysbox and guest-integration tests.
 2. From a normal ordinary workspace, use an operator-created auxiliary VM via
    `dim-workspace discovery` and `dim-vm`. Verify filtered discovery, status,
    stdin/stdout/stderr/exit, signal cancellation, binary push/pull, optional
@@ -107,6 +108,15 @@ The operator performs provisioning, grant/revoke and exact-resource cleanup.
 The verifier receives no Incus socket, host credential or another workspace's
 private VM credential. Root publication and installed policy activation remain
 separate coordinator actions.
+
+Native repository CI currently supports one repository-wide required job set
+and no candidate environment/profile declarations. Requiring QEMU there would
+gate ordinary `development` candidates while leaving physical bindings
+undefined; trusted acquisition also supplies source trees without `.git`, while
+the runtime receipt deliberately binds a canonical commit/tree. The reviewed
+Native policy therefore remains source-only. Heavy runtime acceptance is scoped
+to trusted GitHub merge/main/release/manual contexts and remains directly
+runnable from an exact ordinary Git workspace.
 
 ## Deferred boundaries
 
