@@ -16,6 +16,7 @@ type WorkflowStep = {
 };
 
 type WorkflowJob = {
+  readonly env?: Readonly<Record<string, string>>;
   readonly steps: readonly WorkflowStep[];
 };
 
@@ -74,17 +75,24 @@ describe("candidate source workflows", () => {
     }));
   });
 
-  it("dispatches only native ordinary and real-KVM integration lanes", async () => {
+  it("dispatches native ordinary and trusted real-KVM integration lanes", async () => {
     // Given
     const { source, workflow } = await readWorkflow("integration");
 
     // When / Then
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(Object.keys(workflow.jobs).sort()).toEqual(["ordinary", "qemu-kvm"]);
+    expect(Object.keys(workflow.jobs).sort()).toEqual(["ordinary", "qemu-kvm", "vm-runtime-acceptance"]);
     expect(source).toContain("workflow_dispatch:");
-    expect(source.match(/ref: \$\{\{ github\.sha \}\}/g)).toHaveLength(2);
+    expect(source.match(/ref: \$\{\{ github\.sha \}\}/g)).toHaveLength(3);
     expect(source).toContain("just verify native-ordinary-executor-live");
     expect(source).toContain("just verify native-qemu-guest-mechanics-kvm");
+    const runtime = workflow.jobs["vm-runtime-acceptance"];
+    assert(runtime !== undefined);
+    expect(runtime.env).toBeUndefined();
+    expect(runtime.steps).toContainEqual(expect.objectContaining({
+      env: { DIM_VM_ACCEPTANCE_ROOT: "${{ runner.temp }}/vm-runtime-acceptance" },
+      run: "just verify vm-runtime-prepare --run",
+    }));
     for (const job of Object.values(workflow.jobs)) {
       expectExactCheckout(job, "${{ github.sha }}");
       const pnpm = job.steps.find((step) => step.uses?.startsWith("pnpm/action-setup@"));

@@ -59,8 +59,6 @@ jobs:
     if: ${{ github.event_name == 'merge_group' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.lane == 'vm-runtime') }}
     runs-on: dim-native-qemu
     timeout-minutes: 120
-    env:
-      DIM_VM_ACCEPTANCE_ROOT: ${{ runner.temp }}/vm-runtime-acceptance
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -73,6 +71,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: just build-packages
       - name: Prepare and run exact VM runtime acceptance
+        env:
+          DIM_VM_ACCEPTANCE_ROOT: ${{ runner.temp }}/vm-runtime-acceptance
         run: just verify vm-runtime-prepare --run
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
