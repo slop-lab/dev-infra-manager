@@ -284,7 +284,9 @@ is implied by these source changes.
   and provide Web account management behind explicit account-admin authority and
   password confirmation, with local CLI recovery. Persist updates immediately,
   revoke affected sessions and prevent last-administrator lockout while preserving
-  passwords, service connections and independent reviewer authority. Accept SSH SCP workspace sources, show
+  passwords, service connections and independent reviewer authority. Closing the
+  one-time result after resetting your own password preserves the next sign-in
+  attempt while the revoked session remains ended. Accept SSH SCP workspace sources, show
   tool lifecycle availability and copyable connection details. Guide worker setup
   from empty execution state, reopen Codex sign-in and draft routes from account
   model catalogs. Keep accepted Git operations successful when follow-up reads fail

@@ -243,7 +243,7 @@ describe("real Git local source build safety", () => {
     const fixture = await createRealGitFixture();
     const stateScript = resolve(fixture.root, "scripts/local-preparation-state.bash");
     await copyFile(resolve(workspaceRoot, "scripts/local-preparation-state.bash"), stateScript);
-    for (const helper of ["local-control-plane/images.ts", "local-uninstall/command.ts", "local-uninstall/files.ts"]) {
+    for (const helper of ["local-control-plane/images.ts", "local-uninstall/command.ts", "local-uninstall/command-process.ts", "local-uninstall/files.ts"]) {
       const target = resolve(fixture.root, "scripts", helper);
       await mkdir(resolve(target, ".."), { recursive: true });
       await copyFile(resolve(workspaceRoot, "scripts", helper), target);

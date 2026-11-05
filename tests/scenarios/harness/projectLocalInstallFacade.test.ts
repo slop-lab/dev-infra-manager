@@ -26,7 +26,7 @@ async function createFixture(): Promise<Fixture> {
   const oldFacadeMutation = resolve(root, "old-facade-mutated");
   await Promise.all([scripts, tools, packageRoot, resolve(scripts, "local-uninstall")].map((directory) => mkdir(directory, { recursive: true })));
   await Promise.all(
-    ["install-source-build.bash", "local-package-version.bash", "install-local-profile.ts", "local-uninstall/command.ts", "local-uninstall/files.ts"].map((script) =>
+    ["install-source-build.bash", "local-package-version.bash", "install-local-profile.ts", "local-uninstall/command.ts", "local-uninstall/command-process.ts", "local-uninstall/files.ts"].map((script) =>
       copyFile(resolve(workspaceRoot, "scripts", script), resolve(scripts, script))
     )
   );

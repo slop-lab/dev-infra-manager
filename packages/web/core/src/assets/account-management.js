@@ -68,6 +68,8 @@ export function mountAccountManagement(session, container) {
     } catch { if (current()) { uncertain = true; status.textContent = "Could not confirm the account update. It may have been saved. Refresh accounts to inspect the current state before retrying."; } }
     finally { pending = false; password.value = ""; if (current()) { paintForm(); paintAccounts(); refresh.disabled = signInRequired; } }
   });
-  dialog?.addEventListener("close", () => { password.value = ""; result.replaceChildren(); if (signInRequired && region.isConnected) window.dispatchEvent(new Event("dim-session-expired")); }, { once: true });
+  // Self-revocation already ends the session before preserving this one-time result.
+  // A queued close event must not invalidate a subsequent login attempt.
+  dialog?.addEventListener("close", () => { password.value = ""; result.replaceChildren(); }, { once: true });
   void load();
 }

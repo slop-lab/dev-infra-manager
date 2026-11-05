@@ -124,7 +124,21 @@ try {
   await page.waitForTimeout(1_100); await form.getByLabel("Your current password", { exact: true }).fill(login.password); page.once("dialog", (confirmation) => confirmation.accept()); await form.getByRole("button", { name: "Save account", exact: true }).click();
   await dialog.getByRole("button", { name: "Sign in again", exact: true }).waitFor();
   const selfPassword = await generated.inputValue(); assert.notEqual(selfPassword, login.password); assert.equal((await page.request.get(origin + "/v1/session")).status(), 401); assert.equal(await generated.inputValue(), selfPassword);
-  await page.keyboard.press("Escape"); assert.equal(await dialog.isVisible(), false); await page.getByLabel("Username", { exact: true }).fill(login.username); await page.getByLabel("Password", { exact: true }).fill(selfPassword); await page.waitForTimeout(1_100); await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.evaluate(() => {
+    const accountDialog = document.getElementById("account-access-dialog");
+    if (!(accountDialog instanceof HTMLDialogElement)) throw new Error("Missing account dialog");
+    let repeatedExpiry = false;
+    const expiryListener = new AbortController();
+    window.addEventListener("dim-session-expired", () => { repeatedExpiry = true; }, { signal: expiryListener.signal });
+    accountDialog.addEventListener("close", () => {
+      expiryListener.abort();
+      accountDialog.dataset.repeatedExpiry = String(repeatedExpiry);
+    }, { once: true });
+  });
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => document.getElementById("account-access-dialog")?.dataset.repeatedExpiry !== undefined);
+  assert.equal(await page.locator("#account-access-dialog").getAttribute("data-repeated-expiry"), "false", "Closing an already revoked session must not invalidate the next login");
+  assert.equal(await dialog.isVisible(), false); await page.getByLabel("Username", { exact: true }).fill(login.username); await page.getByLabel("Password", { exact: true }).fill(selfPassword); await page.waitForTimeout(1_100); await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const accessButton = page.getByRole("button", { name: "Account & access", exact: true }); await accessButton.click(); await dialog.getByRole("cell", { name: login.username, exact: true }).waitFor();
   const focusSnapshot = () => page.evaluate(() => {
     const active = document.activeElement, currentDialog = document.getElementById("account-access-dialog");

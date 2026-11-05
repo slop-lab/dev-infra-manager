@@ -482,6 +482,7 @@ exec "$DIM_TEST_REAL_PNPM" "$@"
     await mkdir(resolve(scripts, "local-uninstall"));
     await copyFile(resolve(projectRoot, "scripts/local-control-plane/images.ts"), resolve(scripts, "local-control-plane/images.ts"));
     await copyFile(resolve(projectRoot, "scripts/local-uninstall/command.ts"), resolve(scripts, "local-uninstall/command.ts"));
+    await copyFile(resolve(projectRoot, "scripts/local-uninstall/command-process.ts"), resolve(scripts, "local-uninstall/command-process.ts"));
     await copyFile(resolve(projectRoot, "scripts/local-uninstall/files.ts"), resolve(scripts, "local-uninstall/files.ts"));
     await writeFile(resolve(packages, "control-plane-images.json"), JSON.stringify({ schemaVersion: 1,
       "native-git": { tag: "dim-local-native-git:test", id: `sha256:${"0".repeat(63)}8` },

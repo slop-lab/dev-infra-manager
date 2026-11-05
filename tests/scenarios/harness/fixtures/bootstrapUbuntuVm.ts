@@ -157,7 +157,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
   await writeFile(state, await readFile(resolve(workspaceRoot, "scripts/lib/bootstrap-host-state.bash"), "utf8"));
   await writeFile(resolve(source, "scripts/local-package-version.bash"), await readFile(resolve(workspaceRoot, "scripts/local-package-version.bash"), "utf8"));
   await writeFile(resolve(source, "scripts/local-preparation-state.bash"), await readFile(resolve(workspaceRoot, "scripts/local-preparation-state.bash"), "utf8"));
-  await Promise.all(["local-control-plane/images.ts", "local-uninstall/command.ts", "local-uninstall/files.ts"].map((script) =>
+  await Promise.all(["local-control-plane/images.ts", "local-uninstall/command.ts", "local-uninstall/command-process.ts", "local-uninstall/files.ts"].map((script) =>
     copyFile(resolve(workspaceRoot, "scripts", script), resolve(source, "scripts", script))));
   await writeFile(facadeInstaller, await readFile(resolve(workspaceRoot, "scripts/lib/install-candidate-facade.bash"), "utf8"));
   await chmod(facadeInstaller, 0o755);
