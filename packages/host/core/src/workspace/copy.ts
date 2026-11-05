@@ -1,31 +1,43 @@
 export const workspaceCopyMarker = "dim-workspace-copy";
 
+export function workspaceCopyProcessArgumentsMatch(args: readonly string[], marker: string, token: string, physicalRoot?: string): boolean {
+  const suffix = physicalRoot === undefined ? [marker, "helper", token] : [marker, "helper", token, physicalRoot];
+  return args.length >= suffix.length && args.slice(-suffix.length).every((value, index) => value === suffix[index]);
+}
+
 export const workspaceCopyGuest = String.raw`
 const fs=require("node:fs"),fsp=require("node:fs/promises"),path=require("node:path");
-const [direction,operand,recursiveFlag,overwriteFlag,marker,role,token]=process.argv.slice(1);
+const [direction,operand,recursiveFlag,overwriteFlag,marker,role,token,physicalRoot]=process.argv.slice(1);
 const recursive=recursiveFlag==="1",overwrite=overwriteFlag==="1",magic=Buffer.from("DIMCP1\0","ascii");
-const target=path.resolve(operand),parent=path.dirname(target);
-const staging=path.join(parent,".dim-copy-"+token),stage=path.join(staging,"payload"),backup=path.join(parent,".dim-copy-backup-"+token);
+let target=path.resolve(operand),parent=path.dirname(target),staging=path.join(parent,".dim-copy-"+token),stage=path.join(staging,"payload"),backup=path.join(parent,".dim-copy-backup-"+token),owner=path.join(parent,".dim-copy-owner-"+token),scoped=!physicalRoot;
 const maxEntries=100000,maxHeaders=16*1024*1024,maxPayload=64*1024*1024*1024,maxPath=4096,maxTarget=4096;
-let backedUp=false;
+let backedUp=false,claimed=false;const held=[];
 const fail=(message)=>{throw new Error(message)};
 const exists=async(file)=>{try{await fsp.lstat(file);return true}catch(error){if(error&&error.code==="ENOENT")return false;throw error}};
 const inside=(root,candidate)=>{const relative=path.relative(root,candidate);return relative===""||(relative!==".."&&!relative.startsWith(".."+path.sep))};
+const stable=(handle)=>"/proc/self/fd/"+handle.fd;
+async function scope(create){
+  if(!physicalRoot)return;
+  const root=path.resolve(physicalRoot),relative=path.relative(root,target);if(!relative||relative===".."||relative.startsWith(".."+path.sep)||path.isAbsolute(relative))fail("copy path escapes its physical root");
+  let handle=await fsp.open(root,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY|fs.constants.O_NOFOLLOW);held.push(handle);let current=stable(handle);const parts=relative.split(path.sep),leaf=parts.pop();
+  for(const part of parts){const next=path.join(current,part);if(create){try{await fsp.mkdir(next,{mode:448})}catch(error){if(!error||error.code!=="EEXIST")throw error}}handle=await fsp.open(next,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY|fs.constants.O_NOFOLLOW);held.push(handle);current=stable(handle)}
+  if(!leaf)fail("copy path must name an entry below its physical root");target=path.join(current,leaf);parent=current;staging=path.join(parent,".dim-copy-"+token);stage=path.join(staging,"payload");backup=path.join(parent,".dim-copy-backup-"+token);owner=path.join(parent,".dim-copy-owner-"+token);scoped=true;
+}
+async function claim(){await fsp.mkdir(parent,{recursive:true});await fsp.writeFile(owner,String(process.pid),{encoding:"utf8",mode:384,flag:"wx"});claimed=true}
 const frame=(entry)=>{const encoded=Buffer.from(JSON.stringify(entry)),length=Buffer.alloc(4);length.writeUInt32BE(encoded.length);return Buffer.concat([length,encoded])};
 async function write(buffer){if(!process.stdout.write(buffer))await new Promise(resolve=>process.stdout.once("drain",resolve))}
 async function pack(absolute,relative,root){
   const info=await fsp.lstat(absolute);
   if(info.isDirectory()){
-    await write(frame({path:relative,type:"directory",mode:info.mode&511}));
-    const entries=await fsp.readdir(absolute,{withFileTypes:true});entries.sort((a,b)=>a.name.localeCompare(b.name));
-    for(const entry of entries)await pack(path.join(absolute,entry.name),relative==="."?entry.name:relative+"/"+entry.name,root);
-    return;
+    const directory=await fsp.open(absolute,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY|fs.constants.O_NOFOLLOW);try{const opened=stable(directory);await write(frame({path:relative,type:"directory",mode:info.mode&511}));
+      const entries=await fsp.readdir(opened,{withFileTypes:true});entries.sort((a,b)=>a.name.localeCompare(b.name));
+      for(const entry of entries)await pack(path.join(opened,entry.name),relative==="."?entry.name:relative+"/"+entry.name,root);return;
+    }finally{await directory.close()}
   }
   if(info.isFile()){
-    if(info.nlink!==1)fail("refusing to copy hard-linked file '"+relative+"'");
-    await write(frame({path:relative,type:"file",mode:info.mode&511,size:info.size}));
-    for await(const chunk of fs.createReadStream(absolute))await write(chunk);
-    return;
+    const file=await fsp.open(absolute,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);try{const opened=await file.stat();if(opened.nlink!==1)fail("refusing to copy hard-linked file '"+relative+"'");
+      await write(frame({path:relative,type:"file",mode:opened.mode&511,size:opened.size}));for await(const chunk of file.createReadStream({autoClose:false}))await write(chunk);return;
+    }finally{await file.close()}
   }
   if(info.isSymbolicLink()){
     const link=await fsp.readlink(absolute);let resolved;try{resolved=await fsp.realpath(absolute)}catch(error){throw new Error("refusing unresolved symlink '"+relative+"'",{cause:error})}
@@ -71,34 +83,45 @@ async function receive(){
   try{await fsp.rename(stage,target)}catch(promotionError){if(backedUp){try{await fsp.rename(backup,target);backedUp=false}catch(restorationError){throw new AggregateError([promotionError,restorationError],"copy promotion failed; old destination backup retained at '"+backup+"'")}}throw promotionError}
   await fsp.rm(staging,{recursive:true,force:true});if(backedUp){await fsp.rm(backup,{recursive:true,force:true});backedUp=false}
 }
-async function cleanup(){await fsp.rm(staging,{recursive:true,force:true})}
+async function cleanup(){if(scoped)await fsp.rm(staging,{recursive:true,force:true})}
 async function main(){
   if(!direction||!operand||marker!=="dim-workspace-copy"||role!=="helper"||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(token))fail("invalid workspace copy invocation");
   if(direction==="send"){
+    await scope(false);
     const info=await fsp.lstat(target);if(info.isDirectory()&&!recursive)fail("workspace copy source is a directory; use --recursive");if(info.isSymbolicLink())fail("a copied symlink must be contained in a recursive directory source");
     await write(magic);await pack(target,".",await fsp.realpath(target));await write(Buffer.alloc(4));return;
   }
-  if(direction!=="receive")fail("invalid workspace copy direction");await receive();
+  if(direction!=="receive")fail("invalid workspace copy direction");await scope(true);await claim();await receive();
 }
-main().catch(async error=>{await cleanup();process.stderr.write((error instanceof Error?error.message:String(error))+"\n");process.exitCode=2});
+main().catch(async error=>{await cleanup();process.stderr.write((error instanceof Error?error.message:String(error))+"\n");process.exitCode=2}).finally(async()=>{if(claimed)await fsp.rm(owner,{force:true});for(const handle of held.reverse())await handle.close()});
 `;
 
 export const workspaceCopyCleanup = String.raw`
 const fs=require("node:fs"),fsp=require("node:fs/promises"),path=require("node:path");
-const [operand,marker,role,token]=process.argv.slice(1);
+const [operand,marker,role,token,physicalRoot]=process.argv.slice(1);
 const fail=(message)=>{throw new Error(message)};
 if(!operand||marker!=="dim-workspace-copy"||role!=="cleanup"||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(token))fail("invalid workspace copy cleanup invocation");
-const target=path.resolve(operand),parent=path.dirname(target),staging=path.join(parent,".dim-copy-"+token),stage=path.join(staging,"payload"),backup=path.join(parent,".dim-copy-backup-"+token);
+let target=path.resolve(operand),parent=path.dirname(target),staging=path.join(parent,".dim-copy-"+token),stage=path.join(staging,"payload"),backup=path.join(parent,".dim-copy-backup-"+token),owner=path.join(parent,".dim-copy-owner-"+token);const held=[];
 const exists=async(file)=>{try{await fsp.lstat(file);return true}catch(error){if(error&&error.code==="ENOENT")return false;throw error}};
-const matches=(pid)=>{try{const args=fs.readFileSync("/proc/"+pid+"/cmdline","utf8").split("\0").filter(Boolean);return args.at(-3)===marker&&args.at(-2)==="helper"&&args.at(-1)===token}catch{return false}};
+const stable=(handle)=>"/proc/self/fd/"+handle.fd;
+async function scope(){
+  if(!physicalRoot)return true;
+  const root=path.resolve(physicalRoot),relative=path.relative(root,target);if(!relative||relative===".."||relative.startsWith(".."+path.sep)||path.isAbsolute(relative))fail("copy path escapes its physical root");
+  let handle=await fsp.open(root,fs.constants.O_RDONLY|fs.constants.O_DIRECTORY|fs.constants.O_NOFOLLOW);held.push(handle);let current=stable(handle);const parts=relative.split(path.sep),leaf=parts.pop();
+  try{for(const part of parts){handle=await fsp.open(path.join(current,part),fs.constants.O_RDONLY|fs.constants.O_DIRECTORY|fs.constants.O_NOFOLLOW);held.push(handle);current=stable(handle)}}catch(error){if(error&&error.code==="ENOENT")return false;throw error}
+  if(!leaf)return false;target=path.join(current,leaf);parent=current;staging=path.join(parent,".dim-copy-"+token);stage=path.join(staging,"payload");backup=path.join(parent,".dim-copy-backup-"+token);owner=path.join(parent,".dim-copy-owner-"+token);return true;
+}
+const matchesArguments=${workspaceCopyProcessArgumentsMatch.toString()};
+const matches=(pid)=>{try{const args=fs.readFileSync("/proc/"+pid+"/cmdline","utf8").split("\0").filter(Boolean);return matchesArguments(args,marker,token,physicalRoot)}catch{return false}};
 const signal=(pid,name)=>{try{process.kill(Number(pid),name)}catch(error){if(error.code!=="ESRCH")throw error}};
-async function stop(){
-  const owned=fs.readdirSync("/proc").filter(pid=>/^\d+$/.test(pid)&&matches(pid));
+async function stop(useOwner){
+  const owned=new Set(fs.readdirSync("/proc").filter(pid=>/^\d+$/.test(pid)&&matches(pid)));
+  if(useOwner&&await exists(owner)){const pid=(await fsp.readFile(owner,"utf8")).trim();if(/^\d+$/.test(pid)&&matches(pid))owned.add(pid)}
   for(const pid of owned)signal(pid,"SIGTERM");
-  const graceful=Date.now()+750;while(owned.some(matches)&&Date.now()<graceful)await new Promise(resolve=>setTimeout(resolve,10));
-  for(const pid of owned.filter(matches))signal(pid,"SIGKILL");
-  const killed=Date.now()+500;while(owned.some(matches)&&Date.now()<killed)await new Promise(resolve=>setTimeout(resolve,10));
-  if(owned.some(matches))fail("owned workspace copy helper did not exit");
+  const active=()=>[...owned].filter(matches);const graceful=Date.now()+750;while(active().length&&Date.now()<graceful)await new Promise(resolve=>setTimeout(resolve,10));
+  for(const pid of active())signal(pid,"SIGKILL");
+  const killed=Date.now()+500;while(active().length&&Date.now()<killed)await new Promise(resolve=>setTimeout(resolve,10));
+  if(active().length)fail("owned workspace copy helper did not exit");
 }
 async function recover(){
   const hasBackup=await exists(backup),hasStage=await exists(stage),hasTarget=await exists(target);
@@ -110,5 +133,5 @@ async function recover(){
   await fsp.rm(staging,{recursive:true,force:true});
   if(await exists(backup))fail("workspace copy cancellation could not restore old data from "+backup);
 }
-(async()=>{await stop();await recover()})().catch(error=>{process.stderr.write(error.message+"\n");process.exitCode=1});
+(async()=>{await stop(false);const available=await scope();if(available){await stop(true);await recover();await fsp.rm(owner,{force:true})}})().catch(error=>{process.stderr.write(error.message+"\n");process.exitCode=1}).finally(async()=>{for(const handle of held.reverse())await handle.close()});
 `;
