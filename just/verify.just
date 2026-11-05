@@ -23,6 +23,10 @@ native-qemu-guest-mechanics-kvm:
     @[[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]] || { echo "native-qemu-guest-mechanics-kvm requires an accessible character /dev/kvm" >&2; exit 2; }
     cd .. && bash scripts/checks/native-qemu-guest-mechanics-kvm-smoke.bash
 
+# Required exact-image KVM/Sysbox acceptance for normal VM and guest access.
+vm-runtime-acceptance:
+    cd .. && node scripts/checks/vm-runtime-acceptance.ts
+
 # Real native ordinary executor Docker integration; nested execution requires explicit digest-pinned Sysbox fixture images.
 native-ordinary-executor-live:
     @docker info >/dev/null 2>&1 || { echo "native-ordinary-executor-live requires a reachable Docker daemon" >&2; exit 2; }
