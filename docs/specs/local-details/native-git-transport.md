@@ -136,6 +136,12 @@ are version 2 and require `preIssueMilliseconds`. The issuer measures that
 duration with a monotonic clock from handler entry to immediately before
 issuance, after completing proof. Credentials still live at most 30 seconds from
 issuance, and the server enforces generation/expiry on every use.
+Root-read and workspace-write credentials are stateless process-local MACs over
+a canonical bounded payload containing the exact lease scope and timestamps.
+The two roles use independent rotating keys; service close/restart rotates them,
+so prior credentials fail immediately. This keeps registry memory constant and
+does not impose a global live-identity quota. Every Git request still performs
+the current root, policy, generation, ownership and post-proof credential checks.
 
 For local reuse, let `D = expiresAt - issuedAt`, `E = ceil(client monotonic
 elapsed after complete response parsing)` and `P = preIssueMilliseconds`. The

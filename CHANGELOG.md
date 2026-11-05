@@ -147,6 +147,9 @@ is implied by these source changes.
   Scoped Git credentials account for request latency without requiring exactly
   synchronized clocks between the control plane and workspace host. Separate
   pre-issuance proof time from network transit in versioned lease responses.
+  Sign root-read and workspace-write leases with independent process-local keys
+  over exact scope and expiry, eliminating the global live-identity quota while
+  preserving per-request readiness, policy, ownership and generation checks.
   Route workspace Git read/proposal traffic through the shared guest service
   endpoint while retaining plugin-owned deterministic loopback brokers. Endpoint
   adoption is retry-safe across partial origin repair and preserves user-modified
