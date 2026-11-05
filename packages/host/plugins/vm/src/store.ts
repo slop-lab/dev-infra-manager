@@ -1,11 +1,25 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { MissingRecordError, UserError, WorkspaceStore, validateResources, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
+import { MissingRecordError, UserError, WorkspaceStore, validateResources, type WorkspaceRecord, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 import { fingerprint, object, text, uuid } from "./config.js";
 import { type VmIdentity, IncusMachines } from "./incus.js";
 
-export interface VmGrant { workspaceId: string; workspaceName: string; digest: string }
+export const vmPermissions = ["console", "copy", "discover", "exec", "lifecycle", "status"] as const;
+export type VmPermission = typeof vmPermissions[number];
+export interface VmGrant {
+  workspaceId: string; workspaceName: string; digest: string; grantId: string; generation: number;
+  permissions: VmPermission[]; createdAt: string;
+}
+export interface VmGrantCredential {
+  readonly grantId: string; readonly generation: number; readonly vmId: string; readonly vmName: string;
+  readonly workspaceId: string; readonly workspaceName: string; readonly permissions: readonly VmPermission[]; readonly token: string;
+}
+export interface VmAuthorization { readonly vm: PersistentVm; readonly grant: VmGrant; readonly workspace: WorkspaceRecord }
+export interface VmGrantIdentity { readonly workspaceId: string; readonly grantId: string; readonly generation: number }
+export interface VmLifecycleAccess extends VmGrantIdentity {
+  readonly token: string; readonly vmId: string; readonly vmName: string; readonly operation: "start" | "stop";
+}
 export interface PersistentVm extends VmIdentity {
   schemaVersion: 1; name: string; createdAt: string; grants: VmGrant[];
 }
@@ -43,8 +57,12 @@ export class PersistentVmService {
       return record;
     });
   }
-  async start(name: string): Promise<void> { await this.lock(name, async () => this.machines.start(await this.read(name))); }
-  async stop(name: string): Promise<void> { await this.lock(name, async () => this.machines.stop(await this.read(name))); }
+  async start(name: string, expectedId?: string): Promise<void> { await this.lock(name, async () => {
+    const record = await this.read(name); requireVmIdentity(record, expectedId); await this.machines.start(record);
+  }); }
+  async stop(name: string, expectedId?: string): Promise<void> { await this.lock(name, async () => {
+    const record = await this.read(name); requireVmIdentity(record, expectedId); await this.machines.stop(record);
+  }); }
   async allocation(name: string, changes: { cpuCount?: number; memory?: string }): Promise<{ cpuCount: number; memory: string }> {
     return this.lock(name, async () => this.machines.updateAllocation(await this.read(name), changes));
   }
@@ -66,15 +84,23 @@ export class PersistentVmService {
     });
   }
   async grant(name: string, workspaceName: string): Promise<string> {
+    return (await this.grantAccess(name, workspaceName, ["console"])).token;
+  }
+  async grantAccess(name: string, workspaceName: string, requested: readonly VmPermission[]): Promise<VmGrantCredential> {
     return this.lock(name, async () => {
       const record = await this.read(name);
       const workspace = await this.workspaces.read(workspaceName);
       if (!workspace.initialized || workspace.phase !== "running") throw new UserError("grant access only to an initialized running workspace");
+      const permissions = parsePermissions(requested);
       const token = randomBytes(32).toString("base64url");
+      const previous = record.grants.find((grant) => grant.workspaceId === workspace.id);
+      const grant: VmGrant = { workspaceId: workspace.id, workspaceName: workspace.name, digest: digest(token),
+        grantId: randomUUID(), generation: (previous?.generation ?? 0) + 1, permissions, createdAt: new Date().toISOString() };
       record.grants = record.grants.filter((grant) => grant.workspaceId !== workspace.id);
-      record.grants.push({ workspaceId: workspace.id, workspaceName: workspace.name, digest: digest(token) });
+      record.grants.push(grant);
       await this.write(record);
-      return token;
+      return { grantId: grant.grantId, generation: grant.generation, vmId: record.id, vmName: record.name,
+        workspaceId: workspace.id, workspaceName: workspace.name, permissions: grant.permissions, token };
     });
   }
   async revoke(name: string, workspaceId: string): Promise<void> {
@@ -84,14 +110,42 @@ export class PersistentVmService {
       await this.write(record);
     });
   }
+  async revokeGrant(name: string, identity: VmGrantIdentity): Promise<void> {
+    await this.lock(name, async () => {
+      const record = await this.read(name);
+      record.grants = record.grants.filter((grant) => grant.workspaceId !== identity.workspaceId
+        || grant.grantId !== identity.grantId || grant.generation !== identity.generation);
+      await this.write(record);
+    });
+  }
+  async lifecycleAccess(input: VmLifecycleAccess): Promise<void> {
+    await this.lock(input.vmName, async () => {
+      const access = await this.authorizeAccess(input.vmName, input.token, { permission: "lifecycle", vmId: input.vmId,
+        workspaceId: input.workspaceId, grantId: input.grantId, generation: input.generation });
+      if (!access) throw new UserError("VM access denied or expired");
+      await this.machines[input.operation](access.vm);
+    });
+  }
   async authorize(name: string, token: string): Promise<PersistentVm | undefined> {
+    return (await this.authorizeAccess(name, token, { permission: "console" }))?.vm;
+  }
+  async authorizeAccess(name: string, token: string, request: {
+    readonly permission: VmPermission; readonly vmId?: string; readonly workspaceId?: string;
+    readonly grantId?: string; readonly generation?: number;
+  }): Promise<VmAuthorization | undefined> {
     const record = await this.read(name);
+    if (request.vmId !== undefined && record.id !== request.vmId) return;
     const hash = digest(token);
     for (const grant of record.grants) {
-      if (!equal(hash, grant.digest)) continue;
+      if (!equal(hash, grant.digest) || !grant.permissions.includes(request.permission)
+        || request.workspaceId !== undefined && grant.workspaceId !== request.workspaceId
+        || request.grantId !== undefined && grant.grantId !== request.grantId
+        || request.generation !== undefined && grant.generation !== request.generation) continue;
       try {
         const workspace = await this.workspaces.read(grant.workspaceName);
-        if (workspace.id === grant.workspaceId && workspace.initialized && workspace.phase === "running") return record;
+        if (workspace.id === grant.workspaceId && workspace.initialized && workspace.phase === "running") {
+          return { vm: record, grant, workspace };
+        }
       } catch (error) { if (!(error instanceof MissingRecordError)) throw error; }
     }
     return undefined;
@@ -119,8 +173,21 @@ export function parsePersistentVm(value: unknown): PersistentVm {
     resources: validateResources({ cpuCount: text(resources.cpuCount), memory: text(resources.memory), pidsLimit: text(resources.pidsLimit) }),
     initialized: record.initialized, createdAt, grants: record.grants.map((input: unknown) => {
       const grant = object(input);
-      if (Object.keys(grant).sort().join() !== "digest,workspaceId,workspaceName" || !/^[a-f0-9]{64}$/.test(text(grant.digest))) throw new UserError("invalid VM workspace grant");
-      return { workspaceId: uuid(text(grant.workspaceId)), workspaceName: validName(text(grant.workspaceName)), digest: text(grant.digest) };
+      const keys = Object.keys(grant).sort().join();
+      if (!/^[a-f0-9]{64}$/.test(text(grant.digest))) throw new UserError("invalid VM workspace grant");
+      const workspaceId = uuid(text(grant.workspaceId)), workspaceName = validName(text(grant.workspaceName));
+      if (keys === "digest,workspaceId,workspaceName") {
+        return { workspaceId, workspaceName, digest: text(grant.digest), grantId: workspaceId, generation: 1,
+          permissions: ["console"] as VmPermission[], createdAt };
+      }
+      if (keys !== "createdAt,digest,generation,grantId,permissions,workspaceId,workspaceName"
+        || !Number.isSafeInteger(grant.generation) || Number(grant.generation) < 1 || !Array.isArray(grant.permissions)) {
+        throw new UserError("invalid VM workspace grant");
+      }
+      const grantCreatedAt = text(grant.createdAt);
+      if (!Number.isFinite(Date.parse(grantCreatedAt))) throw new UserError("invalid VM grant creation time");
+      return { workspaceId, workspaceName, digest: text(grant.digest), grantId: uuid(text(grant.grantId)),
+        generation: Number(grant.generation), permissions: parsePermissions(grant.permissions), createdAt: grantCreatedAt };
     }) };
 }
 export function digest(token: string): string { return createHash("sha256").update(token).digest("hex"); }
@@ -131,5 +198,18 @@ export function equal(left: string, right: string): boolean {
 function validName(name: string): string {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$/.test(name)) throw new UserError("invalid persistent VM or workspace name");
   return name;
+}
+function requireVmIdentity(record: PersistentVm, expectedId?: string): void {
+  if (expectedId !== undefined && record.id !== expectedId) throw new UserError("persistent VM identity changed");
+}
+function parsePermissions(input: readonly unknown[]): VmPermission[] {
+  const permissions = input.map((permission) => {
+    switch (permission) {
+      case "console": case "copy": case "discover": case "exec": case "lifecycle": case "status": return permission;
+      default: throw new UserError("invalid VM grant permission");
+    }
+  }).sort();
+  if (!permissions.length || new Set(permissions).size !== permissions.length) throw new UserError("VM grant permissions must be nonempty and unique");
+  return permissions;
 }
 function isMissing(error: unknown): boolean { return error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT"; }
