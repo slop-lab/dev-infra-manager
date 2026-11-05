@@ -192,7 +192,7 @@ function leaseUsername(value: unknown): string {
 function leasePassword(value: unknown): string {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value)) invalid();
   const decoded = Buffer.from(value, "base64url");
-  if (decoded.length !== 32 || decoded.toString("base64url") !== value) invalid();
+  if (decoded.length < 32 || decoded.length > 2080 || decoded.toString("base64url") !== value) invalid();
   return value;
 }
 

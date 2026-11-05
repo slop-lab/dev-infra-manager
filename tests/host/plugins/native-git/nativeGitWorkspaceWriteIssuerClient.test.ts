@@ -47,7 +47,9 @@ describe("native Git workspace write issuer host client", () => {
       generationId, workspaceId
     });
     expect(lease.username).toMatch(/^workspace-write-[A-Za-z0-9_-]{24}$/);
-    expect(Buffer.from(lease.password, "base64url")).toHaveLength(32);
+    const credential = Buffer.from(lease.password, "base64url");
+    expect(credential.length).toBeGreaterThan(32); expect(credential.length).toBeLessThanOrEqual(2080);
+    expect(credential.toString("base64url")).toBe(lease.password);
     expect(lease.expiresAt).toBeGreaterThan(Date.now());
     expect(lease.expiresAt).toBeLessThanOrEqual(Date.now() + 30_000);
     expect(client).not.toHaveProperty("credential");
