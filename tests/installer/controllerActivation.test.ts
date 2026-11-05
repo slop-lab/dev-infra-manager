@@ -201,6 +201,7 @@ describe("existing managed controller activation", () => {
     const preload = `data:text/javascript,${encodeURIComponent(`
       import { writeFileSync } from "node:fs";
       writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid));
+      setInterval(() => {}, 1000);
       console.log("ready");
       await new Promise(() => {});
     `)}`;
@@ -213,7 +214,11 @@ describe("existing managed controller activation", () => {
       }
     });
     await once(child.stdout!, "data");
+    expect(child.exitCode).toBeNull();
+    expect(child.signalCode).toBeNull();
     expect(await managedControllerIsActive(runtime, env)).toBe(false);
+    expect(child.exitCode).toBeNull();
+    expect(child.signalCode).toBeNull();
   });
 
   it("rejects an expected entrypoint when NODE_OPTIONS preloads code", async () => {
@@ -224,6 +229,7 @@ describe("existing managed controller activation", () => {
     const preload = `data:text/javascript,${encodeURIComponent(`
       import { writeFileSync } from "node:fs";
       writeFileSync(process.argv[process.argv.indexOf("--pid-file") + 1], String(process.pid));
+      setInterval(() => {}, 1000);
       console.log("ready");
       await new Promise(() => {});
     `)}`;
@@ -236,7 +242,11 @@ describe("existing managed controller activation", () => {
       }
     });
     await once(child.stdout!, "data");
+    expect(child.exitCode).toBeNull();
+    expect(child.signalCode).toBeNull();
     expect(await managedControllerIsActive(runtime, env)).toBe(false);
+    expect(child.exitCode).toBeNull();
+    expect(child.signalCode).toBeNull();
   });
 
   it("rejects an expected entrypoint with dynamic-loader environment", async () => {
