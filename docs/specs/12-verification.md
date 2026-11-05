@@ -27,7 +27,8 @@ KVM behavior. Candidate-controlled results never establish human approval.
 Scoped auxiliary-VM acceptance additionally proves discovery without repository
 configuration, exact workspace/VM identity, stdin/stdout/stderr/exit and signal
 behavior, binary push/pull, unauthorized-workspace denial, revoke during active
-streams, stop/start reconnect, retained VM data and exact cleanup. Direct
+streams, intermediate-symlink read/write denial, open-idle and delayed stdin,
+immediate exec after stop/start reconnect, retained VM data and exact cleanup. Direct
 `container-kvm`, Incus VM workspaces and auxiliary VM attachments are separate
 claims. The required runtime runner must fail unavailable when its reviewed
 images, private state parent, KVM probe, Sysbox or real KVM device are missing;

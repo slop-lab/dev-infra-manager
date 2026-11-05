@@ -56,5 +56,9 @@ workspace. Discovery is grant-filtered. Host-owned transport checks the current
 workspace and VM UUIDs, grant ID/generation, permission, exact Incus ownership
 and running state. Exec runs as the VM's `dim` user; copy is limited to
 home-relative paths and the shared bounded DIMCP1 protocol. Lifecycle permission
-allows only start and stop. The workspace never receives the Incus socket,
+allows only start and stop. Start waits for guest-agent readiness and verifies
+the reviewed auxiliary image provides writable non-symlink `/workspace` and a
+mode-0700, `dim`-owned `/mnt/dim-tmp`. Home-relative copy holds no-follow
+directory descriptors while resolving existing ancestors and publishing data;
+intermediate symlink replacement cannot widen the grant. The workspace never receives the Incus socket,
 project, host filesystem, budget helper, operator token or provisioning API.
