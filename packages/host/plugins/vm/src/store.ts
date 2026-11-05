@@ -161,7 +161,7 @@ export class PersistentVmService {
       if (ready !== 0) throw new UserError("auxiliary VM image must provide writable /workspace and private mode-0700 /mnt/dim-tmp for user dim");
     } catch (error) {
       if (!started) throw error;
-      try { await this.machines.stop(record); }
+      try { await this.machines.abortStart(record); }
       catch (stopError) { throw new AggregateError([error, stopError], "auxiliary VM readiness failed and the started VM could not be stopped"); }
       throw error;
     }

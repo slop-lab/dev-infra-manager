@@ -81,11 +81,11 @@ describe("workspace-scoped auxiliary VM access", () => {
     expect((await f.machines.inspect(f.vm))?.running).toBe(true);
   });
 
-  it("reports readiness and rollback failures when a newly started VM cannot stop", async () => {
+  it("reports readiness and rollback failures when a newly started VM cannot be force-stopped", async () => {
     const f = await fixture(["discover", "status", "lifecycle"]), identity = request(f);
     await f.access.lifecycle({ ...identity, operation: "stop" });
     vi.spyOn(f.machines, "waitForAgent").mockRejectedValue(new Error("guest agent unavailable"));
-    vi.spyOn(f.machines, "stop").mockRejectedValue(new Error("stop failed"));
+    vi.spyOn(f.machines, "abortStart").mockRejectedValue(new Error("force stop failed"));
     await expect(f.access.lifecycle({ ...identity, operation: "start" }))
       .rejects.toThrow("auxiliary VM readiness failed and the started VM could not be stopped");
   });
