@@ -21,10 +21,11 @@ import { activateFinalizeService, cleanupFinalizeFixtures, generationId, importe
   rootReadIssuer, runGit, startFinalizeService, workspaceWriteIssuer } from "../../control-plane/plugins/git-repositories/nativeRootImportFinalizeFixture.js";
 
 const image = process.env.DIM_NATIVE_MULTI_REPOSITORY_IMAGE;
+const required = process.env.DIM_VM_ACCEPTANCE_REQUIRED === "1";
 const example = resolve(import.meta.dirname, "../../../examples/projects/native-multiple-repositories");
 
 describe("disposable multi-repository workspace runtime", () => {
-  it.skipIf(!image)("seeds independent Git checkouts and retains selected layout across Sysbox recreation", async () => {
+  it.skipIf(!required && !image)("seeds independent Git checkouts and retains selected layout across Sysbox recreation", async () => {
     if (!image) throw new Error("provide an already reviewed local DIM_NATIVE_MULTI_REPOSITORY_IMAGE");
     const root = await mkdtemp(join(tmpdir(), "dim-multi-repository-runtime-"));
     const managed = join(root, "managed"); await mkdir(managed, { mode: 0o700 });

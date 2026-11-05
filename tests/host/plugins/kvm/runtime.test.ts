@@ -7,7 +7,8 @@ import { configureKvm, hostPlugin } from "../../../../packages/host/plugins/kvm/
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
 
 const image = process.env.DIM_TEST_KVM_IMAGE, parent = process.env.DIM_TEST_KVM_STATE_PARENT, probe = process.env.DIM_TEST_KVM_PROBE;
-it.skipIf(!image || !parent || !probe)("prepares KVM without sudo and retains actual guest KVM access across restart/recreation", async () => {
+const required = process.env.DIM_VM_ACCEPTANCE_REQUIRED === "1";
+it.skipIf(!required && (!image || !parent || !probe))("prepares KVM without sudo and retains actual guest KVM access across restart/recreation", async () => {
   if (!image || !parent || !probe) throw new Error("reviewed local image, dev-enabled private fixture parent and static KVM ioctl probe are required");
   const root = await mkdtemp(join(parent, "kvm-runtime-")), runner = new ProcessRunner();
   const original = await lstat("/dev/kvm"), record = workspaceRecord(`kvm-${randomUUID()}`, { initialized: false, image, runtime: "container-kvm" });

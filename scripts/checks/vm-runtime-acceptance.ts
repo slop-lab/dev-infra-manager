@@ -35,25 +35,25 @@ const probe = await realpath(requestedProbe);
 if (!probeInfo.isFile() || probeInfo.isSymbolicLink() || probe !== requestedProbe || (probeInfo.mode & 0o111) === 0) {
   throw new Error("DIM_TEST_KVM_PROBE must be a reviewed executable regular file");
 }
-await run(probe, []);
 const status = await capture("git", ["status", "--porcelain=v1"]);
 if (status.trim()) throw new Error("vm-runtime-acceptance requires a clean exact source tree");
 const sourceSha = (await capture("git", ["rev-parse", "HEAD"])).trim(), sourceTree = (await capture("git", ["rev-parse", "HEAD^{tree}"])).trim();
 const deterministicTests = ["host/plugins/vm/grants.test.ts", "host/plugins/vm/access.test.ts", "host/plugins/vm/accessServer.test.ts",
   "host/plugins/vm/guestClient.test.ts", "host/plugins/vm/workspaceIntegration.test.ts"];
 const runtimeTests = ["host/plugins/kvm/runtime.test.ts", "host/core/multiRepositoryWorkspaceRuntime.test.ts", "host/core/guestIntegrationRuntime.test.ts"];
-await run("pnpm", ["--dir", "tests", "exec", "vitest", "run", ...deterministicTests, ...runtimeTests, "--no-file-parallelism"]);
+await run("pnpm", ["--dir", "tests", "exec", "vitest", "run", ...deterministicTests, ...runtimeTests, "--no-file-parallelism"],
+  { ...process.env, DIM_VM_ACCEPTANCE_REQUIRED: "1" });
 const receipt = process.env.DIM_VM_ACCEPTANCE_RECEIPT ?? path.join(root, ".local/verification", `vm-runtime-acceptance-${sourceSha}.json`);
 await mkdir(path.dirname(receipt), { recursive: true, mode: 0o700 });
 await writeFile(receipt, `${JSON.stringify({ schemaVersion: 1, sourceSha, sourceTree, observedAt: new Date().toISOString(),
   kvm: { device: "/dev/kvm", deviceId: kvmDeviceId }, images: { kvm: values.DIM_TEST_KVM_IMAGE,
     multiRepository: values.DIM_NATIVE_MULTI_REPOSITORY_IMAGE, guestIntegration: values.DIM_GUEST_INTEGRATION_IMAGE },
-  stateParent: parent, probe: { path: probe, outcome: "passed" },
+  stateParent: parent, probe: { path: probe, outcome: "passed-in-container-kvm-test" },
   tests: { deterministic: deterministicTests, runtime: runtimeTests }, outcome: "passed" }, null, 2)}\n`, { mode: 0o600 });
 process.stdout.write(`vm-runtime-acceptance-ok receipt=${receipt}\n`);
 
-async function run(command: string, args: readonly string[]): Promise<void> {
-  const code = await new Promise<number>((resolve, reject) => { const child = spawn(command, args, { cwd: root, env: process.env, stdio: "inherit" }); child.once("error", reject); child.once("close", (value) => resolve(value ?? 1)); });
+async function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const code = await new Promise<number>((resolve, reject) => { const child = spawn(command, args, { cwd: root, env, stdio: "inherit" }); child.once("error", reject); child.once("close", (value) => resolve(value ?? 1)); });
   if (code !== 0) throw new Error(`${command} failed with exit ${code}`);
 }
 async function capture(command: string, args: readonly string[]): Promise<string> {

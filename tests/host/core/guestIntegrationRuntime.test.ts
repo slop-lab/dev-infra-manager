@@ -16,9 +16,10 @@ import { createWorkspaceAgentServer } from "../../../packages/host/core/src/appl
 import { loadHostPlugins } from "../../../packages/host/core/src/application/host-plugins.js";
 
 const image = process.env.DIM_GUEST_INTEGRATION_IMAGE;
+const required = process.env.DIM_VM_ACCEPTANCE_REQUIRED === "1";
 
 describe("guest integrations in an ordinary disposable workspace", () => {
-  it.skipIf(!image)("delivers without repository configuration, repairs after recreation and targets only one nested container", async () => {
+  it.skipIf(!required && !image)("delivers without repository configuration, repairs after recreation and targets only one nested container", async () => {
     if (!image) throw new Error("provide a reviewed local DIM_GUEST_INTEGRATION_IMAGE");
     const root = await mkdtemp(join(tmpdir(), "dim-guest-integration-runtime-"));
     const runner = new ProcessRunner(), runtime = new ContainerWorkspaceRuntime(runner);
