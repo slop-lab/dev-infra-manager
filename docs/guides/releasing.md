@@ -164,10 +164,11 @@ Manual dispatch does not install or register a runner. Before dispatching:
   These are public test images, not production role credentials.
 - The QEMU runner must be x86-64 with a character `/dev/kvm` readable and
   writable by the runner user and usable from Docker. TCG is not accepted.
-  The `vm-runtime` lane additionally needs exact local image IDs in
-  `DIM_TEST_KVM_IMAGE`, `DIM_NATIVE_MULTI_REPOSITORY_IMAGE` and
-  `DIM_GUEST_INTEGRATION_IMAGE`, plus a private
-  `DIM_TEST_KVM_STATE_PARENT` and reviewed executable `DIM_TEST_KVM_PROBE`.
+  The `vm-runtime` lane runs `just verify vm-runtime-prepare --run` to build the
+  exact candidate workspace image, inspect its immutable ID, compile a fixed
+  static KVM ioctl probe, attest its SHA-256, check a private device-enabled
+  fixture directory and pass explicit bindings to the hard-fail runner. The
+  disposable runner additionally needs `cc` with static libc support.
   Missing/offline runners leave a job queued, not passed. Use only disposable
   test hosts; do not expose production DIM state, credentials, or protected
   host verification services to GitHub jobs.
@@ -175,6 +176,8 @@ Manual dispatch does not install or register a runner. Before dispatching:
   reviewed merge queue, `main` pushes and release tags. Pull-request source does
   not execute automatically on the KVM/Docker runner; manual dispatch requires
   the same reviewed candidate and disposable runner prerequisites.
+- The separate `examples-vm` workflow follows the same trust boundary: merge
+  queue, `main`/release pushes and manual dispatch only, never pull-request code.
 
 See GitHub's [manual workflow documentation](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
 for the default-branch requirement. In the UI, select **Actions → workflow →
