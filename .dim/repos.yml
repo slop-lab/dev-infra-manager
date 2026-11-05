@@ -24,3 +24,6 @@ policy:
       - name: source
         kind: ordinary-sysbox
         evidenceClass: candidate-controlled
+      - name: vm-runtime-acceptance
+        kind: qemu
+        evidenceClass: candidate-controlled

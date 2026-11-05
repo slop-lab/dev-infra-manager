@@ -20,8 +20,11 @@ review/script files. The host core interprets none of the plugin-specific YAML.
 `repos.yml` here declares repository `main` with managed `development`, GitHub
 `development` as its upstream and publication target, and `mjy` review for `.dim/` changes. Other changes
 need no human approval. The explicit `git-ci` policy requires successful DIM CI
-for the candidate-controlled `source` job before either managed branch can be
-promoted. Merely having `ci/runner.yml`, an approved review, a configured worker,
+for both the candidate-controlled `source` job and the real `vm-runtime-acceptance`
+QEMU job before either managed branch can be promoted. The VM job runs the same
+hard-fail acceptance command used interactively and remains unavailable until a
+reviewed QEMU worker profile supplies the exact images, private state parent and
+KVM probe. Merely having `ci/runner.yml`, an approved review, a configured worker,
 or successful GitHub CI does not satisfy that gate. The declaration takes effect only after reviewed
 import or an explicit policy update; fetch, sync and publish are explicit plugin commands. Credentials remain
 in private operator/service configuration. See [Git synchronization](../docs/guides/git-sync.md).

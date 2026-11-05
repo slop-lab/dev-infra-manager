@@ -1,3 +1,6 @@
 jobs:
   source:
     script: scripts/ci/source.bash
+  vm-runtime-acceptance:
+    script: scripts/ci/vm-runtime-acceptance.bash
+    runtime: vm
