@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { configuredExecutionServer } from "../../../../packages/control-plane/plugins/execution-scheduler/src/service.js";
 import { GitExecutionAuthorityError, type ExecutionSource } from "../../../../packages/control-plane/plugins/execution-scheduler/src/ci-source.js";
 import { event, grant, slot } from "../../../contracts/ci/executionFixture.js";
@@ -14,7 +14,7 @@ const generationId = "a".repeat(64);
 const credential = (username: string, byte: number) => ({ username, password: Buffer.alloc(32, byte).toString("base64url") });
 const operator = credential("operator", 1), workerToken = Buffer.alloc(32, 2).toString("base64url");
 
-async function fixture(source: ExecutionSource, leaseMilliseconds = 30) {
+async function fixture(source: ExecutionSource, leaseMilliseconds = 30, now?: () => number) {
   const root = await mkdtemp(join(tmpdir(), "dim-admission-flow-")); roots.push(root);
   const activationToken = randomBytes(32).toString("base64url");
   const service = configuredExecutionServer({ config: { schemaVersion: 1, claimLeaseMilliseconds: leaseMilliseconds,
@@ -22,7 +22,8 @@ async function fixture(source: ExecutionSource, leaseMilliseconds = 30) {
     nativeGit: { endpoint: "http://127.0.0.1:9", grantIssuer: credential("grants", 5),
       candidateReader: credential("reader", 6), resultReporter: credential("results", 7) },
     workers: [{ id: "worker-a", token: workerToken, slots: [{ id: slot.id, runtime: "container" as const, profile: slot.profile }] }] }, stateDirectory: root,
-    readinessToken: randomBytes(32).toString("base64url"), activationToken, expectedGenerationId: generationId, source });
+    readinessToken: randomBytes(32).toString("base64url"), activationToken, expectedGenerationId: generationId, source,
+    ...(now === undefined ? {} : { now }) });
   await new Promise<void>((resolve) => service.server.listen(0, "127.0.0.1", resolve));
   const address = service.server.address(); if (address === null || typeof address === "string") throw new Error("missing listener");
   const endpoint = `http://127.0.0.1:${address.port}`;
@@ -36,14 +37,26 @@ const operatorHeaders = { authorization: `Basic ${Buffer.from(`${operator.userna
   "x-dim-generation-id": generationId, "content-type": "application/json" };
 
 it("renews the exact reservation through delayed HTTP authorization", async () => {
-  const source: ExecutionSource = { async authorize(assignment, signal) { await delay(80, undefined, { signal }); return grant(assignment); },
+  let releaseAuthorization: () => void = () => {};
+  const authorized = new Promise<void>((resolve) => { releaseAuthorization = resolve; });
+  const source: ExecutionSource = { async authorize(assignment) { await authorized; return grant(assignment); },
     async candidate() { throw new Error("not requested"); }, async publish() {} };
-  const running = await fixture(source);
+  let now = 0;
+  const running = await fixture(source, 30, () => now);
   try {
+    const original = running.service.store.renewAdmission.bind(running.service.store);
+    let renewals = 0;
+    vi.spyOn(running.service.store, "renewAdmission").mockImplementation((...args) => {
+      now += 20; renewals++;
+      const renewed = original(...args);
+      if (renewals === 5) releaseAuthorization();
+      return renewed;
+    });
     const queued = running.service.store.enqueue(event());
     const response = await fetch(`${running.endpoint}/v1/claims`, { method: "POST", headers: workerHeaders,
       body: JSON.stringify({ requestId: randomUUID(), slotId: slot.id }) });
     expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ id: queued.id, phase: "assigned", grant: { executionId: queued.id } });
+    expect(renewals).toBeGreaterThanOrEqual(6); expect(now).toBeGreaterThan(30);
   } finally { await running.service.close(); }
 });
 
