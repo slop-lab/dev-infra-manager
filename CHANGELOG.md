@@ -156,6 +156,8 @@ is implied by these source changes.
   Sign root-read and workspace-write leases with independent process-local keys
   over exact scope and expiry, eliminating the global live-identity quota while
   preserving per-request readiness, policy, ownership and generation checks.
+  Refresh retained workspace Git brokers when the installed package or its pinned
+  dependencies change, so upgrades use the current credential format.
   Route workspace Git read/proposal traffic through the shared guest service
   endpoint while retaining plugin-owned deterministic loopback brokers. Endpoint
   adoption is retry-safe across partial origin repair and preserves user-modified
