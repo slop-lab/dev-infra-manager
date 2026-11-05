@@ -21,14 +21,13 @@ review/script files. The host core interprets none of the plugin-specific YAML.
 `development` as its upstream and publication target, and `mjy` review for `.dim/` changes. Other changes
 need no human approval. The explicit `git-ci` policy requires the
 candidate-controlled `source` job before either managed branch can be promoted.
-The current policy schema has no per-branch required-job scope, so the heavy
-`vm-runtime-acceptance` QEMU job remains declared in `ci/runner.yml` for explicit
-use but is not globally required for development candidates. Native trusted
-acquisition supplies checkout trees without `.git`, while the runtime runner
-deliberately binds a canonical Git commit/tree, so this optional job is not
-claimed operational for ordinary Native candidates. Main merge, `main`
+The current policy/compiler has no per-branch job scope and schedules every job
+declared in `ci/runner.yml`; therefore that workflow contains only `source`.
+Native trusted acquisition also supplies checkout trees without `.git`, while
+the runtime runner deliberately binds a canonical Git commit/tree. Main merge, `main`
 push and release-tag runtime acceptance use the restricted GitHub workflow on a
-separately provisioned disposable runner. Merely having `ci/runner.yml`, an
+separately provisioned disposable runner, or the same explicit preparation
+command from an ordinary exact Git workspace. Merely having `ci/runner.yml`, an
 approved review, a configured worker, or successful GitHub CI does not satisfy
 DIM's source job. The declaration takes effect only after reviewed
 import or an explicit policy update; fetch, sync and publish are explicit plugin commands. Credentials remain
