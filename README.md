@@ -194,7 +194,7 @@ the base CLI.
 | [cache-server](packages/host/plugins/cache-server/README.md) | Optional host-owned Docker, npm, PyPI and APT cache services |
 | [host-mirrors](packages/host/plugins/mirrors/README.md) | Workspace clients for local or remote package caches |
 | [host-llm-router](packages/host/plugins/llm-router/README.md) | Workspace identity fencing, private gateway and OpenCode connection to a control-plane router |
-| [vm](packages/host/plugins/vm/README.md) | Incus VM workspace runtime, persistent auxiliary VMs and scoped browser consoles |
+| [vm](packages/host/plugins/vm/README.md) | Incus VM workspace runtime, persistent auxiliary VMs and scoped guest access |
 | [kvm](packages/host/plugins/kvm/README.md) | Explicit KVM access inside a Sysbox workspace through the `container-kvm` runtime |
 | [tailscale](docs/guides/tailscale.md) | Host-managed IPv4 tailnet routing and DNS for workspaces and agents; optional host-node TCP ingress |
 | [tunnels](packages/host/plugins/tunnels/README.md) | Persistent TCP/UDP routes, workspace grants and operator web UI |

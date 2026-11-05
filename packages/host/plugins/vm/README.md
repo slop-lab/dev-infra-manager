@@ -121,7 +121,7 @@ the actual image and Incus/QEMU version; configuration alone is not proof.
 CPU ceilings below 0.01 are rejected by the VM cgroup adapter. A host PID
 limit counts QEMU host tasks, not guest processes.
 
-## Persistent auxiliary VMs and browser console
+## Persistent auxiliary VMs and scoped workspace access
 
 ```bash
 dim vm create desktop FULL_64_CHARACTER_IMAGE_FINGERPRINT
@@ -129,6 +129,8 @@ dim vm start desktop
 dim vm ls
 dim vm resources desktop --cpus unlimited --memory 10g --pids 2048
 dim vm grant desktop dev
+# Optional, separately authorized start/stop:
+dim vm grant desktop dev --lifecycle
 dim vm console 8089
 dim vm revoke desktop CORE_WORKSPACE_UUID
 dim vm stop desktop
@@ -140,10 +142,13 @@ Access grants bind a core workspace UUID and current initialized/running
 state, so name reuse cannot inherit access. Grant issues a private scoped
 credential at `~/.config/dim/vms/desktop.json` **inside that workspace**. The
 host stores only its hash. Grant rotation/revoke affects that workspace only.
-An existing browser stream is closed when its grant or workspace becomes
-invalid. The credential allows the named VM's console, not the Incus API or
-host management. Stop/revoke a grant before handing a workspace to another
-operator.
+An existing browser, exec or copy stream is closed when its grant or workspace
+becomes invalid. The credential grants discovery, status, console, ordinary
+guest exec and safe home-relative copy. `--lifecycle` additionally grants start
+and stop. Inside the workspace use `dim-vm list|status|exec|push|pull|start|stop`.
+The credential does not expose the Incus API or permit create, discard, image
+import, resource changes, allocation, root exec or host management. Stop/revoke
+a grant before handing a workspace to another operator.
 
 The console defaults to trusted-host loopback. To make scoped console access
 reachable from a workspace, explicitly configure its private Incus bridge

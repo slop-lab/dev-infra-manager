@@ -377,6 +377,12 @@ is implied by these source changes.
   in optional plugins. Fence guest capabilities by current workspace UUID;
   control-plane router plugins own backend keys and usage, while the separate
   host router adapter owns workspace fencing and guest gateway tokens.
+  Let ordinary workspace agents discover and use explicitly granted auxiliary
+  VMs through scoped status, console, framed exec, safe home-relative file copy
+  and separately granted start/stop operations. Bind every operation to current
+  workspace/VM identities and grant generation; keep provisioning, resources,
+  Incus access and host authority operator-only. Require a hard-fail real
+  KVM/Sysbox runtime acceptance job for main and release candidates.
   Connect multiple Codex accounts through device authorization and multiple
   OpenAI-compatible or Anthropic-compatible API accounts from Web or the operator
   CLI. Start Codex sign-in directly from Web without entering an account ID or
