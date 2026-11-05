@@ -60,12 +60,7 @@ jobs:
     runs-on: dim-native-qemu
     timeout-minutes: 120
     env:
-      DIM_TEST_KVM_IMAGE: ${{ vars.DIM_TEST_KVM_IMAGE }}
-      DIM_TEST_KVM_STATE_PARENT: ${{ vars.DIM_TEST_KVM_STATE_PARENT }}
-      DIM_TEST_KVM_PROBE: ${{ vars.DIM_TEST_KVM_PROBE }}
-      DIM_NATIVE_MULTI_REPOSITORY_IMAGE: ${{ vars.DIM_NATIVE_MULTI_REPOSITORY_IMAGE }}
-      DIM_GUEST_INTEGRATION_IMAGE: ${{ vars.DIM_GUEST_INTEGRATION_IMAGE }}
-      DIM_VM_ACCEPTANCE_RECEIPT: ${{ runner.temp }}/vm-runtime-acceptance.json
+      DIM_VM_ACCEPTANCE_ROOT: ${{ runner.temp }}/vm-runtime-acceptance
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -77,11 +72,11 @@ jobs:
           version: 10.13.1
       - run: pnpm install --frozen-lockfile
       - run: just build-packages
-      - name: Run exact VM runtime acceptance
-        run: just verify vm-runtime-acceptance
+      - name: Prepare and run exact VM runtime acceptance
+        run: just verify vm-runtime-prepare --run
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: vm-runtime-acceptance-${{ github.sha }}
-          path: ${{ runner.temp }}/vm-runtime-acceptance.json
+          path: ${{ runner.temp }}/vm-runtime-acceptance
           if-no-files-found: error

@@ -27,6 +27,10 @@ native-qemu-guest-mechanics-kvm:
 vm-runtime-acceptance:
     cd .. && node scripts/checks/vm-runtime-acceptance.ts
 
+# Build and attest exact local fixtures, then optionally run acceptance with --run.
+vm-runtime-prepare *args:
+    cd .. && node scripts/checks/prepare-vm-runtime-acceptance.ts {{args}}
+
 # Real native ordinary executor Docker integration; nested execution requires explicit digest-pinned Sysbox fixture images.
 native-ordinary-executor-live:
     @docker info >/dev/null 2>&1 || { echo "native-ordinary-executor-live requires a reachable Docker daemon" >&2; exit 2; }

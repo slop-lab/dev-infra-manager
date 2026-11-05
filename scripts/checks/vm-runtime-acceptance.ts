@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { lstat, mkdir, realpath, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,6 +8,7 @@ const root = fileURLToPath(new URL("../..", import.meta.url));
 const values = { DIM_TEST_KVM_IMAGE: requiredEnvironment("DIM_TEST_KVM_IMAGE"),
   DIM_TEST_KVM_STATE_PARENT: requiredEnvironment("DIM_TEST_KVM_STATE_PARENT"),
   DIM_TEST_KVM_PROBE: requiredEnvironment("DIM_TEST_KVM_PROBE"),
+  DIM_TEST_KVM_PROBE_SHA256: requiredEnvironment("DIM_TEST_KVM_PROBE_SHA256"),
   DIM_NATIVE_MULTI_REPOSITORY_IMAGE: requiredEnvironment("DIM_NATIVE_MULTI_REPOSITORY_IMAGE"),
   DIM_GUEST_INTEGRATION_IMAGE: requiredEnvironment("DIM_GUEST_INTEGRATION_IMAGE") };
 
@@ -35,11 +37,15 @@ const probe = await realpath(requestedProbe);
 if (!probeInfo.isFile() || probeInfo.isSymbolicLink() || probe !== requestedProbe || (probeInfo.mode & 0o111) === 0) {
   throw new Error("DIM_TEST_KVM_PROBE must be a reviewed executable regular file");
 }
+const probeSha256 = createHash("sha256").update(await readFile(probe)).digest("hex");
+if (!/^[a-f0-9]{64}$/.test(values.DIM_TEST_KVM_PROBE_SHA256) || probeSha256 !== values.DIM_TEST_KVM_PROBE_SHA256) {
+  throw new Error("DIM_TEST_KVM_PROBE does not match its reviewed SHA-256");
+}
 const status = await capture("git", ["status", "--porcelain=v1"]);
 if (status.trim()) throw new Error("vm-runtime-acceptance requires a clean exact source tree");
 const sourceSha = (await capture("git", ["rev-parse", "HEAD"])).trim(), sourceTree = (await capture("git", ["rev-parse", "HEAD^{tree}"])).trim();
 const deterministicTests = ["host/plugins/vm/grants.test.ts", "host/plugins/vm/access.test.ts", "host/plugins/vm/accessServer.test.ts",
-  "host/plugins/vm/guestClient.test.ts", "host/plugins/vm/workspaceIntegration.test.ts"];
+  "host/plugins/vm/copyContainment.test.ts", "host/plugins/vm/guestClient.test.ts", "host/plugins/vm/workspaceIntegration.test.ts"];
 const runtimeTests = ["host/plugins/kvm/runtime.test.ts", "host/core/multiRepositoryWorkspaceRuntime.test.ts", "host/core/guestIntegrationRuntime.test.ts"];
 await run("pnpm", ["--dir", "tests", "exec", "vitest", "run", ...deterministicTests, ...runtimeTests, "--no-file-parallelism"],
   { ...process.env, DIM_VM_ACCEPTANCE_REQUIRED: "1" });
@@ -48,7 +54,7 @@ await mkdir(path.dirname(receipt), { recursive: true, mode: 0o700 });
 await writeFile(receipt, `${JSON.stringify({ schemaVersion: 1, sourceSha, sourceTree, observedAt: new Date().toISOString(),
   kvm: { device: "/dev/kvm", deviceId: kvmDeviceId }, images: { kvm: values.DIM_TEST_KVM_IMAGE,
     multiRepository: values.DIM_NATIVE_MULTI_REPOSITORY_IMAGE, guestIntegration: values.DIM_GUEST_INTEGRATION_IMAGE },
-  stateParent: parent, probe: { path: probe, outcome: "passed-in-container-kvm-test" },
+  stateParent: parent, probe: { path: probe, sha256: probeSha256, outcome: "passed-in-container-kvm-test" },
   tests: { deterministic: deterministicTests, runtime: runtimeTests }, outcome: "passed" }, null, 2)}\n`, { mode: 0o600 });
 process.stdout.write(`vm-runtime-acceptance-ok receipt=${receipt}\n`);
 
