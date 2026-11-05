@@ -44,6 +44,7 @@ it.skipIf(!required && (!image || !parent || !probe))("prepares KVM without sudo
     expect({ inode: after.ino, mode: after.mode, uid: after.uid, gid: after.gid }).toEqual({ inode: original.ino, mode: original.mode, uid: original.uid, gid: original.gid });
   } finally {
     try { await runtime?.remove(record, { keepData: false }); }
-    finally { await rm(root, { recursive: true, force: true }); }
+    catch (error) { throw new Error(`KVM runtime cleanup failed; fixture state retained at ${root}`, { cause: error }); }
+    await rm(root, { recursive: true, force: true });
   }
 }, 90_000);

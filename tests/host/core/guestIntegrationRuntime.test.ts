@@ -47,7 +47,7 @@ describe("guest integrations in an ordinary disposable workspace", () => {
       const pluginHome = join(root, "plugins");
       const enabled = ["agent-tools", "external-urls"];
       await mkdir(join(pluginHome, "node_modules/@slop-lab"), { recursive: true });
-      for (const plugin of enabled) await symlink(new URL(`../../../../packages/host/plugins/${plugin.replace(/^host-/, "")}`, import.meta.url).pathname,
+      for (const plugin of enabled) await symlink(new URL(`../../../packages/host/plugins/${plugin.replace(/^host-/, "")}`, import.meta.url).pathname,
         join(pluginHome, "node_modules/@slop-lab", `dim-host-plugin-${plugin.replace(/^host-/, "")}`));
       const manifest = (plugins: string[]) => JSON.stringify({ schemaVersion: 1, plugins: plugins.map((name) => `@slop-lab/dim-host-plugin-${name.replace(/^host-/, "")}`) });
       await writeFile(join(pluginHome, "plugins.json"), manifest(enabled));

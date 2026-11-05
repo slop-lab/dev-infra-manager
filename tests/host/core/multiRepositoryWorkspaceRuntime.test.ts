@@ -52,7 +52,7 @@ describe("disposable multi-repository workspace runtime", () => {
       expect(inspected.exitCode, inspected.stderr).toBe(0);
       expect(inspected.stdout.trim()).toMatch(/^sha256:[a-f0-9]{64}$/);
       // Brokers are real source processes. No shared dist rebuild or compiled fallback is required.
-      process.env.NODE_OPTIONS = `${previous.NODE_OPTIONS ?? ""} --import=${resolve(import.meta.dirname, "../../../node_modules/tsx/dist/loader.mjs")}`.trim();
+      process.env.NODE_OPTIONS = `${previous.NODE_OPTIONS ?? ""} --import=${resolve(import.meta.dirname, "../../node_modules/tsx/dist/loader.mjs")}`.trim();
       process.env.TSX_TSCONFIG_PATH = resolve(import.meta.dirname, "../../tsconfig.json");
       const service = await startFinalizeService(join(root, "native"));
       await activateFinalizeService(service.origin);
