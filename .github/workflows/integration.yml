@@ -1,8 +1,6 @@
 name: Native integration
 
 on:
-  pull_request:
-    branches: [main]
   merge_group:
     branches: [main]
     types: [checks_requested]
@@ -58,7 +56,7 @@ jobs:
         run: test -c /dev/kvm -a -r /dev/kvm -a -w /dev/kvm
       - run: just verify native-qemu-guest-mechanics-kvm
   vm-runtime-acceptance:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.lane == 'vm-runtime' }}
+    if: ${{ github.event_name == 'merge_group' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.lane == 'vm-runtime') }}
     runs-on: dim-native-qemu
     timeout-minutes: 120
     env:
