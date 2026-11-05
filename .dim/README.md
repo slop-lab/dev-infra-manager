@@ -19,13 +19,18 @@ documents the schemas, activation rules, plugin boundaries and project-owned
 review/script files. The host core interprets none of the plugin-specific YAML.
 `repos.yml` here declares repository `main` with managed `development`, GitHub
 `development` as its upstream and publication target, and `mjy` review for `.dim/` changes. Other changes
-need no human approval. The explicit `git-ci` policy requires successful DIM CI
-for both the candidate-controlled `source` job and the real `vm-runtime-acceptance`
-QEMU job before either managed branch can be promoted. The VM job runs the same
-hard-fail acceptance command used interactively and remains unavailable until a
-reviewed QEMU worker profile supplies the exact images, private state parent and
-KVM probe. Merely having `ci/runner.yml`, an approved review, a configured worker,
-or successful GitHub CI does not satisfy that gate. The declaration takes effect only after reviewed
+need no human approval. The explicit `git-ci` policy requires the
+candidate-controlled `source` job before either managed branch can be promoted.
+The current policy schema has no per-branch required-job scope, so the heavy
+`vm-runtime-acceptance` QEMU job remains declared in `ci/runner.yml` for explicit
+use but is not globally required for development candidates. Native trusted
+acquisition supplies checkout trees without `.git`, while the runtime runner
+deliberately binds a canonical Git commit/tree, so this optional job is not
+claimed operational for ordinary Native candidates. Main merge, `main`
+push and release-tag runtime acceptance use the restricted GitHub workflow on a
+separately provisioned disposable runner. Merely having `ci/runner.yml`, an
+approved review, a configured worker, or successful GitHub CI does not satisfy
+DIM's source job. The declaration takes effect only after reviewed
 import or an explicit policy update; fetch, sync and publish are explicit plugin commands. Credentials remain
 in private operator/service configuration. See [Git synchronization](../docs/guides/git-sync.md).
 
