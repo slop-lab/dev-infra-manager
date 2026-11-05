@@ -1,5 +1,5 @@
 import source from "../package.json" with { type: "json" };
-import { copyFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { publishPackageVersion } from "../../../../../scripts/packages/publish-package-version.ts";
 const { private: privateSource, scripts: sourceScripts, devDependencies, ...metadata } = source;
 if (privateSource !== true) throw new Error("The source package.json must remain private");
@@ -13,3 +13,5 @@ await copyFile(new URL("../../../../../LICENSE", import.meta.url), new URL("../d
 await copyFile(new URL("./install-budget-helper.bash", import.meta.url), new URL("../dist/install-budget-helper.bash", import.meta.url));
 
 await copyFile(new URL("./artifact-cache.bash", import.meta.url), new URL("../dist/artifact-cache.bash", import.meta.url));
+await mkdir(new URL("../dist/assets", import.meta.url), { recursive: true });
+await copyFile(new URL("../src/assets/dim-vm.mjs", import.meta.url), new URL("../dist/assets/dim-vm.mjs", import.meta.url));
