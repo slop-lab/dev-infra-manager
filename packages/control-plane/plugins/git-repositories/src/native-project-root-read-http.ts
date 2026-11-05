@@ -127,10 +127,6 @@ export function createNativeProjectRootReadService(input: RootReadServiceInput):
           projectId,
           repositoryId
         });
-        if (lease === undefined) {
-          sendJson(response, 503, { error: "native Git root read lease capacity is exhausted" });
-          return true;
-        }
         sendJson(response, 201, {
           schemaVersion: 2,
           serviceId: "native-main",

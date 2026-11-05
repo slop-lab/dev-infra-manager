@@ -22,20 +22,17 @@ const maximumLiveLeases = 16;
 afterEach(cleanupFinalizeFixtures);
 
 describe("native Project root read lease lifecycle", () => {
-  it("caps live leases and reaps expired records before issuing another", async () => {
+  it("issues more than sixteen short-lived root-read credentials without a live-identity quota", async () => {
     // Given
     let now = 1_000;
     const fixture = await finalizedFixture("root-read-lease-cap", () => now);
-    const leases = await Promise.all(Array.from({ length: maximumLiveLeases }, () => issueLease(fixture.service.origin)));
+    const leases = [];
+    for (let index = 0; index < maximumLiveLeases * 2; index++) leases.push(await issueLease(fixture.service.origin));
 
-    // When
-    const capped = await requestLease(fixture.service.origin);
+    // When / Then
+    expect(leases).toHaveLength(maximumLiveLeases * 2);
     now = leases[0]?.expiresAt ?? now;
-    const reaped = await requestLease(fixture.service.origin);
-
-    // Then
-    expect(capped.status).toBe(503);
-    expect(reaped.status).toBe(201);
+    expect((await requestLease(fixture.service.origin)).status).toBe(201);
   });
 
   it("rejects a lease that expires while live-root verification is blocked", async () => {

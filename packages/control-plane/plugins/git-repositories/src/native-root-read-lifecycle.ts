@@ -1,7 +1,6 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createNativeSignedLease } from "./native-signed-lease.js";
 
 const leaseLifetimeMilliseconds = 30_000;
-const maximumLiveLeases = 16;
 
 export type RootReadCredential = { readonly username: string; readonly password: string };
 export type RootReadLeaseScope = {
@@ -12,53 +11,30 @@ export type RootReadLeaseScope = {
 };
 export type IssuedRootReadLease = RootReadCredential & RootReadLeaseScope & { readonly issuedAt: number; readonly expiresAt: number };
 
-type StoredRootReadLease = RootReadLeaseScope & {
-  readonly expiresAt: number;
-  readonly passwordDigest: Buffer;
-};
-
 export type RootReadLeaseRegistry = {
   authenticate(credential: RootReadCredential): RootReadLeaseScope | undefined;
   clear(): void;
-  issue(scope: RootReadLeaseScope): IssuedRootReadLease | undefined;
+  issue(scope: RootReadLeaseScope): IssuedRootReadLease;
 };
 
 export function createRootReadLeaseRegistry(now: () => number): RootReadLeaseRegistry {
-  const leases = new Map<string, StoredRootReadLease>();
-  const pruneExpired = (): void => {
-    const currentTime = now();
-    for (const [key, lease] of leases) {
-      if (currentTime >= lease.expiresAt) leases.delete(key);
-    }
-  };
+  const leases = createNativeSignedLease("root-read-", leaseLifetimeMilliseconds, now);
   return {
     authenticate(credential) {
-      pruneExpired();
-      const lease = leases.get(digest(credential.username));
-      if (lease === undefined || !timingSafeEqual(lease.passwordDigest, digestBuffer(credential.password))) {
-        return undefined;
-      }
-      return {
-        generationId: lease.generationId,
-        ownerHostId: lease.ownerHostId,
-        projectId: lease.projectId,
-        repositoryId: lease.repositoryId
-      };
+      const scope = leases.authenticate(credential);
+      if (!fourStrings(scope)) return;
+      const [generationId, ownerHostId, projectId, repositoryId] = scope;
+      return { generationId, ownerHostId, projectId, repositoryId };
     },
-    clear() {
-      leases.clear();
-    },
+    clear: leases.clear,
     issue(scope) {
-      pruneExpired();
-      if (leases.size >= maximumLiveLeases) return undefined;
-      const username = `root-read-${randomBytes(18).toString("base64url")}`;
-      const password = randomBytes(32).toString("base64url");
-      const issuedAt = now();
-      const expiresAt = issuedAt + leaseLifetimeMilliseconds;
-      leases.set(digest(username), { ...scope, expiresAt, passwordDigest: digestBuffer(password) });
-      return { ...scope, username, password, issuedAt, expiresAt };
+      return { ...scope, ...leases.issue([scope.generationId, scope.ownerHostId, scope.projectId, scope.repositoryId]) };
     }
   };
+}
+
+function fourStrings(value: readonly unknown[] | undefined): value is readonly [string, string, string, string] {
+  return value?.length === 4 && value.every((entry) => typeof entry === "string");
 }
 
 export type RootReadOperationGate = {
@@ -96,12 +72,4 @@ export function createRootReadOperationGate(maximumActive: number): RootReadOper
       return open;
     }
   };
-}
-
-function digest(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
-}
-
-function digestBuffer(value: string): Buffer {
-  return createHash("sha256").update(value, "utf8").digest();
 }
