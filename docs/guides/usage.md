@@ -225,6 +225,36 @@ filesystem; it streams the bounded archive to the pinned workspace runtime.
 Cancellation removes operator-side staging data and leaves an existing exact
 destination unchanged.
 
+### Use an operator-granted auxiliary VM
+
+After the selected host operator creates and starts a reviewed auxiliary VM,
+they grant it to the current workspace:
+
+```bash
+dim vm grant desktop dev
+# Add separately authorized start/stop:
+dim vm grant desktop dev --lifecycle
+```
+
+Inside `dev`, ordinary agents and shells use the repository-independent client:
+
+```bash
+dim-vm list
+dim-vm status desktop
+printf 'input' | dim-vm exec desktop -- sh -c 'cat; printf error >&2'
+dim-vm push desktop ./artifact.bin artifacts/artifact.bin
+dim-vm pull desktop results/report.json ./report.json
+dim-vm stop desktop   # only with --lifecycle grant
+dim-vm start desktop
+```
+
+Targets and permissions are also visible through `dim-workspace discovery` and
+`dim-workspace plugin vm list {}`. VM paths are relative to `/home/dim`; copy
+uses the same bounded archive, traversal and symlink rules as workspace copy.
+The grant does not permit create, discard, image import, resource changes, root
+commands, arbitrary Incus operations or host file access. Revocation and
+workspace/VM identity changes invalidate active and future access.
+
 ## Select a remote host
 
 Install the same DIM source build and runtime prerequisites on the remote host

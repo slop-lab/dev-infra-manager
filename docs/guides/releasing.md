@@ -147,7 +147,7 @@ Manual dispatch does not install or register a runner. Before dispatching:
   `gh repo view --json defaultBranchRef` and `gh workflow list --all`.
 - The selected branch or tag must point at the reviewed clean candidate.
   Dispatch uses a branch/tag ref, not a promise that a moving branch will
-  remain at the SHA inspected earlier. Freeze the ref for all four dispatches
+  remain at the SHA inspected earlier. Freeze the ref for all five dispatches
   and reject any run whose `headSha` differs from the candidate.
 - The source workflow uses fresh `ubuntu-24.04` hosted runners. Integration
   requires fresh, disposable Linux self-hosted runners with labels
@@ -164,6 +164,10 @@ Manual dispatch does not install or register a runner. Before dispatching:
   These are public test images, not production role credentials.
 - The QEMU runner must be x86-64 with a character `/dev/kvm` readable and
   writable by the runner user and usable from Docker. TCG is not accepted.
+  The `vm-runtime` lane additionally needs exact local image IDs in
+  `DIM_TEST_KVM_IMAGE`, `DIM_NATIVE_MULTI_REPOSITORY_IMAGE` and
+  `DIM_GUEST_INTEGRATION_IMAGE`, plus a private
+  `DIM_TEST_KVM_STATE_PARENT` and reviewed executable `DIM_TEST_KVM_PROBE`.
   Missing/offline runners leave a job queued, not passed. Use only disposable
   test hosts; do not expose production DIM state, credentials, or protected
   host verification services to GitHub jobs.
@@ -171,7 +175,7 @@ Manual dispatch does not install or register a runner. Before dispatching:
 See GitHub's [manual workflow documentation](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
 for the default-branch requirement. In the UI, select **Actions → workflow →
 Run workflow**, choose the reviewed branch/tag, and select the integration
-lane. Repeat for both integration lanes. CLI equivalent, after the prerequisites
+lane. Repeat for all three integration lanes. CLI equivalent, after the prerequisites
 and reviewed candidate publication are complete:
 
 ```bash
@@ -192,6 +196,7 @@ candidate_root_sha="$(git rev-parse HEAD)"
   gh workflow run examples.yml --repo "$repository" --ref "$candidate_ref"
   gh workflow run integration.yml --repo "$repository" --ref "$candidate_ref" -f lane=ordinary
   gh workflow run integration.yml --repo "$repository" --ref "$candidate_ref" -f lane=qemu-kvm
+  gh workflow run integration.yml --repo "$repository" --ref "$candidate_ref" -f lane=vm-runtime
 
   gh run list --repo "$repository" --commit "$candidate_root_sha" \
     --event workflow_dispatch --limit 20 \
@@ -212,8 +217,8 @@ run_id=REPLACE_WITH_NEW_RUN_ID
 )
 ```
 
-Require both source matrix jobs, `examples-vm`, and the selected job of each
-integration run to succeed. The unselected integration job is skipped by design; a skipped
+Require both source matrix jobs, `examples-vm`, and the selected job of each of
+the three integration runs to succeed. The unselected integration jobs are skipped by design; a skipped
 selected job, queued job, cancellation, failure, or timeout is not success.
 Retain the exact run URLs and source artifacts
 `native-candidate-source-node-{24,26}-<SHA>` and `examples-vm-source-<SHA>`

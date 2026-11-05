@@ -48,6 +48,13 @@ operations through `dim-workspace plugin NAME OPERATION [JSON]`. An operation
 receives the authenticated immutable workspace identity from the host, rather
 than accepting another workspace selector from its caller.
 
+The VM plugin uses this channel to publish grant-filtered auxiliary VM targets.
+Its `dim-vm` client uses the declared `vm` service for framed guest exec and
+bounded DIMCP1 transfer. Credentials contain only the workspace/VM/grant
+identities, permissions and scoped token. They contain no Incus endpoint or host
+credential. Direct KVM discovery remains a separate runtime fact; an ordinary
+workspace without `/dev/kvm` can still use an operator-granted auxiliary VM.
+
 This connection is a shared proxy for all enabled guest integrations. Host
 composition owns its process, current protocol and installed-plugin generation;
 plugins do not each implement update detection or install another proxy. The
