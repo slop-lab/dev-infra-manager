@@ -55,7 +55,9 @@ try {
   await page.getByLabel("Username", { exact: true }).fill(credentials.username);
   await page.getByLabel("Password", { exact: true }).fill(credentials.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.getByRole("button", { name: "Output fixture", exact: true }).click();
+  const outputLink = page.getByRole("link", { name: "Output fixture", exact: true });
+  assert.equal(await outputLink.getAttribute("href"), "#/features/fixture-output");
+  await outputLink.click();
   await page.getByText("Output fixture ready", { exact: true }).waitFor();
   async function invoke(name: "large" | "mutate") {
     return page.evaluate(async operation => {

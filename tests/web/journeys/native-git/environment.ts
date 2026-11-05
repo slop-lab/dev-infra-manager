@@ -52,6 +52,27 @@ export async function createReviewEnvironment() {
     await writeFile(join(fixture.managed.root, "promoter.json"), JSON.stringify({ schemaVersion: 1, serviceId: "native-main",
       endpoint: proxyOrigin, generationId, role: "host-promoter", hostId: hostPromoter.hostId,
       credential: { username: hostPromoter.username, password: hostPromoter.password } }), { mode: 0o600 });
+    const base = `${fixture.managed.service.origin}/v1/projects/review-journey/repositories/public`;
+    const workspaceId = Buffer.alloc(32, 91).toString("base64url");
+    async function workspaceRemote() {
+      const response = await fetch(base + "/workspace-write-leases", { method: "POST", headers: {
+        authorization: `Basic ${Buffer.from(`${workspaceWriteIssuer.username}:${workspaceWriteIssuer.password}`).toString("base64")}`,
+        "content-type": "application/json", "x-dim-generation-id": generationId
+      }, body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "public", workspaceId }) });
+      assert.equal(response.status, 201, "workspace proposal lease must be issued");
+      const lease: unknown = await response.json();
+      assert(lease !== null && typeof lease === "object" && "username" in lease && typeof lease.username === "string"
+        && "password" in lease && typeof lease.password === "string", "workspace lease is valid");
+      const remote = new URL(base + ".git"); remote.username = lease.username; remote.password = lease.password;
+      return remote.toString();
+    }
+    // Browser interaction can outlive a workspace credential. Each independent
+    // Git phase must acquire a new lease for the same immutable workspace scope.
+    async function pushWorkspace(args: string[]) {
+      assert(checkout, "a workspace checkout must exist before pushing");
+      await runGit("/usr/bin/git", ["-C", checkout, "remote", "set-url", "origin", await workspaceRemote()]);
+      await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", ...args]);
+    }
     return {
       origin: fixture.origin, username: fixture.username, password: fixture.password,
       projectId: "review-journey", repositoryId: "public", upstreamUrl: "https://github.com/mjy9088/codyssey-public.git",
@@ -62,19 +83,9 @@ export async function createReviewEnvironment() {
         return { reached: reached.promise, release: release.resolve };
       },
       async prepareProposal() {
-        const base = `${fixture.managed.service.origin}/v1/projects/review-journey/repositories/public`;
-        const workspaceId = Buffer.alloc(32, 91).toString("base64url");
-        const response = await fetch(base + "/workspace-write-leases", { method: "POST", headers: {
-          authorization: `Basic ${Buffer.from(`${workspaceWriteIssuer.username}:${workspaceWriteIssuer.password}`).toString("base64")}`,
-          "content-type": "application/json", "x-dim-generation-id": generationId
-        }, body: JSON.stringify({ schemaVersion: 1, generationId, repositoryId: "public", workspaceId }) });
-        assert.equal(response.status, 201, "workspace proposal lease must be issued");
-        const lease: unknown = await response.json();
-        assert(lease !== null && typeof lease === "object" && "username" in lease && typeof lease.username === "string"
-          && "password" in lease && typeof lease.password === "string", "workspace lease is valid");
-        const remote = new URL(base + ".git"); remote.username = lease.username; remote.password = lease.password;
+        const remote = await workspaceRemote();
         checkout = join(fixture.managed.root, "journey-checkout");
-        await runGit("/usr/bin/git", ["clone", "--quiet", remote.toString(), checkout]);
+        await runGit("/usr/bin/git", ["clone", "--quiet", remote, checkout]);
         const baseCommit = (await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", "HEAD"])).stdout.trim();
         await mkdir(join(checkout, ".dim"));
         await writeFile(join(checkout, ".dim", "review-boundary.json"), '{"requiresReview":true}\n');
@@ -83,7 +94,7 @@ export async function createReviewEnvironment() {
         const candidate = (await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", "HEAD"])).stdout.trim();
         proposalCommit = candidate;
         proposalRef = `refs/heads/review-boundary-${workspaceId}`;
-        await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", "origin", `HEAD:${proposalRef}`]);
+        await pushWorkspace(["origin", `HEAD:${proposalRef}`]);
         // Another reviewer has prepared pending evidence. The browser's initial
         // operator still cannot resolve/approve; it must discover and obtain that
         // access through the actual account UI before exercising those actions.
@@ -108,8 +119,8 @@ export async function createReviewEnvironment() {
         assert.equal((await runGit("/usr/bin/git", ["-C", checkout, "rev-parse", `${candidate}^`])).stdout.trim(), baseCommit,
           "rewritten source must replace rather than descend from the reviewed candidate");
         const siblingRef = proposalRef.replace("review-boundary-", "review-sibling-");
-        await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", "origin", `${previousCandidate}:${siblingRef}`]);
-        await runGit("/usr/bin/git", ["-C", checkout, "push", "--quiet", `--force-with-lease=${proposalRef}:${previousCandidate}`, "origin", `HEAD:${proposalRef}`]);
+        await pushWorkspace(["origin", `${previousCandidate}:${siblingRef}`]);
+        await pushWorkspace([`--force-with-lease=${proposalRef}:${previousCandidate}`, "origin", `HEAD:${proposalRef}`]);
         proposalCommit = candidate;
         return { candidate, previousCandidate, proposalRef, siblingRef };
       },
