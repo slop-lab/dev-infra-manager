@@ -57,7 +57,8 @@ export const vmWorkspaceServices = {
 function vmAccess(context: WorkspaceHostPluginContext): VmAccessService {
   const config = readVmHostConfig(context.stateRoot);
   if (!config.budgetHelper) throw new UserError("VM host requires the reviewed budget helper");
-  const machines = new IncusMachines(config, context.runner, new CommandVmBudget(context.runner, config.budgetHelper), context.cleanupRunner);
+  const machines = new IncusMachines(config, context.runner, new CommandVmBudget(context.runner, config.budgetHelper), context.cleanupRunner,
+    new CommandVmBudget(context.cleanupRunner, config.budgetHelper));
   return new VmAccessService(new PersistentVmService(context.stateRoot, machines, context.store));
 }
 

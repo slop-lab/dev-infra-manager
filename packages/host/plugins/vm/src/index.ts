@@ -31,7 +31,8 @@ export const hostPlugin: WorkspaceHostPlugin = {
     isolation: "virtual-machine",
     create(context) {
       const config = readVmHostConfig(context.stateRoot);
-      return new IncusWorkspaceRuntime(new IncusMachines(config, context.runner, configuredBudget(config, context.runner), context.cleanupRunner));
+      return new IncusWorkspaceRuntime(new IncusMachines(config, context.runner, configuredBudget(config, context.runner), context.cleanupRunner,
+        configuredBudget(config, context.cleanupRunner)));
     }
   },
   workspaceReady: deployVmAccess,
@@ -72,7 +73,8 @@ async function runVmCommand(args: string[], context: WorkspaceHostPluginContext)
     process.stdout.write(`${JSON.stringify({ fingerprint: await importReviewedImage(config, input, context.runner, context.signal) })}\n`);
     return;
   }
-  const machines = new IncusMachines(config, context.runner, configuredBudget(config, context.runner), context.cleanupRunner);
+  const machines = new IncusMachines(config, context.runner, configuredBudget(config, context.runner), context.cleanupRunner,
+    configuredBudget(config, context.cleanupRunner));
   const service = new PersistentVmService(context.stateRoot, machines, context.store);
   switch (command) {
     case "ls": {
