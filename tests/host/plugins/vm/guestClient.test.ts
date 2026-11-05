@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { workspaceCopyGuest } from "../../../../packages/host/core/src/workspace/copy.js";
 
 const roots: string[] = [];
@@ -19,6 +19,17 @@ async function fixture() {
   const requests: Array<{ readonly path: string; readonly body: Buffer }> = [];
   const server = createServer((request, response) => { void (async () => {
     const url = request.url ?? "";
+    const encodedCommand = request.headers["x-dim-command"];
+    const command = typeof encodedCommand === "string" ? JSON.parse(Buffer.from(encodedCommand, "base64url").toString("utf8")) : undefined;
+    if (url.endsWith("/exec") && Array.isArray(command) && command[0] === "true") {
+      requests.push({ path: url, body: Buffer.alloc(0) }); response.write(frame(1, Buffer.from("stdout:")));
+      response.write(frame(2, Buffer.from("stderr"))); response.end(frame(3, Buffer.from("7"))); return;
+    }
+    if (url.endsWith("/exec") && Array.isArray(command) && command[0] === "full-duplex") {
+      response.write(frame(1, Buffer.from("ready:"))); const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk)); response.write(frame(1, Buffer.concat(chunks)));
+      response.write(frame(2, Buffer.from("stderr"))); response.end(frame(3, Buffer.from("7"))); return;
+    }
     if (url.includes("reject%2Fresult.bin")) {
       request.once("data", () => { request.resume(); response.writeHead(403); response.end("rejected"); }); return;
     }
@@ -47,6 +58,16 @@ async function run(home: string, args: readonly string[], input = "") {
   child.stdin.end(input); const [code] = await once(child, "close"); return { code, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) };
 }
 
+function spawnClient(home: string, args: readonly string[]) {
+  const child = spawn(process.execPath, [client, ...args], { env: { ...process.env, HOME: home }, stdio: ["pipe", "pipe", "pipe"] });
+  if (!child.stdin || !child.stdout || !child.stderr) throw new Error("missing child streams");
+  const stdout: Buffer[] = [], stderr: Buffer[] = [];
+  child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk))); child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+  return { child, stdin: child.stdin, result: once(child, "close", { signal: AbortSignal.timeout(2_000) })
+    .then(([code]) => ({ code, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) })) };
+}
+
+describe.sequential("dim-vm guest client", () => {
 it("prints help without requiring a VM credential", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-vm-guest-client-help-")); roots.push(root);
   const result = await run(root, ["--help"]);
@@ -66,6 +87,41 @@ it("uses a private credential for status and framed interactive exec", async () 
       .toEqual({ code: 7, stdout: "stdout:input", stderr: "stderr" });
     await chmod(path.join(f.home, ".config/dim/vms/desktop.json"), 0o644);
     expect((await run(f.home, ["status", "desktop"])).code).toBe(2);
+  } finally { f.server.close(); await once(f.server, "close"); }
+});
+
+it("executes and exits while stdin remains open and idle", async () => {
+  const f = await fixture();
+  try {
+    const running = spawnClient(f.home, ["exec", "desktop", "--", "true"]);
+    try {
+      const result = await running.result;
+      expect({ code: result.code, stdout: result.stdout.toString("utf8"), stderr: result.stderr.toString("utf8") })
+        .toEqual({ code: 7, stdout: "stdout:", stderr: "stderr" });
+    } finally { running.stdin.destroy(); if (running.child.exitCode === null) running.child.kill(); }
+  } finally { f.server.close(); await once(f.server, "close"); }
+});
+
+it("streams delayed stdin bytes before EOF without losing framed output", async () => {
+  const f = await fixture();
+  try {
+    const running = spawnClient(f.home, ["exec", "desktop", "--", "cat"]);
+    running.stdin.write("delayed-"); running.stdin.end("input");
+    const result = await running.result;
+    expect({ code: result.code, stdout: result.stdout.toString("utf8"), stderr: result.stderr.toString("utf8") })
+      .toEqual({ code: 7, stdout: "stdout:delayed-input", stderr: "stderr" });
+  } finally { f.server.close(); await once(f.server, "close"); }
+});
+
+it("keeps stdin attached after early output until delayed input and EOF", async () => {
+  const f = await fixture();
+  try {
+    const running = spawnClient(f.home, ["exec", "desktop", "--", "full-duplex"]);
+    await once(running.child.stdout, "data", { signal: AbortSignal.timeout(2_000) });
+    running.stdin.end("answer");
+    const result = await running.result;
+    expect({ code: result.code, stdout: result.stdout.toString("utf8"), stderr: result.stderr.toString("utf8") })
+      .toEqual({ code: 7, stdout: "ready:answer", stderr: "stderr" });
   } finally { f.server.close(); await once(f.server, "close"); }
 });
 
@@ -93,7 +149,8 @@ it("terminates the local copy helper when a push request fails", async () => {
     const source = path.join(f.root, "source.bin"); await writeFile(source, "payload");
     expect((await run(f.home, ["push", "desktop", source, "reject/result.bin"])).code).toBe(2);
     expect(await readFile(marker, "utf8")).toBe("yes");
-  } finally { f.server.close(); await once(f.server, "close"); }
+  } finally { f.server.closeAllConnections(); f.server.close(); await once(f.server, "close"); }
+});
 });
 
 function frame(channel: number, body: Buffer): Buffer { const header = Buffer.alloc(5); header.writeUInt8(channel); header.writeUInt32BE(body.length, 1); return Buffer.concat([header, body]); }

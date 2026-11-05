@@ -58,6 +58,7 @@ async function main(args) {
         const response = await streamRequest(copyUrl(target, "push", destination, recursive, overwrite), { method: "POST", headers, body: child.stdout });
         response.resume(); await once(response, "end"); process.exitCode = await completion; return;
       } catch (error) {
+        child.stdout.destroy();
         if (child.exitCode === null && child.signalCode === null) child.kill();
         await completion.then(() => undefined, () => undefined); throw error;
       }
@@ -84,6 +85,7 @@ function closed(child) { return new Promise((resolve, reject) => { child.once("e
 /** @param {string} endpoint @param {{method:string,headers:Record<string,string>,body?:import("node:stream").Readable,signal?:AbortSignal}} options */
 function streamRequest(endpoint, options) { return new Promise((resolve, reject) => {
   const outgoing = httpRequest(endpoint, { method: options.method, headers: options.headers, signal: options.signal }, (incoming) => {
+    incoming.once("end", finishBody); incoming.once("aborted", detachBody);
     if ((incoming.statusCode ?? 500) >= 200 && (incoming.statusCode ?? 500) < 300) resolve(incoming);
     else {
       /** @type {Buffer[]} */ const chunks = [];
@@ -91,7 +93,10 @@ function streamRequest(endpoint, options) { return new Promise((resolve, reject)
       incoming.once("end", () => reject(new Error(Buffer.concat(chunks).toString("utf8") || `VM request failed (${incoming.statusCode})`)));
     }
   });
-  outgoing.once("error", reject); if (options.body) options.body.pipe(outgoing); else outgoing.end();
+  const detachBody = () => { if (options.body) { options.body.unpipe(outgoing); options.body.pause(); } };
+  const finishBody = () => { detachBody(); if (!outgoing.writableEnded) outgoing.end(); };
+  outgoing.once("error", (error) => { detachBody(); reject(error); });
+  if (options.body) { outgoing.flushHeaders(); options.body.pipe(outgoing); } else outgoing.end();
 }); }
 class FrameReader {
   /** @param {AsyncIterable<Uint8Array|string>} stream */
