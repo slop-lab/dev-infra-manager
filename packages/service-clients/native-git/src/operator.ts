@@ -74,7 +74,10 @@ export async function createNativeGitOperator(config: {
       else if (name === "sync.fetch" || name === "sync.merge" || name === "sync.publish") {
         if (!sync) throw new Error("Git sync operator connection is not configured");
         result = await sync.invoke(projectId, repositoryId, name === "sync.fetch" ? "fetch" : name === "sync.merge" ? "merge" : "publish", scope.extend({ protectedRef: z.string().optional() }).parse(input).protectedRef);
-      } else if (name === "merges.prepare") result = await client.prepareMerge(projectId, repositoryId, scope.extend({ sourceRef: z.string(), targetRef: z.string() }).parse(input));
+      } else if (name === "merges.prepare") {
+        const { sourceRef, targetRef } = scope.extend({ sourceRef: z.string(), targetRef: z.string() }).parse(input);
+        result = await client.prepareMerge(projectId, repositoryId, { sourceRef, targetRef });
+      }
       else if (name === "reviews.list") result = await client.listReviews(projectId, repositoryId);
       else if (name === "reviews.resolve") {
         const resolved = scope.extend({ proposalRef: z.string().startsWith("refs/").max(1024), protectedRef: z.string().startsWith("refs/heads/").max(1024).optional() }).parse(input);
