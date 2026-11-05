@@ -66,6 +66,14 @@ describe("workspace-scoped auxiliary VM access", () => {
     expect(wait).toHaveBeenCalledWith(expect.objectContaining({ id: f.vm.id, name: f.vm.name })); expect(execute).toHaveBeenCalled();
   });
 
+  it("stops a newly started auxiliary VM when readiness fails", async () => {
+    const f = await fixture(["discover", "status", "lifecycle"]), identity = request(f);
+    await f.access.lifecycle({ ...identity, operation: "stop" });
+    vi.spyOn(f.machines, "waitForAgent").mockRejectedValue(new Error("guest agent unavailable"));
+    await expect(f.access.lifecycle({ ...identity, operation: "start" })).rejects.toThrow("guest agent unavailable");
+    expect((await f.machines.inspect(f.vm))?.running).toBe(false);
+  });
+
   it("serializes lifecycle authorization with grant revocation", async () => {
     const f = await fixture(["discover", "status", "lifecycle"]), identity = request(f);
     const originalAuthorize = f.records.authorizeAccess.bind(f.records), originalStop = f.machines.stop.bind(f.machines);

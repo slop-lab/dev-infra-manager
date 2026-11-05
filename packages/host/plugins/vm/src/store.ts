@@ -152,10 +152,17 @@ export class PersistentVmService {
   }
   private file(name: string): string { return path.join(this.directory, `${validName(name)}.json`); }
   private async startReady(record: PersistentVm): Promise<void> {
-    await this.machines.start(record); await this.machines.waitForAgent(record);
-    const ready = await this.machines.exec(record, ["sh", "-eu", "-c",
-      'test -d /workspace && test ! -L /workspace && test -w /workspace && test -d /mnt/dim-tmp && test ! -L /mnt/dim-tmp && test -w /mnt/dim-tmp && test "$(stat -c %a /mnt/dim-tmp)" = 700']);
-    if (ready !== 0) throw new UserError("auxiliary VM image must provide writable /workspace and private mode-0700 /mnt/dim-tmp for user dim");
+    await this.machines.start(record);
+    try {
+      await this.machines.waitForAgent(record);
+      const ready = await this.machines.exec(record, ["sh", "-eu", "-c",
+        'test -d /workspace && test ! -L /workspace && test -w /workspace && test -d /mnt/dim-tmp && test ! -L /mnt/dim-tmp && test -w /mnt/dim-tmp && test "$(stat -c %a /mnt/dim-tmp)" = 700']);
+      if (ready !== 0) throw new UserError("auxiliary VM image must provide writable /workspace and private mode-0700 /mnt/dim-tmp for user dim");
+    } catch (error) {
+      try { await this.machines.stop(record); }
+      catch (stopError) { throw new AggregateError([error, stopError], "auxiliary VM readiness failed and the started VM could not be stopped"); }
+      throw error;
+    }
   }
   private async write(record: PersistentVm): Promise<void> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
