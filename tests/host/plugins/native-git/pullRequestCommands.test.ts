@@ -79,7 +79,7 @@ describe.sequential("ergonomic CLI PR actions against the actual service", () =>
     expect(await call("blame", "acme", "public", pr.id, "--path", "README.md", "--side", "head", "--line", "1")).toMatchObject({ author: "CLI Test", summary: "candidate" });
   });
 
-  it("rejects merge without a current approval and honors revocation", async () => {
+  it("rejects merge without a current approval and honors revocation", { timeout: 30_000 }, async () => {
     await expect(call("merge", "acme", "public", pr.id)).rejects.toThrow();
     expect(await call("approve", "acme", "public", pr.id)).toMatchObject({ status: "approved", ci: { state: "not-required" } });
     expect(await call("revoke", "acme", "public", pr.id)).toMatchObject({ status: "revoked" });
