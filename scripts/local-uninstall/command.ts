@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { terminateCommandTree } from "./command-process.ts";
+import { captureCommandProcess, terminateCommandTree, type CommandProcessProof } from "./command-process.ts";
 export interface CommandResult { readonly status: number; readonly stdout: string; readonly stderr: string }
 export type Command = (file: string, args: readonly string[]) => Promise<CommandResult>;
 export interface CommandOptions {
@@ -13,6 +13,9 @@ export function createCommand(env: NodeJS.ProcessEnv, options: CommandOptions = 
   return async (file, args) => new Promise((resolve, reject) => {
     if (options.signal?.aborted) { reject(new Error(`${file} operation cancelled`)); return; }
     const child = spawn(file, [...args], { detached: true, stdio: ["ignore", "pipe", "pipe"], env });
+    let leader: CommandProcessProof | undefined;
+    let ownershipFailure: unknown;
+    try { leader = captureCommandProcess(child.pid); } catch (error) { ownershipFailure = error; }
     let stdout = "", stderr = "", stopping = false, settled = false;
     const finish = (result: CommandResult | Error): void => {
       if (settled) return;
@@ -23,10 +26,11 @@ export function createCommand(env: NodeJS.ProcessEnv, options: CommandOptions = 
     const stop = (reason: string): void => {
       if (stopping || settled) return;
       stopping = true; clearTimeout(timer);
-      void terminateCommandTree(child.pid, grace).then(
-        () => finish(new Error(`${file} operation ${reason}`)),
-        (error: unknown) => finish(new Error(`${file} operation ${reason}; descendant cleanup unconfirmed`, { cause: error }))
-      ).finally(() => { child.stdout.destroy(); child.stderr.destroy(); });
+      const closePipes = (): void => { child.stdout.destroy(); child.stderr.destroy(); };
+      void terminateCommandTree(leader, grace).then(
+        () => { closePipes(); finish(new Error(`${file} operation ${reason}`)); },
+        (error: unknown) => { closePipes(); finish(new Error(`${file} operation ${reason}; descendant cleanup unconfirmed`, { cause: error })); }
+      );
     };
     const abort = (): void => stop("cancelled");
     const timer = setTimeout(() => stop("timed out"), timeout);
@@ -42,6 +46,7 @@ export function createCommand(env: NodeJS.ProcessEnv, options: CommandOptions = 
     child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr = append(stderr, chunk, 1024 * 1024); });
     child.once("error", (error) => { if (!stopping) finish(error); });
     child.once("close", (status) => { if (!stopping) finish({ status: status ?? 1, stdout, stderr }); });
+    if (ownershipFailure !== undefined || (child.pid !== undefined && leader === undefined)) stop("could not capture its original process ownership");
   });
 }
 /** Package installation needs a longer bounded budget; ordinary commands retain two minutes. */

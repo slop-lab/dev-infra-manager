@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect, it } from "vitest";
 import { createCommand, createInstallCommand } from "../../../scripts/local-uninstall/command.ts";
+import { captureCommandProcess, terminateCommandTree } from "../../../scripts/local-uninstall/command-process.ts";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -81,4 +82,54 @@ it("prefers cached metadata only in install children while honoring an explicit 
   expect(env.npm_config_prefer_offline).toBeUndefined();
   expect((await createInstallCommand({ ...env, npm_config_prefer_offline: "false" })(process.execPath, args)).stdout).toBe("false");
   expect((await createInstallCommand({ ...env, NPM_CONFIG_PREFER_OFFLINE: "false" })(process.execPath, args)).stdout).toBe("false");
+});
+
+it("never signals an unrelated live PID when the original captured start proof differs", async () => {
+  const unrelated = spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], { stdio: "ignore", detached: true });
+  const proof = captureCommandProcess(unrelated.pid);
+  if (proof === undefined) throw new Error("unrelated fixture identity missing");
+  try {
+    await expect(terminateCommandTree({ pid: proof.pid, start: proof.start + "0" }, 100)).rejects.toThrow("original command leader exited or changed");
+    expect(await live(proof.pid)).toBe(true);
+  } finally { await terminateCommandTree(proof, 100); }
+});
+it("rejects within its budget and closes pipes after the original parent exits with held stdio", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-exited-command-")); roots.push(root);
+  const pidFile = join(root, "holder.pid"), parent = join(root, "parent.mjs"), helperFile = join(root, "helper.mjs");
+  const holder = `import {writeFileSync} from "node:fs";process.on("SIGTERM",()=>{});writeFileSync(${JSON.stringify(pidFile)},String(process.pid));setInterval(()=>{},1000);`;
+  await writeFile(parent, `import {spawn} from "node:child_process";const child=spawn(process.execPath,["--input-type=module","-e",${JSON.stringify(holder)}],{detached:true,stdio:["ignore","inherit","inherit"]});child.unref();setTimeout(()=>process.exit(0),50);\n`);
+  const owner = pathToFileURL(resolve(import.meta.dirname, "../../../scripts/local-uninstall/command.ts")).href;
+  await writeFile(helperFile, `import {createCommand} from ${JSON.stringify(owner)};try{await createCommand(process.env,{timeoutMilliseconds:1500,terminationGraceMilliseconds:100})(process.execPath,[${JSON.stringify(parent)}]);process.exitCode=2;}catch(error){process.stdout.write(error.message);}\n`);
+  const helper = spawn(process.execPath, [helperFile], { stdio: ["ignore", "pipe", "pipe"] });
+  let output = "";
+  helper.stdout.setEncoding("utf8").on("data", (chunk: string) => { output += chunk; });
+  const closed = new Promise<number | null>((resolve) => helper.once("close", resolve));
+  const pid = await ready(pidFile), proof = captureCommandProcess(pid);
+  if (proof === undefined) throw new Error("stdio holder proof missing");
+  try {
+    const code = await Promise.race([closed, delay(4_000).then(() => { throw new Error("helper remained alive on held stdio"); })]);
+    expect(code).toBe(0);
+    expect(output).toContain("descendant cleanup unconfirmed");
+    expect(await live(pid)).toBe(true); // No unsafe attempt to rediscover a reparented holder.
+  } finally {
+    await terminateCommandTree(proof, 100);
+    helper.kill("SIGTERM");
+    await closed;
+  }
+});
+it("reports incomplete discovery at the process bound while stopping only verified fixtures", async () => {
+  const fixture = await childFixture();
+  const parent = spawn(process.execPath, [fixture.script], { stdio: "ignore", detached: true });
+  const proof = captureCommandProcess(parent.pid);
+  if (proof === undefined) throw new Error("parent proof missing");
+  const closed = new Promise<void>((resolve) => parent.once("close", () => resolve()));
+  const pid = await ready(fixture.pidFile), childProof = captureCommandProcess(pid);
+  try {
+    await expect(terminateCommandTree(proof, 100, { maximumProcesses: 1 })).rejects.toThrow("discovery was incomplete");
+    expect(await live(pid)).toBe(false);
+  } finally {
+    if (childProof !== undefined && await live(pid)) await terminateCommandTree(childProof, 100);
+    if (await live(proof.pid)) await terminateCommandTree(proof, 100);
+    await closed;
+  }
 });
