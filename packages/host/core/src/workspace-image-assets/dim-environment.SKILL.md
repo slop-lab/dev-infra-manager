@@ -48,3 +48,29 @@ workspace access. When `vm-fd-verification` is available, its fixed `verify`
 operation proves only KVM API access and creation of a VM file descriptor. It
 does not boot a VM or authorize repository suites, host commands, or arbitrary
 KVM operations.
+
+The separate `vm` owner's `auxiliary-vm-access` capability may be available in
+an ordinary workspace with no `/dev/kvm`. When advertised, use `dim-vm list` to
+learn the exact granted targets/permissions, then `dim-vm status`, `exec`, `push`
+and `pull` for that target. VM creation and grants belong to the host operator;
+do not request host sockets, operator credentials or another workspace's token.
+
+## Application services and recovery
+
+Declared plugin endpoints with `readiness: not-probed` are not proof of a working
+service. Use the owner's advertised client/operation, check its actual response
+and report the specific missing connection or grant. A workspace preparation
+failure does not imply its runtime stopped: check discovery and `dim show` through
+the operator, retaining existing sessions and data while the owner repairs it.
+
+OpenCode is a coding-agent server, not your application's API. Discover an
+application's documented port, authentication and response schema from its own
+repository. If `external-urls` advertises `dim-expose`, publish only that known
+port and verify the returned URL from the consumer side. Route declaration or an
+OpenCode health response does not prove that an application is provisioned.
+
+For disposable DIM acceptance from a DIM source checkout, see
+`examples/features/ordinary-workspace/README.md` and
+`just verify selected-host-smoke --help`. Host selection, LLM project scope,
+reviewed VM images and isolated-update bundles must be supplied explicitly by
+the operator; absence is a blocked lane, never permission to discover credentials.
