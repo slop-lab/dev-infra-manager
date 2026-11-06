@@ -6,14 +6,15 @@ import { deployGuestIntegration, workspaceServiceEndpoint } from "@slop-lab/dim-
 import { type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-api";
 import { issuePrincipal, revokePrincipal } from "./client.js";
 import { loadHostConfig, parseHostConfig } from "./config.js";
-import { deployRouterHelpers } from "./integration.js";
+import { deployRouterHelpers, repairRouterConnectionEndpoint } from "./integration.js";
 import { createAttachment, createHostGateway } from "./gateway.js";
 import { lockWorkspaceGateway, selectWorkspaceGateway, validateGatewayAdoption } from "./workspaceService.js";
 import { snapshotRouterConnection, restoreRouterConnection } from "./connectionSnapshot.js";
 
 const usage = `dim llm prepare DIRECTORY --control-plane ORIGIN --issuer ID --issuer-key-file FILE --endpoint GUEST_REACHABLE_ORIGIN [--listen-host IP] [--port PORT]
   dim llm serve|status CONFIG
-  dim llm attach WORKSPACE --config CONFIG --project PROJECT [--route ID]`;
+  dim llm attach WORKSPACE --config CONFIG --project PROJECT [--route ID]
+  dim llm recover WORKSPACE --config ORIGINAL_CONFIG`;
 export async function runLlmCommand(args: string[], context: WorkspaceHostPluginContext): Promise<void> {
   const [command, action, positional, ...tail] = args;
   if (command !== "llm" || !action || !positional || positional.startsWith("-")) throw new Error(usage);
@@ -30,7 +31,7 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
     await mkdir(directory, { mode: 0o700 }); await writeFile(join(directory, "gateway.json"), JSON.stringify(config, null, 2) + "\n", { mode: 0o600, flag: "wx" });
     console.log(`Prepared ${join(directory, "gateway.json")}. Run its persistent gateway before attaching workspaces.`); return;
   }
-  const configFile = resolve(action === "attach" ? required("--config") : positional);
+  const configFile = resolve(action === "attach" || action === "recover" ? required("--config") : positional);
   const config = await loadHostConfig(configFile);
   if (config.workspaceStateRoot !== context.store.root) throw new Error("gateway and selected host must use the same workspace state root");
   if (action === "status") { console.log(JSON.stringify({ controlPlane: config.connection.endpoint, gateway: config.publicEndpoint, workspaceStateRoot: config.workspaceStateRoot })); return; }
@@ -41,9 +42,24 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
       await new Promise<void>((resolve) => { if (context.signal.aborted) resolve(); else context.signal.addEventListener("abort", () => resolve(), { once: true }); });
     } finally { await gateway.close(); } return;
   }
-  if (action !== "attach") throw new Error(usage);
+  if (action !== "attach" && action !== "recover") throw new Error(usage);
   const workspace = await context.store.read(positional);
   if (!workspace.initialized || workspace.phase !== "running") throw new Error("LLM attachment requires a running initialized workspace");
+  if (action === "recover") {
+    if (flags.size !== 1) throw new Error("LLM recovery accepts only --config; existing project, route and credential are retained");
+    const guard = await lockWorkspaceGateway(workspace, context);
+    if (!guard) throw new Error("another LLM attachment is running for this workspace; retry after it finishes");
+    try {
+      const previous = await snapshotRouterConnection(workspace, context);
+      if (previous === undefined) throw new Error("no existing workspace LLM connection; use dim llm attach with an explicit project");
+      await validateGatewayAdoption(config, workspace, previous);
+      const selected = await selectWorkspaceGateway(workspace, context, configFile);
+      try { await deployRouterHelpers(workspace, context); await repairRouterConnectionEndpoint(workspace, context); }
+      catch (error) { await selected.rollback(); throw error; }
+      console.log(`Recovered existing LLM binding for ${workspace.name}; project, route and credentials were retained.`);
+    } finally { await guard.release(); }
+    return;
+  }
   const scope = { bindingId: randomUUID(), workspaceId: workspace.id, workspaceName: workspace.name, projectId: required("--project"), routeId: flags.get("--route") ?? "default" };
   const guard = await lockWorkspaceGateway(workspace, context);
   if (!guard) throw new Error("another LLM attachment is running for this workspace; retry after it finishes");

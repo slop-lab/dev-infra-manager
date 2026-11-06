@@ -33,8 +33,18 @@ paths. The host pins the selected gateway's configuration identity; changing
 gateway identity or configuration path is rejected until the prior attachment
 is explicitly retired. Failed preparation or credential delivery retains or
 restores the previous private guest connection. Recovery of a legacy direct
-connection without a host selection requires explicit reattachment through the
-same gateway; host-private binding evidence is checked before adoption.
+connection without a host selection is recovered through the same gateway:
+
+```sh
+dim llm recover development --config /home/operator/.config/dim/llm-host/gateway.json
+dim start development
+```
+
+Recovery validates the retained gateway's current token binding, workspace UUID,
+project and principal before restoring its host selection. It repairs helpers
+and the transport endpoint without issuing a principal, rotating credentials,
+changing routes or selecting a gateway automatically. A different/missing
+binding fails closed; use explicit attach only when creating a new connection.
 
 Attach installs a
 private connection at `~/.config/dim/llm-router.json` and a self-contained

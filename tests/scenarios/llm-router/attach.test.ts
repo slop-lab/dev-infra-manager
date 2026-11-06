@@ -196,6 +196,30 @@ it("keeps a legacy direct connection usable when replacement delivery fails afte
   expect(response.status).toBe(200); await response.body?.cancel();
 });
 
+it("recovers a legacy selection only through its original gateway without rotating credentials", async () => {
+  const f = await fixture(), selection = join(f.context.stateRoot, "llm-services", `${f.workspace.id}.json`);
+  const before = JSON.stringify({ ...f.connection, endpoint: f.gatewayOrigin });
+  await writeFile(f.connectionPath, before, { mode: 0o600 }); await unlink(selection);
+  await expect(hostPlugin.workspaceReady!(f.workspace, f.context)).rejects.toThrow(`dim llm recover ${f.workspace.name} --config`);
+  expect(await hostPlugin.guest!.inspect!(f.workspace, f.context)).toMatchObject({ state: "unconfigured", message: expect.stringContaining(`dim llm recover ${f.workspace.name}`) });
+  expect(await readFile(f.connectionPath, "utf8")).toBe(before);
+  await runLlmCommand(["llm", "recover", f.workspace.name, "--config", join(f.root, "host/gateway.json")], f.context);
+  expect(JSON.parse(await readFile(f.connectionPath, "utf8"))).toEqual({ ...JSON.parse(before), endpoint: workspaceServiceEndpoint("llm-router") });
+  expect(Number(f.cp.ledger.database.prepare("SELECT COUNT(*) AS n FROM principals").get()?.n)).toBe(1);
+  await hostPlugin.workspaceReady!(f.workspace, f.context);
+  const response = await f.request(); expect(response.status).toBe(200); await response.text();
+});
+
+it("rejects recovery through a gateway without the existing current binding", async () => {
+  const f = await fixture(), selection = join(f.context.stateRoot, "llm-services", `${f.workspace.id}.json`);
+  const before = await readFile(f.connectionPath, "utf8"); await unlink(selection);
+  const wrong = join(f.root, "wrong-gateway.json");
+  await writeFile(wrong, JSON.stringify({ ...f.config, stateDirectory: join(f.root, "unrelated-gateway") }), { mode: 0o600 });
+  await expect(runLlmCommand(["llm", "recover", f.workspace.name, "--config", wrong], f.context)).rejects.toThrow();
+  await expect(readFile(selection)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(f.connectionPath, "utf8")).toBe(before);
+});
+
 it("repairs attached helper assets automatically without changing credentials and reports actual gateway readiness", async () => {
   const f = await fixture(), legacy: unknown = JSON.parse(await readFile(f.connectionPath, "utf8"));
   if (!legacy || typeof legacy !== "object") throw new Error("missing legacy guest connection");

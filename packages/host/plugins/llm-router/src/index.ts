@@ -13,7 +13,7 @@ export const hostPlugin: WorkspaceHostPlugin = { name: "host-llm-router", comman
   },
   async workspaceReady(workspace, context) {
     if (await hasRouterConnection(workspace, context)) {
-      if (!await workspaceRouterServices.resolve("llm-router", workspace, context)) throw new Error("legacy LLM connection needs explicit dim llm attach through its existing gateway before shared transport recovery");
+      if (!await workspaceRouterServices.resolve("llm-router", workspace, context)) throw new Error(`workspace '${workspace.name}' retains an LLM credential but has no pinned host gateway selection; run dim llm recover ${workspace.name} --config ORIGINAL_GATEWAY_CONFIG on the selected host. Existing project, route and credentials are preserved; no gateway is selected automatically`);
       await deployRouterHelpers(workspace, context);
       await repairRouterConnectionEndpoint(workspace, context);
     }
@@ -23,6 +23,9 @@ export const hostPlugin: WorkspaceHostPlugin = { name: "host-llm-router", comman
     description: "Project-scoped LLM access through this host gateway, with private control-plane credentials kept outside the workspace",
     commands: [{ name: "opencode", description: "Attached OpenCode routes through the configured project; explicit host-side dim llm attach is required first" }],
     async inspect(workspace, context) {
+      if (await hasRouterConnection(workspace, context) && !await workspaceRouterServices.resolve("llm-router", workspace, context)) {
+        return { state: "unconfigured", message: `Retained LLM credential needs its original gateway selection: dim llm recover ${workspace.name} --config ORIGINAL_GATEWAY_CONFIG on the selected host; credentials and route are retained` };
+      }
       return await hasRouterConnection(workspace, context, true)
         ? { state: "ready", message: "Attached project gateway is reachable; no provider login or credential rotation is performed by preparation" }
         : { state: "unconfigured", message: "Run dim llm attach WORKSPACE --config CONFIG --project PROJECT on the host, or start its configured gateway" };

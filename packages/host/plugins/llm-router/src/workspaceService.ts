@@ -49,7 +49,8 @@ export async function validateGatewayAdoption(config: HostRouterConfig, workspac
   const directory = join(config.stateDirectory, "attachments");
   const current = object(JSON.parse(await privateFile(join(directory, `.current-${workspace.id}.json`), 1024)));
   const grant = object(JSON.parse(await privateFile(join(directory, `${tokenHash}.json`), 16384)));
-  if (current.tokenHash !== tokenHash || grant.workspaceId !== workspace.id || grant.workspaceName !== workspace.name) {
+  if (current.tokenHash !== tokenHash || grant.workspaceId !== workspace.id || grant.workspaceName !== workspace.name
+    || grant.projectId !== connection.projectId || grant.principalId !== connection.principalId) {
     throw new Error("prior LLM attachment belongs to another gateway or binding; retire it before reattaching");
   }
 }
