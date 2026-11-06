@@ -8,7 +8,9 @@ Target: `0.10.0` internal development candidate. No publication or deployment
 is implied by these source changes.
 
 - Recover retained workspace LLM connections through their explicitly selected
-  original gateway without issuing new principals or rotating scoped credentials.
+  original gateway without issuing new principals or rotating scoped credentials;
+  restore the prior connection after failed transport repair without overwriting
+  concurrent credential edits.
   Report missing gateway selection with `dim llm recover` guidance; preserve a
   running workload and expose failed integration preparation instead of hiding
   readiness failure behind an unqualified running state. Extend the explicit
