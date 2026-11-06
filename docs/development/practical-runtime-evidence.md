@@ -51,7 +51,8 @@ complete strict compiler checks are the available replacement.
 | Real scoped provider inference / OpenCode / application ingress | BLOCKED | No reviewed disposable project/account/gateway/ingress profile supplied; live application or fleet credentials were not inspected |
 | Existing task workspace provider/file-tool consumer | PASS, limited scope | Actual `dim-agent opencode run --format json` completed a read and patch through the already selected connection, exited 0 and produced byte-identical owned input/output. OpenCode 1.18.31; sanitized private receipt at `provider-probe/receipt.json`. This is not a disposable-host attach/restart/ingress/update acceptance result |
 | Agent-discovered auxiliary VM | BLOCKED | No reviewed Incus runtime host/image profile supplied; guest `/dev/kvm` absence is not being interpreted as host unavailability |
-| Isolated installation update | BLOCKED | Requires distinct reviewed before/after facades and complete local bundles plus immutable image on the disposable runtime host; no fleet installation was attempted |
+| Isolated CLI/core/enabled-plugin activation | PASS, limited scope | Nine real private-prefix stages passed: base CLI/core install, exact base host version, agent-tools enablement, core and enabled-plugin update, exact updated host version, CLI update, installed help and empty workspace list. Private `isolated-installer-receipt.json` retains exact versions and stage exits. No workspace/service continuity was exercised |
+| Isolated installation update with retained running workspace | BLOCKED | Reviewed before/after bundles and facades are prepared and their private activation passed. Still requires an approved disposable Sysbox execution surface and immutable local image; no fleet installation was attempted |
 
 ## Reproduction entry points
 
@@ -138,8 +139,19 @@ that subsequent edits or a later commit were executed on the healthy host.
 - The current task guest's read-only discovery journey found an older helper that
   rejects `dim-workspace discovery`; `dim-workspace plugins` works and reports
   scoped LLM/tools/ingress readiness but no VM plugin. There is no `dim` or `dim-vm`
-  executable here. No helper, credentials or running service was changed to bypass
-  that boundary; this says nothing about the coordinator's root-host capabilities.
+  executable in its original PATH. A reviewed CLI/core was subsequently installed
+  in a fresh private prefix, without modifying that PATH or the host-owned guest
+  helpers. No credentials or running service was changed to bypass the owning
+  boundary; this says nothing about the coordinator's root-host capabilities.
+- The actual isolated installation probe installed base CLI/core, enabled
+  agent-tools and updated core, the enabled plugin and CLI from the reviewed
+  checkpoint bundle. All nine stages exited zero, exact host/plugin versions
+  matched and its workspace list was empty. The installed CLI was then exercised
+  in a real terminal: help worked, an invalid command returned exit 2, and
+  `--host local doctor --json` truthfully reported this guest's accessible Docker
+  daemon but missing Sysbox registration and candidate workspace image. This
+  qualifies isolated package activation, not retained-workspace/service/auth
+  continuity, and does not describe the coordinator's root runtime.
 
 The remaining coordinator-side input is the approved disposable selected-host
 command surface and small host bindings, not source versions, plugin lists or
