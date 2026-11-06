@@ -24,7 +24,7 @@ const adapterLocationProbe = String.raw`
 const path=require("node:path"),os=require("node:os");
 try{const home=os.homedir(),config=process.env.XDG_CONFIG_HOME||path.join(home,".config");
  if(!path.isAbsolute(config))throw Error("XDG_CONFIG_HOME must be absolute");
- const file=path.relative(home,path.join(config,"opencode/plugins/dim-llm-router.js"));
+ const file=path.relative(home,path.join(config,"opencode/plugins/dim-llm-router.mjs"));
  if(file===".."||file.startsWith(".."+path.sep)||path.isAbsolute(file)||file.length>4096||/[\x00-\x1f\x7f]/.test(file))throw Error("unsupported config location");
  process.stdout.write(JSON.stringify({path:file}));
 }catch{process.exitCode=2}`;
@@ -50,7 +50,7 @@ const fs=require("node:fs"),path=require("node:path");
  if(process.argv[2]==="live"){try{
 const home=process.env.HOME,config=process.env.XDG_CONFIG_HOME||path.join(home,".config"),relative=path.relative(home,config);
 if(!path.isAbsolute(config)||relative===".."||relative.startsWith(".."+path.sep)||path.isAbsolute(relative))throw Error("unsupported config location");
-const adapter=fs.openSync(path.join(config,"opencode/plugins/dim-llm-router.js"),fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
+const adapter=fs.openSync(path.join(config,"opencode/plugins/dim-llm-router.mjs"),fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
 try{const info=fs.fstatSync(adapter);if(!info.isFile()||info.uid!==process.getuid()||info.nlink!==1||!info.size)throw Error("adapter unavailable")}finally{fs.closeSync(adapter)}
 const url=new URL(connection.endpoint);if((url.origin!==connection.endpoint&&connection.endpoint!=="http://127.0.0.1:19420/services/llm-router")||!["http:","https:"].includes(url.protocol))throw Error("invalid endpoint");const response=await fetch(connection.endpoint+"/v1/models",{redirect:"error",signal:AbortSignal.timeout(2000),headers:{authorization:"Bearer "+connection.token}});await response.body?.cancel();if(response.status!==200)process.exitCode=3}catch{process.exitCode=3}}
 })().catch(()=>{process.exitCode=3});`;

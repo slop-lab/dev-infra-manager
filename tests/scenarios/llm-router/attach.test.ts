@@ -20,7 +20,7 @@ it("attaches a local-only guest credential and forwards through independently co
   expect((await fetch(f.cpOrigin + "/v1/models", { headers: { authorization: `Bearer ${f.token}` } })).status).toBe(401);
   expect(f.connection).not.toHaveProperty("defaultModel");
   expect(f.connection).not.toHaveProperty("models");
-  const connectionPath = f.connectionPath, adapterPath = join(f.home, ".config/opencode/plugins/dim-llm-router.js");
+  const connectionPath = f.connectionPath, adapterPath = join(f.home, ".config/opencode/plugins/dim-llm-router.mjs");
   const result = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", `
     const {default: plugin} = await import(process.env.DIM_TEST_ADAPTER);
     const hooks = await plugin();
@@ -202,7 +202,7 @@ it("repairs attached helper assets automatically without changing credentials an
   const selection = join(f.context.stateRoot, "llm-services", `${f.workspace.id}.json`);
   await writeFile(f.connectionPath, JSON.stringify({ ...legacy, endpoint: f.gatewayOrigin }), { mode: 0o600 });
   const before = JSON.parse(await readFile(f.connectionPath, "utf8"));
-  const adapter = join(f.home, ".config/opencode/plugins/dim-llm-router.js"), launcher = join(f.home, ".config/dim/opencode-launch.js");
+  const adapter = join(f.home, ".config/opencode/plugins/dim-llm-router.mjs"), launcher = join(f.home, ".config/dim/opencode-launch.js");
   await writeFile(adapter, "damaged asset", { mode: 0o600 }); await unlink(launcher);
   await hostPlugin.workspaceReady!(f.workspace, f.context);
   expect(await readFile(adapter, "utf8")).not.toBe("damaged asset");
@@ -232,7 +232,7 @@ it("honors an in-HOME XDG config root and rejects an outside-HOME replacement be
   f.guestEnvironment.XDG_CONFIG_HOME = customConfig;
   const attach = ["llm", "attach", f.workspace.name, "--config", join(f.root, "host/gateway.json"), "--project", "application"];
   await runLlmCommand(attach, f.context);
-  const adapter = join(customConfig, "opencode/plugins/dim-llm-router.js");
+  const adapter = join(customConfig, "opencode/plugins/dim-llm-router.mjs");
   expect(await readFile(adapter, "utf8")).toContain("DimLlmRouter");
   const result = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", `
     const {default: factory}=await import(process.env.DIM_TEST_ADAPTER);

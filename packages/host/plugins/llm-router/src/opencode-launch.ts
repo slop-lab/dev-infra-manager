@@ -38,6 +38,7 @@ async function atomic(file: string, text: string): Promise<void> {
   }); }
 }
 export async function prepareOpenCode(): Promise<Record<string, string>> {
+  const environment: Record<string, string> = {};
   const mode = process.env.DIM_LLM_ROUTER_OPENCODE_MODE ?? "router";
   if (mode !== "router" && mode !== "providers") throw new Error("DIM_LLM_ROUTER_OPENCODE_MODE must be router or providers");
   // Routing belongs to OpenCode's provider configuration. OMO's selected
@@ -48,18 +49,22 @@ export async function prepareOpenCode(): Promise<Record<string, string>> {
   const connection = await privateText(process.env.DIM_LLM_ROUTER_CONNECTION_FILE ?? join(home, ".config/dim/llm-router.json"), true);
   if (connection !== undefined) {
     const configHome = process.env.XDG_CONFIG_HOME ?? join(home, ".config");
-    const adapterFile = join(configHome, "opencode/plugins/dim-llm-router.js");
+    const adapterFile = join(configHome, "opencode/plugins/dim-llm-router.mjs");
     await privateText(adapterFile);
     const adapter: unknown = await import(pathToFileURL(adapterFile).href);
     if (!adapter || typeof adapter !== "object" || !("default" in adapter) || typeof adapter.default !== "function") throw new Error("invalid DIM OpenCode adapter; rerun explicit tool preparation");
     await adapter.default();
+    const configured = process.env.OPENCODE_CONFIG_CONTENT === undefined ? {} : record(JSON.parse(process.env.OPENCODE_CONFIG_CONTENT));
+    const plugins = configured.plugin === undefined ? [] : configured.plugin;
+    if (!Array.isArray(plugins) || !plugins.every((entry) => typeof entry === "string")) throw new Error("OpenCode plugins must be explicit module specifiers");
+    environment.OPENCODE_CONFIG_CONTENT = JSON.stringify({ ...configured, plugin: [...new Set([...plugins, pathToFileURL(adapterFile).href])] });
   }
   const metadataFile = join(home, ".config/dim/opencode-omo-profile.json");
   const metadata = await privateText(metadataFile, true);
-  if (metadata === undefined) return {};
+  if (metadata === undefined) return environment;
   const omoFile = join(home, ".omo/omo.jsonc");
   const source = await privateText(omoFile, true);
-  if (source === undefined) return {};
+  if (source === undefined) return environment;
   const loaded: unknown = createRequire(join(home, ".local/package.json"))(join(home, ".local/lib/node_modules/jsonc-parser"));
   const module = record(loaded);
   if (typeof module.parse !== "function" || typeof module.modify !== "function") throw new Error("invalid pinned JSONC parser; rerun dim tools setup");
@@ -69,7 +74,7 @@ export async function prepareOpenCode(): Promise<Record<string, string>> {
   if (errors.length) throw new Error("invalid OMO JSONC; refusing to modify it");
   const profiles = value.profiles === undefined ? {} : record(value.profiles);
   const profileName = "dim-router";
-  if (profiles[profileName] === undefined || JSON.stringify(profiles[profileName]) !== JSON.stringify(JSON.parse(metadata))) return {};
+  if (profiles[profileName] === undefined || JSON.stringify(profiles[profileName]) !== JSON.stringify(JSON.parse(metadata))) return environment;
   const edits = parser.modify(source, ["profiles", profileName], undefined, { formattingOptions: { insertSpaces: true, tabSize: 2 } });
   if (!Array.isArray(edits)) throw new Error("invalid JSONC edit output");
   let output = source;
@@ -82,7 +87,7 @@ export async function prepareOpenCode(): Promise<Record<string, string>> {
   }
   if (output !== source) await atomic(omoFile, output);
   await unlink(metadataFile);
-  return {};
+  return environment;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try { console.log(JSON.stringify(await prepareOpenCode())); }

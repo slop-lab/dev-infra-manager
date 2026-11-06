@@ -386,12 +386,12 @@ const fs = require("node:fs"), path = require("node:path"), crypto = require("no
 const home = process.env.HOME
 const hash = crypto.createHash("sha256")
 hash.update(JSON.stringify([process.cwd(), process.env.DIM_OPENCODE_WEB_RUNTIME_ENVIRONMENT]))
-for (const key of ["DIM_LLM_ROUTER_OPENCODE_MODE", "DIM_LLM_ROUTER_CONNECTION_FILE", "OPENCODE_CONFIG_CONTENT", "OMO_PROFILE", "OCX_PROFILE", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "NPM_CONFIG_CACHE", "npm_config_cache"]) {
+for (const key of ["DIM_LLM_ROUTER_OPENCODE_MODE", "DIM_LLM_ROUTER_CONNECTION_FILE", "DIM_LLM_ROUTER_REQUEST_NONCE", "OPENCODE_CONFIG_CONTENT", "OMO_PROFILE", "OCX_PROFILE", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "NPM_CONFIG_CACHE", "npm_config_cache"]) {
   hash.update(JSON.stringify([key, process.env[key] ?? null]))
 }
 const config = process.env.XDG_CONFIG_HOME || path.join(home, ".config")
 for (const file of [process.env.DIM_LLM_ROUTER_CONNECTION_FILE || path.join(home, ".config/dim/llm-router.json"),
-  path.join(home, ".config/dim/opencode-launch.js"), path.join(config, "opencode/plugins/dim-llm-router.js"),
+  path.join(home, ".config/dim/opencode-launch.js"), path.join(config, "opencode/plugins/dim-llm-router.mjs"),
   path.join(config, "opencode/opencode.json"), path.join(config, "opencode/opencode.jsonc"),
   path.join(home, ".omo/omo.jsonc"), process.env.OPENCODE_CONFIG].filter(Boolean)) {
   try {

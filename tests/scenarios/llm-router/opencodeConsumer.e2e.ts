@@ -69,7 +69,7 @@ try {
   if (omo) {
     const cache = join(root, "cache/oh-my-opencode"); await mkdir(cache);
     await mkdir(join(root, "config/opencode/plugins"), { recursive: true });
-    await writeFile(join(root, "config/opencode/plugins/dim-llm-router.js"), await readFile(new URL("../../../packages/host/plugins/llm-router/dist/opencode.js", import.meta.url)));
+    await writeFile(join(root, "config/opencode/plugins/dim-llm-router.mjs"), await readFile(new URL("../../../packages/host/plugins/llm-router/dist/opencode.mjs", import.meta.url)));
     await mkdir(join(root, ".omo")); await writeFile(join(root, ".omo/omo.jsonc"), '{"auto_update":false}');
     await writeFile(join(cache, "connected-providers.json"), JSON.stringify({ connected: ["opencode"], updatedAt: new Date(0).toISOString() }));
     await writeFile(join(cache, "provider-models.json"), JSON.stringify({ models: {}, connected: ["opencode"], updatedAt: new Date(0).toISOString() }));

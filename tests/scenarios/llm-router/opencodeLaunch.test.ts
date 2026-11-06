@@ -2,11 +2,16 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { parse } from "jsonc-parser";
 import DimLlmRouter from "../../../packages/host/plugins/llm-router/src/opencode.js";
 import { prepareOpenCode } from "../../../packages/host/plugins/llm-router/src/opencode-launch.js";
 const roots: string[] = [];
+function expectRouterLaunch(environment: Record<string, string>, home: string): void {
+  const value: unknown = JSON.parse(environment.OPENCODE_CONFIG_CONTENT ?? "null");
+  expect(value).toEqual({ permission: { bash: "ask" }, model: "explicit/original", plugin: [pathToFileURL(join(home, ".config/opencode/plugins/dim-llm-router.mjs")).href] });
+}
 afterEach(async () => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const home = await mkdtemp(join(tmpdir(), "dim-opencode-profile-")); roots.push(home);
@@ -18,7 +23,7 @@ async function fixture() {
   await mkdir(join(home, ".omo")); await mkdir(join(home, ".local/lib/node_modules"), { recursive: true });
   const require = createRequire(import.meta.url);
   await symlink(dirname(require.resolve("jsonc-parser/package.json")), join(home, ".local/lib/node_modules/jsonc-parser"));
-  const adapter = join(home, ".config/opencode/plugins/dim-llm-router.js"); await mkdir(dirname(adapter), { recursive: true });
+  const adapter = join(home, ".config/opencode/plugins/dim-llm-router.mjs"); await mkdir(dirname(adapter), { recursive: true });
   await writeFile(adapter, await readFile(new URL("../../../packages/host/plugins/llm-router/dist/opencode.js", import.meta.url)));
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ models: [{ id: "reviewed", name: "Reviewed", api: "responses" }] })));
   return { home, connection, omo: join(home, ".omo/omo.jsonc") };
@@ -69,12 +74,12 @@ it("preserves role model chains, variants, profiles and explicit launch options"
   "profiles":{"personal":{"[opencode]":{"agents":{"sisyphus":{"models":["google/primary","openai/backup"]}}}}},
 }`;
   await writeFile(fx.omo, original, { mode: 0o600 });
-  expect(await prepareOpenCode()).toEqual({});
+  expectRouterLaunch(await prepareOpenCode(), fx.home);
   expect(await readFile(fx.omo, "utf8")).toBe(original);
   expect(process.env.OPENCODE_CONFIG_CONTENT).toBe('{"permission":{"bash":"ask"},"model":"explicit/original"}');
   expect(process.env.OMO_PROFILE).toBe("personal");
   vi.stubEnv("DIM_LLM_ROUTER_OPENCODE_MODE", "providers");
-  expect(await prepareOpenCode()).toEqual({});
+  expectRouterLaunch(await prepareOpenCode(), fx.home);
   expect(await readFile(fx.omo, "utf8")).toBe(original);
 });
 it("removes only the exact owned generated profile while preserving user configuration", async () => {
@@ -90,7 +95,7 @@ it("removes only the exact owned generated profile while preserving user configu
   await mkdir(dirname(metadata), { recursive: true });
   await writeFile(metadata, JSON.stringify(owned), { mode: 0o600 });
   await writeFile(fx.omo, original, { mode: 0o600 });
-  expect(await prepareOpenCode()).toEqual({});
+  expectRouterLaunch(await prepareOpenCode(), fx.home);
   const source = await readFile(fx.omo, "utf8");
   expect(source).toContain("// retain model chains and selected profiles");
   expect(parse(source)).toEqual({
@@ -99,18 +104,18 @@ it("removes only the exact owned generated profile while preserving user configu
     _migrations: { "model-chains": true }
   });
   await expect(readFile(metadata)).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await prepareOpenCode()).toEqual({});
+  expectRouterLaunch(await prepareOpenCode(), fx.home);
   expect(await readFile(fx.omo, "utf8")).toBe(source);
 });
 it("preserves user-owned and edited DIM-named profiles without selecting or rejecting them", async () => {
   const fx = await fixture();
   const original = '{"profiles":{"dim-router":{"model":"user/owned"}}}';
   await writeFile(fx.omo, original, { mode: 0o600 });
-  expect(await prepareOpenCode()).toEqual({});
+  expectRouterLaunch(await prepareOpenCode(), fx.home);
   const metadata = join(fx.home, ".config/dim/opencode-omo-profile.json");
   await mkdir(dirname(metadata), { recursive: true });
   await writeFile(metadata, JSON.stringify({ model: "dim-responses/reviewed" }), { mode: 0o600 });
-  expect(await prepareOpenCode()).toEqual({});
+  expectRouterLaunch(await prepareOpenCode(), fx.home);
   expect(await readFile(fx.omo, "utf8")).toBe(original);
   expect(JSON.parse(await readFile(metadata, "utf8"))).toEqual({ model: "dim-responses/reviewed" });
 });
@@ -129,7 +134,7 @@ it("does not follow or modify OMO inventory owned by the catalog bootstrap", asy
   await writeFile(authentication, '{"preserve":true}', { mode: 0o600 });
   await symlink(authentication, join(inventory, "connected-providers.json"));
 
-  await expect(prepareOpenCode()).resolves.toEqual({});
+  expectRouterLaunch(await prepareOpenCode(), fx.home);
   expect(await readFile(join(inventory, "connected-providers.json"), "utf8")).toBe('{"preserve":true}');
 
   expect(await readFile(authentication, "utf8")).toBe('{"preserve":true}');
