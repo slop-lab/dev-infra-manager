@@ -16,7 +16,7 @@ it.each([false, "empty"] as const)("rejects exit-zero doctor output with failed 
       name: "fixture", workspace: "dim-smoke-fixture", source: "dim://dim-smoke-fixture", workspaceSourceSha: "b".repeat(40), expectedHostVersion: "0.10.0",
       requiredPlugins: ["agent-tools", "host-llm-router", "external-urls", "native-git"], ingress: "shared",
       sshPublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFixtureSelectedHostKey fixture@example.invalid",
-      llm: { configFile: join(root, "not-read.json"), project: "fixture", route: "default" },
+      llm: { configFile: join(root, "not-read.json"), project: "fixture", route: "default", provider: "dim-responses", model: "reviewed-model", operatorConnectionFile: join(root, "not-read-operator.json") },
     }] }), { mode: 0o600 });
     // Ignore only the pinned tsx loader deprecation; application stderr must stay empty.
     const child = spawn(process.execPath, ["--disable-warning=DEP0205", "--import", "tsx", script, "--config", config, "--host", "fixture", "--preflight-only", "--json"], {

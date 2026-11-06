@@ -9,7 +9,7 @@ export function prepareSmokeProfile(input: { readonly bindings: unknown; readonl
   if (!core) throw new OperatorInputError("reviewed bundle contains no host core");
   const hosts = bindings.hosts.map((value: unknown) => {
     const host = object(value);
-    if (Object.keys(host).some((key) => !["name", "source", "workspaceSourceSha", "ingress", "llm", "vm", "monitor"].includes(key)) || typeof host.name !== "string") throw new OperatorInputError("bindings contain unknown or derived host fields");
+    if (Object.keys(host).some((key) => !["name", "source", "workspaceSourceSha", "ingress", "llm", "vm", "monitor", "image"].includes(key)) || typeof host.name !== "string") throw new OperatorInputError("bindings contain unknown or derived host fields");
     const suffix = createHash("sha256").update(host.name).digest("hex").slice(0, 8);
     return { ...host, workspace: `dim-smoke-${host.name.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 18)}-${suffix}`,
       workspaceSourceSha: host.workspaceSourceSha ?? input.sourceSha, expectedHostVersion: core.version, sshPublicKey: input.sshPublicKey,

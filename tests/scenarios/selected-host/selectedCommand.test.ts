@@ -11,7 +11,7 @@ it("retains failed command exit evidence without recording scripts, prompts or r
   await writeFile(path.join(bin, "dim"), `#!${process.execPath}\nprocess.stderr.write("PRIVATE_STDERR");process.exit(7);\n`, { mode: 0o700 });
   vi.stubEnv("DIM_BIN", path.join(bin, "dim"));
   const profile: HostProfile = { name: "fixture", workspace: "dim-smoke-test", source: "/private/repo", workspaceSourceSha: "a".repeat(40),
-    expectedHostVersion: "0.10.0", requiredPlugins: [], ingress: "shared", sshPublicKey: "fixture", llm: { configFile: "/private/gateway.json", project: "smoke", route: "default" } };
+    expectedHostVersion: "0.10.0", requiredPlugins: [], ingress: "shared", sshPublicKey: "fixture", llm: { configFile: "/private/gateway.json", project: "smoke", route: "default", provider: "dim-responses", model: "reviewed-model", operatorConnectionFile: "/private/read-only.json" } };
   try {
     const tracker = selectedCommandTracker();
     await expect(tracker.checked(profile, "scoped command", ["exec", "dim-smoke-test", "--", "node", "-e", "PRIVATE_SCRIPT"]))

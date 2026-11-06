@@ -16,7 +16,7 @@ const configuration = {
     requiredPlugins: ["agent-tools", "host-llm-router", "external-urls", "native-git"],
     ingress: "shared",
     sshPublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFreshSelectedHostSmokeKey dim-smoke@example.invalid",
-    llm: { configFile: "/private/llm/gateway.json", project: "smoke", route: "default" }
+    llm: { configFile: "/private/llm/gateway.json", project: "smoke", route: "default", provider: "dim-responses", model: "reviewed-model", operatorConnectionFile: "/private/llm/read-only.json" }
   }]
 };
 
@@ -84,6 +84,12 @@ describe("parseSmokeConfiguration", () => {
     const invalid = structuredClone(configuration);
     invalid.hosts[0]!.requiredPlugins = ["agent-tools", "external-urls"];
     expect(() => parseSmokeConfiguration(invalid)).toThrow(/host-llm-router/);
+  });
+
+  it("binds monitor identity at runtime and rejects a configured foreign parent", () => {
+    const hosts = configuration.hosts.map((host) => ({ ...host, monitor: { maxSessions: 12 } }));
+    expect(parseSmokeConfiguration({ ...configuration, hosts }).hosts[0]?.monitor).toMatchObject({ maxSessions: 12 });
+    expect(() => parseSmokeConfiguration({ ...configuration, hosts: hosts.map((host) => ({ ...host, monitor: { parentSessionId: "ses_FOREIGN" } })) })).toThrow(/parentSessionId/);
   });
 
   it("Given a workspace outside the smoke namespace, when parsed, then cleanup ownership is rejected", () => {

@@ -37,10 +37,13 @@ export type HostProfile = {
   readonly requiredPlugins: readonly string[];
   readonly ingress: string;
   readonly sshPublicKey: string;
-  readonly llm: { readonly configFile: string; readonly project: string; readonly route: string };
+  readonly image?: string;
+  readonly llm: { readonly configFile: string; readonly project: string; readonly route: string; readonly provider: "dim-responses" | "dim-chat"; readonly model: string; readonly operatorConnectionFile: string };
   readonly vm?: { readonly image: string };
-  readonly monitor?: MonitorProfile;
+  readonly monitor?: OwnedMonitorProfile;
 };
+export type OwnedMonitorProfile = Omit<MonitorProfile, "parentSessionId" | "directory">;
+export const ownedMonitorDefaults: OwnedMonitorProfile = { maxSessions: 80, maxDepth: 8, maxRequests: 240, recentMessages: 12, staleMinutes: 15, deadlineSeconds: 90, requestTimeoutSeconds: 10 };
 
 export type SmokeConfiguration = {
   readonly installedSourceSha: string;
@@ -135,7 +138,7 @@ export function ownedPartialWorkspace(claim: { readonly name: string; readonly s
 
 function parseHostProfile(value: unknown, index: number): HostProfile {
   const label = `hosts[${index}]`, entry = object(value, label);
-  exactKeys(entry, ["name", "workspace", "source", "workspaceSourceSha", "expectedHostVersion", "requiredPlugins", "ingress", "sshPublicKey", "llm", "monitor", "vm"], label,
+  exactKeys(entry, ["name", "workspace", "source", "workspaceSourceSha", "expectedHostVersion", "requiredPlugins", "ingress", "sshPublicKey", "llm", "monitor", "vm", "image"], label,
     ["name", "workspace", "source", "workspaceSourceSha", "expectedHostVersion", "requiredPlugins", "ingress", "sshPublicKey", "llm"]);
   const name = string(entry["name"], `${label}.name`);
   const workspace = string(entry["workspace"], `${label}.workspace`);
@@ -144,6 +147,8 @@ function parseHostProfile(value: unknown, index: number): HostProfile {
   const expectedHostVersion = string(entry["expectedHostVersion"], `${label}.expectedHostVersion`);
   const ingress = string(entry["ingress"], `${label}.ingress`);
   const sshPublicKey = string(entry["sshPublicKey"], `${label}.sshPublicKey`);
+  const image = entry["image"] === undefined ? undefined : string(entry["image"], `${label}.image`);
+  if (image !== undefined && !/^sha256:[a-f0-9]{64}$/.test(image)) throw new OperatorInputError("workspace image binding must be immutable");
   if (!hostPattern.test(name)) throw new OperatorInputError(`${label}.name is invalid`);
   if (!workspacePattern.test(workspace)) throw new OperatorInputError(`${label}.workspace must use the dim-smoke- ownership namespace`);
   if (!validSmokeSource(source)) throw new OperatorInputError(`${label}.source must select an absolute host repository, credential-free HTTPS repository or disposable dim://dim-smoke-PROJECT`);
@@ -158,9 +163,11 @@ function parseHostProfile(value: unknown, index: number): HostProfile {
   for (const required of [...requiredCapabilityPlugins, ...(source.startsWith("dim://") ? ["native-git"] : [])]) {
     if (!requiredPlugins.includes(required)) throw new OperatorInputError(`${label}.requiredPlugins must include ${required}`);
   }
-  const monitor = entry["monitor"] === undefined ? undefined : parseMonitorProfile(entry["monitor"], `${label}.monitor`);
-  const llm = object(entry["llm"], `${label}.llm`); exactKeys(llm, ["configFile", "project", "route"], `${label}.llm`);
+  const monitor = entry["monitor"] === undefined ? undefined : parseOwnedMonitorProfile(entry["monitor"], `${label}.monitor`);
+  const llm = object(entry["llm"], `${label}.llm`); exactKeys(llm, ["configFile", "project", "route", "provider", "model", "operatorConnectionFile"], `${label}.llm`);
   const configFile = string(llm["configFile"], "LLM config path"), project = string(llm["project"], "LLM project"), route = string(llm["route"], "LLM route");
+  const provider = llm["provider"], model = string(llm["model"], "expected DIM router model"), operatorConnectionFile = string(llm["operatorConnectionFile"], "router metadata connection");
+  if (provider !== "dim-responses" && provider !== "dim-chat" || !/^[^\s\x00-\x1f\x7f]{1,200}$/.test(model) || !path.isAbsolute(operatorConnectionFile)) throw new OperatorInputError("LLM execution requires an explicit DIM provider/model and host-local scoped metadata connection");
   if (!path.isAbsolute(configFile) || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(project) || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(route)) throw new OperatorInputError("invalid explicit LLM attachment selection");
   let vm: HostProfile["vm"];
   if (entry["vm"] !== undefined) {
@@ -170,7 +177,7 @@ function parseHostProfile(value: unknown, index: number): HostProfile {
     vm = { image };
   }
   return { name, workspace, source, workspaceSourceSha, expectedHostVersion, requiredPlugins, ingress, sshPublicKey,
-    llm: { configFile, project, route }, ...(monitor === undefined ? {} : { monitor }), ...(vm === undefined ? {} : { vm }) };
+    llm: { configFile, project, route, provider, model, operatorConnectionFile }, ...(monitor === undefined ? {} : { monitor }), ...(vm === undefined ? {} : { vm }), ...(image === undefined ? {} : { image }) };
 }
 
 function validSmokeSource(source: string): boolean {
@@ -202,6 +209,14 @@ export function parseMonitorProfile(value: unknown, label: string): MonitorProfi
     deadlineSeconds: number("deadlineSeconds", 300), requestTimeoutSeconds: number("requestTimeoutSeconds", 30),
     ...(omoMetadataPath === undefined ? {} : { omoMetadataPath })
   };
+}
+
+function parseOwnedMonitorProfile(value: unknown, label: string): OwnedMonitorProfile {
+  const entry = object(value, label);
+  exactKeys(entry, [...Object.keys(ownedMonitorDefaults), "omoMetadataPath"], label, []);
+  const { parentSessionId: _parent, directory: _directory, ...bounds } = parseMonitorProfile({ ...ownedMonitorDefaults, ...entry,
+    parentSessionId: "ses_BOUNDATRUNTIME", directory: "/workspace" }, label);
+  return bounds;
 }
 
 function requiredValue(values: readonly string[], index: number, flag: string): string {

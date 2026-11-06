@@ -5,7 +5,7 @@ import { prepareSmokeProfile } from "./profilePreparation.js";
 
 const sourceSha = "a".repeat(40), version = "0.10.0-local-reviewed";
 const artifacts = { schemaVersion: 1, packages: ["@slop-lab/dim-host-core", "@slop-lab/dim-cli"].map((name) => ({ name, version, file: `${name.split("/").at(-1)}.tgz`, requires: {} })) };
-const host = { name: "disposable-host", source: "/srv/reviewed/source", ingress: "shared", llm: { configFile: "/private/gateway.json", project: "smoke", route: "default" } };
+const host = { name: "disposable-host", source: "/srv/reviewed/source", ingress: "shared", llm: { configFile: "/private/gateway.json", project: "smoke", route: "default", provider: "dim-responses", model: "reviewed-model", operatorConnectionFile: "/private/read-only.json" } };
 const sshPublicKey = `ssh-ed25519 ${Buffer.alloc(51, 1).toString("base64")} smoke`;
 
 it("derives source, versions, names and required capabilities while retaining explicit host bindings", () => {
