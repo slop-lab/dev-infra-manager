@@ -4,7 +4,7 @@ import { OperatorInputError, SmokeFailure, type HostProfile } from "./config.js"
 export type CommandEvidence = { readonly step: string; readonly surface: readonly string[]; readonly exitCode: number | null; readonly durationMilliseconds: number };
 
 export function dim(host: string, args: readonly string[], acceptFailure: boolean, timeoutMs = 120_000): Promise<CommandResult> {
-  return runCommand("dim", ["--host", host, ...args], { acceptFailure, timeoutMs }).catch((error: unknown) => {
+  return runCommand(process.env.DIM_BIN ?? "dim", ["--host", host, ...args], { acceptFailure, timeoutMs }).catch((error: unknown) => {
     if (error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT") throw new OperatorInputError("DIM client executable is unavailable; provide the reviewed installed CLI before selected-host verification");
     throw error;
   });

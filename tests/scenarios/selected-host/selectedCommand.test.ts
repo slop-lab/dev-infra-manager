@@ -9,7 +9,7 @@ it("retains failed command exit evidence without recording scripts, prompts or r
   const root = await mkdtemp(path.join(tmpdir(), "dim-command-evidence-")), bin = path.join(root, "bin");
   await mkdir(bin);
   await writeFile(path.join(bin, "dim"), `#!${process.execPath}\nprocess.stderr.write("PRIVATE_STDERR");process.exit(7);\n`, { mode: 0o700 });
-  vi.stubEnv("PATH", `${bin}:${process.env.PATH ?? ""}`);
+  vi.stubEnv("DIM_BIN", path.join(bin, "dim"));
   const profile: HostProfile = { name: "fixture", workspace: "dim-smoke-test", source: "/private/repo", workspaceSourceSha: "a".repeat(40),
     expectedHostVersion: "0.10.0", requiredPlugins: [], ingress: "shared", sshPublicKey: "fixture", llm: { configFile: "/private/gateway.json", project: "smoke", route: "default" } };
   try {
