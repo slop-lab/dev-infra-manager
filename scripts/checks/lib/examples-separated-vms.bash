@@ -76,6 +76,7 @@ DIM_VERIFY_SKIP_BUILD=1 bash scripts/checks/native-idle-service-images-smoke.bas
 just verify installer-artifacts
 mkdir -m 0700 /home/dim/dim/example-packages
 node scripts/pack-local-packages.ts "$PWD" /home/dim/dim/example-packages
+printf 'root=%s\n' "$(git rev-parse --verify HEAD)" >/home/dim/dim/example-packages/.dim-source-state
 node scripts/examples/prepare-separated.ts /home/dim/dim/example-operator
 REMOTE
   mkdir -m 0700 "$BOOTSTRAP_WORK_ROOT/transfer"
