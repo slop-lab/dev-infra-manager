@@ -10,13 +10,15 @@ is implied by these source changes.
 - Recover retained workspace LLM connections through their explicitly selected
   original gateway without issuing new principals or rotating scoped credentials;
   restore the prior connection after failed transport repair without overwriting
-  concurrent credential edits.
+  concurrent guest endpoint or metadata edits even when the credential is unchanged.
   Report missing gateway selection with `dim llm recover` guidance; preserve a
   running workload and expose failed integration preparation instead of hiding
   readiness failure behind an unqualified running state. Extend the explicit
   selected-host real-use gate to ordinary repositories, real application schema
   handoff, scoped auxiliary VMs and isolated installation updates, reporting
-  unavailable acceptance lanes as blocked rather than passing skips.
+  unavailable acceptance lanes as blocked rather than passing skips. Installed
+  example entrypoints accept explicit reviewed same-base local builds only after
+  validating exact package closure and installer archive identity.
 
 - Make Git services independently composable through DIM-independent
   `@slop-lab/gs-*` packages. Support standalone durable repository policy and
