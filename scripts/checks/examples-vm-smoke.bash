@@ -10,6 +10,7 @@ case "${1:-}" in
   *) printf '%s\n' 'Unknown argument; use --help' >&2; exit 2 ;;
 esac
 node scripts/checks/examples-vm-preflight.ts
+export DIM_PRACTICAL_CI_REQUIRED=1
 source_sha="$(git rev-parse --verify HEAD)"
 source_tree="$(git rev-parse --verify 'HEAD^{tree}')"
 [[ -z "${GITHUB_SHA:-}" || "$GITHUB_SHA" == "$source_sha" ]] || {
@@ -35,3 +36,4 @@ JS
 cp -- "$work/source.json" "$evidence/source.json"
 DIM_BOOTSTRAP_EXAMPLES_SEPARATE=1 DIM_BOOTSTRAP_VM_LOG_ROOT="$evidence" bash scripts/checks/bootstrap-ubuntu-vm-smoke.bash \
   --source-bundle "$work/candidate.bundle" --source-manifest "$work/source.json"
+node tests/scenarios/selected-host/ci/verifyEvidence.ts "$evidence" "$source_sha" "$source_tree"

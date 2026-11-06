@@ -12,6 +12,10 @@ if (args.length === 1 && args[0] === "--help") {
 } else {
   if (args.length > 1 || args.length === 1 && args[0] !== "--verify-vm") throw new Error("unknown ordinary runtime recipe argument; use --help");
   if (args[0] === "--verify-vm" && process.env.DIM_SMOKE_PREFLIGHT_ONLY === "1") throw new Error("VM acceptance cannot use preflight-only mode");
+  if (args[0] === "--verify-vm" && process.env.DIM_PRACTICAL_CI_REQUIRED === "1") {
+    await import("../../../../tests/scenarios/selected-host/ci/host.ts");
+    process.exit(process.exitCode ?? 0);
+  }
   let config = process.env.DIM_SMOKE_CONFIG, hosts = process.env.DIM_SMOKE_HOSTS?.split(","), temporary: string | undefined;
   try {
     if (config === undefined && process.env.DIM_SMOKE_BINDINGS !== undefined) {

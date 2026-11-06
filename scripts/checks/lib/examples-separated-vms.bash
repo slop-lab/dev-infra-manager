@@ -56,9 +56,10 @@ bootstrap_examples_run() {
     'cd /home/dim/dim/workbench && sudo env DIM_BOOTSTRAP_DOWNLOAD_CACHE=/home/dim/dim/bootstrap-artifacts bash scripts/checks/lib/install-source-tools-ubuntu.bash && ! command -v docker'
   cp_machine="$("${BOOTSTRAP_SSH[@]}" cat /etc/machine-id)"
   printf '[examples] phase=boot-workspace-host log=%s/examples-workspace-host-console.log\n' "$BOOTSTRAP_EVIDENCE_ROOT"
-  bootstrap_guest_start examples-workspace-host 4096; examples_vm_save host
+  bootstrap_guest_start examples-workspace-host 8192; examples_vm_save host
   bootstrap_guest_copy_source; bootstrap_guest_prepare_source
   examples_artifacts_seed_guest
+  timeout 300s "${BOOTSTRAP_SCP[@]}" "$BOOTSTRAP_BASE_IMAGE" dim@127.0.0.1:/home/dim/dim/bootstrap-base.qcow2
   # Keep this shell function outside check_output_run's conditional subshell:
   # Bash otherwise disables errexit inside its multi-step bootstrap body.
   bootstrap_guest_run_acceptance ordinary
@@ -66,7 +67,7 @@ bootstrap_examples_run() {
   [[ -n "$cp_machine" && -n "$host_machine" && "$cp_machine" != "$host_machine" ]] || { echo 'CP and host must be different VM identities' >&2; return 1; }
   printf 'control-plane-machine=%s\nworkspace-host-machine=%s\n' "$cp_machine" "$host_machine" >"$BOOTSTRAP_EVIDENCE_ROOT/roles.txt"
   printf '[examples] phase=host-build-images-artifacts log=%s/02-host-build-images-artifacts.log\n' "$CHECK_OUTPUT_ROOT"
-  check_output_run host-build-images-artifacts timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s <<'REMOTE'
+  check_output_run host-build-images-artifacts timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "$SOURCE_SHA" "$BOOTSTRAP_IMAGE_SHA256" "$host_machine" <<'REMOTE'
 set -euo pipefail
 export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin
 cd /home/dim/dim/workbench
@@ -78,6 +79,13 @@ mkdir -m 0700 /home/dim/dim/example-packages
 node scripts/pack-local-packages.ts "$PWD" /home/dim/dim/example-packages
 printf 'root=%s\n' "$(git rev-parse --verify HEAD)" >/home/dim/dim/example-packages/.dim-source-state
 node scripts/examples/prepare-separated.ts /home/dim/dim/example-operator
+node tests/scenarios/selected-host/ci/prepareServices.ts /home/dim/dim/example-operator
+parent="$(git rev-parse --verify 'HEAD^')"
+DIM_SOURCE_ROOT_COMMIT="$parent" bash scripts/pack-source-build.bash /home/dim/dim/practical-before-packages
+mkdir -m 0700 /home/dim/dim/practical-before-facade
+before_installer="$(node scripts/examples/installer-artifact.ts /home/dim/dim/practical-before-packages)"
+tar -xzf "$before_installer" -C /home/dim/dim/practical-before-facade
+node tests/scenarios/selected-host/ci/prepareHost.ts /home/dim/dim/practical-host /home/dim/dim/bootstrap-base.qcow2 "$2" "$3"
 REMOTE
   mkdir -m 0700 "$BOOTSTRAP_WORK_ROOT/transfer"
   timeout 300s "${BOOTSTRAP_SCP[@]}" -r dim@127.0.0.1:/home/dim/dim/example-packages dim@127.0.0.1:/home/dim/dim/example-operator "$BOOTSTRAP_WORK_ROOT/transfer/"
@@ -90,7 +98,7 @@ REMOTE
   timeout 300s "${BOOTSTRAP_SCP[@]}" -r "$BOOTSTRAP_WORK_ROOT/transfer/example-packages" "$BOOTSTRAP_WORK_ROOT/transfer/example-operator" dim@127.0.0.1:/home/dim/dim/
   printf '[examples] phase=control-plane-install-start log=%s/separate-control-plane.log\n' "$BOOTSTRAP_EVIDENCE_ROOT"
   timeout --signal=TERM --kill-after=30s 7200s "${BOOTSTRAP_SSH[@]}" \
-    'export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin; cd /home/dim/dim/workbench; export DIM_EXAMPLE_PACKAGE_BUNDLE=/home/dim/dim/example-packages DIM_EXAMPLE_REMOTE_SETUP=/home/dim/dim/example-operator; bash scripts/examples/serve-installed-control-plane.bash' \
+    'export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin; cd /home/dim/dim/workbench; export DIM_PRACTICAL_CI_REQUIRED=1 DIM_EXAMPLE_PACKAGE_BUNDLE=/home/dim/dim/example-packages DIM_EXAMPLE_REMOTE_SETUP=/home/dim/dim/example-operator; bash scripts/examples/serve-installed-control-plane.bash' \
     >"$BOOTSTRAP_EVIDENCE_ROOT/separate-control-plane.log" 2>&1 &
   EXAMPLES_CP_SSH_PID=$!
   EXAMPLES_CP_SSH_START="$(cut -d' ' -f22 "/proc/$EXAMPLES_CP_SSH_PID/stat")"
@@ -103,7 +111,9 @@ chmod 0600 /home/dim/examples-cp-key /home/dim/examples-cp-known-hosts
 ssh -N -p "$1" -i /home/dim/examples-cp-key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
   -o HostKeyAlias=examples-control-plane -o UserKnownHostsFile=/home/dim/examples-cp-known-hosts -o ExitOnForwardFailure=yes \
   -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
-  -L 127.0.0.1:18080:127.0.0.1:8080 -L 127.0.0.1:18081:127.0.0.1:8081 dim@10.0.2.2 &
+  -L 127.0.0.1:18080:127.0.0.1:8080 -L 127.0.0.1:18081:127.0.0.1:8081 \
+  -L 127.0.0.1:18318:127.0.0.1:18318 -L 127.0.0.1:18443:127.0.0.1:18443 -L 127.0.0.1:18444:127.0.0.1:18444 \
+  -R 127.0.0.1:18445:127.0.0.1:18445 dim@10.0.2.2 &
 tunnel=$!
 tunnel_start="$(cut -d' ' -f22 "/proc/$tunnel/stat")"
 cleanup_tunnel() {
@@ -118,7 +128,9 @@ node scripts/examples/wait-separated.ts /home/dim/dim/example-operator
 kill -0 "$tunnel"
 export DIM_EXAMPLE_PACKAGE_BUNDLE=/home/dim/dim/example-packages DIM_EXAMPLE_REMOTE_SETUP=/home/dim/dim/example-operator
 export DIM_EXAMPLE_REMOTE_ENDPOINT=http://127.0.0.1:18080 DIM_EXAMPLE_REMOTE_CI_ENDPOINT=http://127.0.0.1:18081
+export DIM_PRACTICAL_CI_REQUIRED=1 DIM_PRACTICAL_CI_RECEIPT=/home/dim/dim/practical-runtime.json
 bash scripts/examples/verify-installed.bash
 REMOTE
+  timeout 60s "${BOOTSTRAP_SCP[@]}" dim@127.0.0.1:/home/dim/dim/practical-runtime.json "$BOOTSTRAP_EVIDENCE_ROOT/practical-runtime.json"
   printf 'PASS separate control-plane and workspace-host VMs source=%s\n' "$SOURCE_SHA"
 }

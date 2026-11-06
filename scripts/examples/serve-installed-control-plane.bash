@@ -14,4 +14,8 @@ export XDG_CONFIG_HOME="$trial/config" XDG_DATA_HOME="$trial/data" XDG_STATE_HOM
 export DIM_CONFIG_PATH="$trial/config/dim.json" DIM_DATA_HOME="$trial/data/dim" DIM_STATE_ROOT="$trial/state/dim"
 mkdir -m 0700 -p "$XDG_RUNTIME_DIR"
 node scripts/examples/run.ts all install-control-plane
-node scripts/examples/serve-control-plane.ts "$DIM_EXAMPLE_REMOTE_SETUP"
+if [[ "${DIM_PRACTICAL_CI_REQUIRED:-}" == 1 ]]; then
+  node tests/scenarios/selected-host/ci/controlPlane.ts "$DIM_EXAMPLE_REMOTE_SETUP"
+else
+  node scripts/examples/serve-control-plane.ts "$DIM_EXAMPLE_REMOTE_SETUP"
+fi
