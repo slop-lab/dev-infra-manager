@@ -59,6 +59,8 @@ function modelLimits(model: Model, configured?: unknown): Record<string, unknown
   return Object.keys(limit).length ? { limit } : {};
 }
 async function DimLlmRouter() {
+  const nonce = process.env.DIM_LLM_ROUTER_REQUEST_NONCE;
+  if (nonce !== undefined && !/^[a-f0-9]{32}$/.test(nonce)) throw new Error("DIM_LLM_ROUTER_REQUEST_NONCE must be a 32-character lowercase hex correlation value");
   const value: unknown = JSON.parse(await readFile(process.env.DIM_LLM_ROUTER_CONNECTION_FILE ?? join(homedir(), ".config/dim/llm-router.json"), "utf8"));
   const connection = record(value);
   if (connection.schemaVersion !== 1 || typeof connection.endpoint !== "string" || typeof connection.token !== "string"
@@ -98,7 +100,8 @@ async function DimLlmRouter() {
       const name = `dim-${api}`;
       if (providers[name] !== undefined) throw new Error(`OpenCode provider '${name}' already exists; refusing to replace it`);
       providers[name] = { npm: api === "responses" ? "@ai-sdk/openai" : "@ai-sdk/openai-compatible", name: "DIM workspace router",
-        options: { baseURL: `${connection.endpoint}/v1`, apiKey: connection.token, headerTimeout: false, chunkTimeout: false },
+        options: { baseURL: `${connection.endpoint}/v1`, apiKey: connection.token, headerTimeout: false, chunkTimeout: false,
+          ...(nonce === undefined ? {} : { headers: { "x-dim-request-nonce": nonce } }) },
         models: Object.fromEntries(selected.map((model) => [model.id, { name: model.name, ...(api === "responses" ? { options: { store: false } } : {}), ...modelLimits(model) }])) };
     }
     config.provider = providers;
@@ -121,6 +124,7 @@ async function DimLlmRouter() {
         if (requestUrl.href !== `${endpoint}/v1/responses`) throw new Error("DIM OpenAI transport requires the attached Responses endpoint");
         const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
         headers.set("authorization", `Bearer ${token}`);
+        if (nonce !== undefined) headers.set("x-dim-request-nonce", nonce);
         return fetch(input, { ...init, headers, redirect: "error" });
       };
       providers.openai = { ...openai, npm: "@ai-sdk/openai", name: "OpenAI via DIM workspace router",

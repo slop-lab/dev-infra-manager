@@ -84,9 +84,12 @@ export async function createHostGateway(config: HostRouterConfig, store: Workspa
         if (!/^[A-Za-z0-9_-]{43}$/.test(grant.cpToken) || (!await current(grant) || !await bound(grant, token))) return deny(response, 401);
       } catch { return deny(response, 401); }
       if (response.destroyed || closing !== undefined) return;
+      const nonce = incoming.headers["x-dim-request-nonce"];
+      if (nonce !== undefined && (typeof nonce !== "string" || !/^[a-f0-9]{32}$/.test(nonce))) return deny(response, 400);
       const target = new URL(config.connection.endpoint + path);
       const remote = (target.protocol === "https:" ? httpsRequest : httpRequest)(target, { method: incoming.method, timeout: 0,
-        headers: { authorization: `Bearer ${grant.cpToken}`, "content-type": "application/json", accept: incoming.headers.accept ?? "application/json" } });
+        headers: { authorization: `Bearer ${grant.cpToken}`, "content-type": "application/json", accept: incoming.headers.accept ?? "application/json",
+          ...(nonce === undefined ? {} : { "x-dim-request-nonce": nonce }) } });
       let finished = false, checking = false;
       const stop = () => { remote.destroy(); incoming.unpipe(remote); if (!response.writableEnded) response.destroy(); };
       const cleanup = () => { if (finished) return; finished = true; clearInterval(watch); active.delete(stop);

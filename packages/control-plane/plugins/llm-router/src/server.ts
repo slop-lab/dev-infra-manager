@@ -117,6 +117,8 @@ export async function createRouter(baseConfig: RouterConfig) {
     }
     const api = url.pathname === "/v1/responses" ? "responses" : url.pathname === "/v1/chat/completions" ? "chat" : undefined;
     if (request.method !== "POST" || api === undefined) throw new RequestError(404, "unsupported endpoint");
+    const nonce = request.headers["x-dim-request-nonce"];
+    if (nonce !== undefined && (typeof nonce !== "string" || !/^[a-f0-9]{32}$/.test(nonce))) throw new RequestError(400, "invalid request correlation nonce");
     const policy = ledger.project(grant.projectId).policy;
     const maximumRequest = policy.limits.requestBytes === null ? config.limits.requestBytes
       : config.limits.requestBytes === null ? policy.limits.requestBytes : Math.min(policy.limits.requestBytes, config.limits.requestBytes);
@@ -134,7 +136,7 @@ export async function createRouter(baseConfig: RouterConfig) {
     if (account.provider) await ensureManagedBackend(config, account);
     const key = (await privateFile(account.keyFile, 16 * 1024)).trim();
     if (!key || /[\r\n]/.test(key)) throw new Error("invalid upstream access key");
-    const admission = ledger.reserve(grant, model.id, hash(JSON.stringify({ route, account: { id: account.id, reference: account.reference, endpoint: account.endpoint }, limits: config.limits })), bytes.length, config.limits, { ...route, backend: config.backend });
+    const admission = ledger.reserve(grant, model.id, hash(JSON.stringify({ route, account: { id: account.id, reference: account.reference, endpoint: account.endpoint }, limits: config.limits })), bytes.length, config.limits, { ...route, backend: config.backend }, nonce);
     const { id } = admission, limits = admission.policy.limits;
     response.setHeader("x-dim-request-id", id);
     const stop = new AbortController(), deadline = new AbortController();

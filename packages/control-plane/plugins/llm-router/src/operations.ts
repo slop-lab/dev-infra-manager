@@ -77,7 +77,9 @@ export async function invokeRouterOperation(baseConfig: RouterConfig, ledger: Ro
       if (input.projectId !== undefined) { filters.push("project_id=?"); values.push(text(input.projectId)); }
       if (input.active === true) filters.push("(occupied=1 OR outcome='running')");
       values.push(typeof input.limit === "number" ? input.limit : 100);
-      output = ledger.database.prepare(`SELECT id,project_id,principal_id,account_id,started_at,finished_at,requested_model AS model,outcome,execution,delivery,accounting,occupied,cancel_requested,input_tokens,output_tokens,error_code FROM requests ${filters.length ? "WHERE " + filters.join(" AND ") : ""} ORDER BY started_at DESC,rowid DESC LIMIT ?`).all(...values); break;
+      output = ledger.database.prepare(`SELECT r.id,project_id,principal_id,workspace_id,route_id,attempt_id,account_id,started_at,finished_at,requested_model AS model,observed_model,outcome,execution,delivery,accounting,occupied,cancel_requested,input_tokens,output_tokens,error_code,
+        json_extract(a.detail,'$.nonce') AS request_nonce FROM requests r LEFT JOIN audit a ON a.target=r.id AND a.actor=r.principal_id AND a.operation='request.nonce'
+        ${filters.length ? "WHERE " + filters.join(" AND ") : ""} ORDER BY started_at DESC,r.rowid DESC LIMIT ?`).all(...values); break;
     }
     case "request.cancel": { const current = request(); ledger.cancel(text(current.id), actor); output = { cancellationRequested: true, upstreamTerminationConfirmed: false }; break; }
     case "request.resolve": {

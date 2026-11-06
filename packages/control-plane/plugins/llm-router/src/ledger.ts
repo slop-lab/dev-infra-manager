@@ -91,7 +91,7 @@ export class RouterLedger {
       this.audit("service", "recovery", "requests", { replayed: false });
     });
   }
-  reserve(grant: WorkspaceGrant, model: string, policyRevision: string, requestBytes: number, global: RouterLimits, route: { accountId: string; [key: string]: unknown }) {
+  reserve(grant: WorkspaceGrant, model: string, policyRevision: string, requestBytes: number, global: RouterLimits, route: { accountId: string; [key: string]: unknown }, nonce?: string) {
     return this.transaction(() => {
       const project = this.project(grant.projectId);
       const limits = Object.fromEntries(Object.entries(project.policy.limits).map(([key, projectLimit]) => {
@@ -128,6 +128,7 @@ export class RouterLedger {
         day,started_at,outcome,execution,delivery,accounting,occupied,token_reservation,capture_state,capture_bytes)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'running','pending','not_started','reserved',1,?,?,?)`).run(id, project.id, grant.principalId, grant.workspaceId, grant.routeId, route.accountId, randomUUID(), model,
           hash(policyRevision + project.revision), snapshot, JSON.stringify(route), day, this.now(), reservation, policy.captureMode === "metadata" ? "disabled_by_policy" : "pending", bytes);
+      if (nonce !== undefined) this.audit(grant.principalId, "request.nonce", id, { nonce });
       return { id, policy, policyRevision: hash(policyRevision + project.revision) };
     });
   }
