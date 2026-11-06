@@ -24,9 +24,9 @@ the fixture's temporary HOME/state. It never reuses installed credentials.
 
 ## Examples in fresh VMs
 
-`.github/workflows/examples.yml` runs the `examples-vm` check on pull requests
-targeting `main`, on merge groups targeting `main`, and on explicit manual
-dispatches such as release candidates. It does not run on `development` pushes.
+`.github/workflows/examples.yml` runs the `examples-vm` check on merge groups
+targeting `main`, `main` pushes, `v*` tags and explicit manual dispatches such as
+release candidates. It does not run hardware jobs on development pushes.
 The ordinary Node 24/26 source checks in `verify.yml` still run on their existing
 events; passing source checks alone does not establish VM example acceptance.
 
@@ -77,14 +77,34 @@ evidence-export failure is not acceptance. Logs remain under the selected
 evidence directory, and the workflow uploads them even on failure. It uploads
 `examples-vm-source-<SHA>` separately with the exact commit/tree evidence.
 
-A maintainer must configure `examples-vm` as a required `main` branch check;
-adding this workflow does not change repository rules. PR runs may test a
-synthetic merge commit, and merge-queue runs test the queue's candidate rather
+A maintainer must configure `examples-vm` and `vm-runtime-acceptance` as required
+`main` checks, following `.github/required-runtime-checks.json`; adding workflow
+source does not configure or attest repository rules. Merge-queue runs test the
+queue's candidate rather
 than the original PR head. Review the recorded commit/tree, not merely the
 branch name or an older green run. Release candidates must repeat this gate
 against their exact frozen commit/tree; see [releasing](../guides/releasing.md#required-verification).
 The workflow event filters follow GitHub's
 [merge-group branch syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onmerge_groupbranchesbranches-ignore).
+
+The existing separate-VM provisioner now prepares test-owned LLM issuer/read
+authorities and shared ingress, builds an Incus VM image from the reviewed Ubuntu
+disk/Node seed, and refreshes only the disposable user's manager after group
+setup. The host needs 8 GiB; the outer runner needs at least 16 GiB. Native and
+practical services remain on the separate CP VM, reached through pinned SSH.
+No operator/provider account credentials are copied into CI or workspaces.
+
+The ordinary recipe runs required local and real public-CLI SSH journeys with an
+explicit test model, actual OpenCode file tools, nonce-correlated scoped router
+accounting, the fresh owned session, production URL-envelope HTTP/auth checks,
+real auxiliary Incus/KVM lifecycle/artifact/revoke, and a separate private
+installation update retaining a running authenticated service and nested data.
+Configuration, source/seed identities, image fingerprints and artifact closure
+are derived from provisioned state. `practical-runtime.json` is mandatory and
+validated against source SHA/tree before the job can pass; source-only tests,
+preflight, an absent receipt or a skipped heavy job are not runtime acceptance.
+The deterministic provider is under `tests/` only and is not external-provider
+qualification. Such account qualification remains an optional authorized lane.
 
 ## Source checks and logs
 

@@ -50,6 +50,19 @@ codes, and verify that the workspace resources exist on the selected host.
 See the [CLI reference](../../packages/cli/core/README.md) for forwarding and host
 configuration.
 
+Required main/premerge/release acceptance uses the existing trusted
+`examples-vm` and `vm-runtime-acceptance` checks, not only a private operator
+receipt. `.github/required-runtime-checks.json` defines the required coverage.
+The separate disposable CP/host gate exercises a normal installed public CLI
+over real pinned SSH, production URL envelopes and actual HTTP/auth consumers,
+a fresh owned OpenCode session, scoped nonce-correlated router accounting,
+real Incus code/artifact/revoke and isolated running-workspace update continuity.
+Its explicitly test-only deterministic provider is protocol/tool/containment
+evidence, not provider/account qualification. File output or catalogue HTTP
+without correlated request accounting cannot establish DIM-routed execution.
+Missing runners stay pending; missing required capabilities/bindings/receipts
+fail. Source-only green checks do not replace these exact-candidate runtime gates.
+
 ## Optional managed Git and review
 
 Install the optional library deliberately:

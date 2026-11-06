@@ -82,11 +82,17 @@ just verify installer-artifacts
 ```
 
 The heavy examples gate is also required before merging into `main` and before
-release. `.github/workflows/examples.yml` runs `examples-vm` for `main` pull
-requests and merge groups; dispatch it explicitly for the frozen release
+release. `.github/workflows/examples.yml` runs `examples-vm` for `main` pushes,
+`main` merge groups and `v*` tags; dispatch it explicitly for the frozen release
 candidate. It does not run on every `development` push. Configure the
-`examples-vm` required check in the repository's `main` rules separately;
+`examples-vm` and `vm-runtime-acceptance` required checks in the repository's `main` rules separately;
 workflow source does not configure branch protection.
+
+The required-check contract is `.github/required-runtime-checks.json`. A release
+CI pass requires the practical runtime completion receipt, not merely workflow
+configuration or source tests. Its deterministic test-only provider exercises
+normal routed request accounting and real tools, but is not external account
+qualification. Missing hardware/bindings/evidence remain pending or failed.
 
 Use a disposable `dim-native-qemu` runner with real readable/writable `/dev/kvm`
 and the [fresh VM prerequisites](../development/bootstrap-ubuntu-vm.md#disposable-fresh-vm-acceptance-profile).

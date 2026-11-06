@@ -45,6 +45,28 @@ multi-host/release acceptance are separate claims. Record what actually ran,
 what was unavailable and any remaining concrete limitation. A script name or
 historical specification is not evidence that the current architecture passed.
 
+Required main/premerge/release runtime coverage is declared in
+`.github/required-runtime-checks.json` and executed by the existing trusted
+`examples-vm` and `vm-runtime-acceptance` jobs. A required CI pass means both ran
+for the exact source and exported validated completion receipts; an absent runner
+is pending, and missing capabilities, bindings, coverage or cleanup fail rather
+than becoming successful skips. Heavy jobs do not run on development pushes.
+
+Practical acceptance includes ordinary local and actual normal-installed public
+CLI over pinned SSH, production public `{urls:[...]}` app/OpenCode consumers,
+fresh-session monitoring, real Incus grant/code/artifact/revoke, and isolated
+update continuity. Routed inference additionally requires explicit DIM
+provider/model selection, session model metadata, and an admission/settlement
+receipt joining a run nonce to the exact workspace/project/principal/route.
+Catalogue HTTP or file-tool output alone does not establish routing.
+
+Deterministic CI uses an explicitly test-only provider through the same normal
+issuer/gateway/router/accounting path. It proves protocol, tools and containment,
+not external provider/account qualification. Optional authorized account lanes
+are separate; older real-provider receipts do not qualify a newer candidate.
+The owned-session monitor is post-run inspection plus captured CLI activity/tool
+metadata; it does not claim that every intermediate busy transition was sampled.
+
 See [host readiness](../development/host-install-readiness.md) and the
 current [verification recipes](../../just/verify.just) for executable
 checks. The architecture plan maps the preserved issue backup to workstreams.
