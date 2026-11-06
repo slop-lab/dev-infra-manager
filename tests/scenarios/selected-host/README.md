@@ -70,11 +70,12 @@ key is required and unknown keys are rejected:
       "llm": {
         "configFile": "/absolute/host/private/llm/gateway.json",
         "project": "disposable-smoke",
-        "route": "default"
+        "route": "default",
+        "provider": "dim-responses",
+        "model": "REVIEWED_MODEL_ID",
+        "operatorConnectionFile": "/absolute/host/private/llm/read-only.json"
       },
       "monitor": {
-        "parentSessionId": "ses_REVIEWEDPARENT",
-        "directory": "/workspace/main",
         "maxSessions": 80,
         "maxDepth": 8,
         "maxRequests": 240,
@@ -137,12 +138,28 @@ public host key only in memory and requires that identity after recreation. A
 separate installed-host acceptance may drive a real SSH client through
 `dim connect`; this runner never reads or persists a private client key.
 
-`monitor` is optional. Its task identity and bounds are externally supplied;
-the runner does not discover task files, assume a host path or select a parent.
+`monitor` optionally selects bounds and an explicit OMO adapter; the inspection
+itself is mandatory. Session identity comes only from this run's fresh OpenCode
+JSON events, and its directory comes from the owned workspace's actual `pwd -P`.
+A configured parent/session directory is rejected in a selected-host profile.
+The CLI's file-tool activity and terminal result are tied to that same identity;
+authenticated session/model metadata, post-run status, children, questions and
+permissions are inspected before the session is checked again after recreation.
+This is post-run monitoring, not a claim to have sampled every busy transition.
 It obtains the already-owned OpenCode server credential through the public
 Workspace tools console, keeps it only in memory and sends it only as an HTTP
 authorization header. Credentials never belong in configuration, evidence,
 logs, prompts, process arguments or URLs.
+
+The LLM selection requires an explicit `dim-responses` or `dim-chat` provider,
+model ID and host-local read-only router metadata connection. The operator file
+stays on its selected host; it is never delivered to the workspace. A per-run
+nonce must join completed, settled router requests to the exact owned immutable
+workspace/project/principal/route and model. The authenticated OpenCode session
+must also identify the expected provider/model. Catalogue HTTP and file output
+alone are not routed inference proof, and this gate never labels them external
+provider/account qualification. Required CI uses a test-only deterministic
+provider through this same owning issuer/gateway/accounting path.
 
 The monitor reads `/session/status`, a bounded session list, the named parent,
 bounded recent message metadata, both list `parentID` relationships and every

@@ -43,7 +43,7 @@ containing `packages.json` and `.dim-source-state`. For example:
     "name": "disposable-host",
     "source": "/srv/reviewed/dim-source",
     "ingress": "shared",
-    "llm": {"configFile": "/private/host/gateway.json", "project": "smoke", "route": "default"},
+    "llm": {"configFile": "/private/host/gateway.json", "project": "smoke", "route": "default", "provider": "dim-responses", "model": "REVIEWED_MODEL_ID", "operatorConnectionFile": "/private/host/read-only.json"},
     "vm": {"image": "REVIEWED_64_HEX_INCUS_FINGERPRINT"}
   }]
 }
