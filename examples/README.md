@@ -50,8 +50,12 @@ profile). Control-plane plugins install into their independent runtime. These
 commands install packages; they do not invent credentials, log in, configure
 external services or start listeners. With reviewed source artifacts, set
 `DIM_EXAMPLE_PACKAGE_BUNDLE` to the directory containing `packages.json` and its
-tarballs. The facade validates the exact declared package versions and dependency
-closure. A local-version bundle is not silently substituted for `0.10.0` recipes.
+tarballs. The installed host and control-plane entrypoints validate the bundle's
+exact matched dependency graph and the installer archive's name/version before
+package installation. With that explicit selection, a recipe's exact base pin
+can resolve to the bundle's same-base `-local-<64-hex>` build. Different base
+versions, floating pins and unrelated local variants are rejected; the resulting
+installer arguments remain exact package coordinates, not ranges or aliases.
 `DIM_EXAMPLE_DIM_BIN` selects the actual installer facade/CLI executable.
 
 For a workspace recipe's deliberate development setup:

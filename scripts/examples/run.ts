@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadExampleRecipe, resolveExamplePath, type ExampleCommand, type ExampleRecipe } from "./recipe.ts";
+import { examplePluginSpecifiers, readExampleArtifacts } from "./bundle.ts";
 const examples = fileURLToPath(new URL("../../examples/", import.meta.url));
 const [directory, stage, ...extra] = process.argv.slice(2);
 if (!directory || !stage || extra.length) throw new Error("usage: node scripts/examples/run.ts EXAMPLE_DIRECTORY|all install-host|install-control-plane|dev|verify|verify-vm");
@@ -12,9 +13,10 @@ async function run(recipe: ExampleRecipe, inherited: NodeJS.ProcessEnv) {
   const plugins = stage === "install-host" ? recipe.plugins.host : stage === "install-control-plane" ? recipe.plugins.controlPlane : undefined;
   if (plugins?.length === 0) { console.log(`${recipe.name}: no ${stage} plugins`); return; }
   const bundle = environment.DIM_EXAMPLE_PACKAGE_BUNDLE;
+  const pluginArguments = plugins === undefined ? [] : bundle === undefined ? plugins : examplePluginSpecifiers(await readExampleArtifacts(resolve(bundle)), plugins);
   const command: ExampleCommand | undefined = plugins === undefined ? recipe.commands[stage!] : {
     argv: [environment.DIM_BIN ?? "dim", "installer", "install", ...(stage === "install-host" ? ["plugin"] : ["control-plane", "plugin"]),
-      ...(bundle === undefined ? [] : ["--local-packages", resolve(bundle)]), ...plugins]
+      ...(bundle === undefined ? [] : ["--local-packages", resolve(bundle)]), ...pluginArguments]
   };
   if (!command) { if (directory === "all") { console.log(`${recipe.name}: no ${stage} stage`); return; } throw new Error(`example has no '${stage}' stage`); }
   const [executable, ...argv] = command.argv; if (!executable) throw new Error("example command is empty");

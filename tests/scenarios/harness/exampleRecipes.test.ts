@@ -42,7 +42,7 @@ it("rejects floating plugin versions, role confusion and paths outside the ownin
     await expect(loadExampleRecipe(directory)).rejects.toThrow(/escapes/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
-it("installation consumes exact recipe declarations through the selected facade and local bundle", async () => {
+it.each(["0.10.0", `0.10.0-local-${"b".repeat(64)}`])("installation binds exact recipe declarations to the reviewed bundle version %s", async (version) => {
   const { execFile } = await import("node:child_process");
   const { promisify } = await import("node:util");
   const execute = promisify(execFile), directory = await mkdtemp(join(tmpdir(), "dim-recipe-install-"));
@@ -50,12 +50,18 @@ it("installation consumes exact recipe declarations through the selected facade 
     const facade = join(directory, "dim"), output = join(directory, "argv");
     await writeFile(facade, '#!/bin/sh\nprintf "%s\\n" "$@" > "$DIM_EXAMPLE_ARGV_OUTPUT"\n', { mode: 0o700 });
     const recipe = join(examples, "projects/native-basic-root"), runner = resolve(examples, "../scripts/examples/run.ts");
+    const declared = await loadExampleRecipe(recipe);
+    const names = new Set(["@slop-lab/dim-cli", "@slop-lab/dim-installer", "@slop-lab/dim-host-core",
+      ...[...declared.plugins.host, ...declared.plugins.controlPlane].map((specifier) => specifier.slice(0, specifier.lastIndexOf("@")))]);
+    await writeFile(join(directory, "packages.json"), JSON.stringify({ schemaVersion: 1, packages: [...names].map((name) => ({
+      name, version, file: `${name.split("/").at(-1)}.tgz`, requires: {}
+    })) }));
     for (const [stage, command] of [["install-host", ["plugin"]], ["install-control-plane", ["control-plane", "plugin"]]] as const) {
       await execute(process.execPath, [runner, recipe, stage], { env: { ...process.env, DIM_EXAMPLE_DIM_BIN: facade,
         DIM_EXAMPLE_ARGV_OUTPUT: output, DIM_EXAMPLE_PACKAGE_BUNDLE: directory } });
-      const declared = await loadExampleRecipe(recipe);
       expect((await readFile(output, "utf8")).trim().split("\n")).toEqual(["installer", "install", ...command,
-        "--local-packages", directory, ...(stage === "install-host" ? declared.plugins.host : declared.plugins.controlPlane)]);
+        "--local-packages", directory, ...(stage === "install-host" ? declared.plugins.host : declared.plugins.controlPlane)
+          .map((specifier) => `${specifier.slice(0, specifier.lastIndexOf("@"))}@${version}`)]);
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
