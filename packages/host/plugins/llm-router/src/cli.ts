@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { deployGuestIntegration, workspaceServiceEndpoint } from "@slop-lab/dim-host-core/workspace";
 import { type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-api";
 import { issuePrincipal, revokePrincipal } from "./client.js";
-import { loadHostConfig, parseHostConfig } from "./config.js";
+import { loadHostConfig, object, parseHostConfig } from "./config.js";
 import { deployRouterHelpers, repairRouterConnectionEndpoint } from "./integration.js";
 import { createAttachment, createHostGateway } from "./gateway.js";
 import { lockWorkspaceGateway, selectWorkspaceGateway, validateGatewayAdoption } from "./workspaceService.js";
@@ -52,10 +52,17 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
     try {
       const previous = await snapshotRouterConnection(workspace, context);
       if (previous === undefined) throw new Error("no existing workspace LLM connection; use dim llm attach with an explicit project");
+      const retained = object(JSON.parse(previous));
+      if (typeof retained.token !== "string") throw new Error("invalid retained workspace LLM connection");
       await validateGatewayAdoption(config, workspace, previous);
       const selected = await selectWorkspaceGateway(workspace, context, configFile);
       try { await deployRouterHelpers(workspace, context); await repairRouterConnectionEndpoint(workspace, context); }
-      catch (error) { await selected.rollback(); throw error; }
+      catch (error) {
+        const rollback = await Promise.allSettled([selected.rollback(), restoreRouterConnection({ workspace, context, previous, token: retained.token })]);
+        const failures = rollback.flatMap((result) => result.status === "rejected" ? [result.reason] : []);
+        if (failures.length) throw new AggregateError([error, ...failures], "LLM recovery failed and rollback was incomplete");
+        throw error;
+      }
       console.log(`Recovered existing LLM binding for ${workspace.name}; project, route and credentials were retained.`);
     } finally { await guard.release(); }
     return;

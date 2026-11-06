@@ -45,6 +45,9 @@ project and principal before restoring its host selection. It repairs helpers
 and the transport endpoint without issuing a principal, rotating credentials,
 changing routes or selecting a gateway automatically. A different/missing
 binding fails closed; use explicit attach only when creating a new connection.
+If repair fails after endpoint publication, recovery restores the prior host
+selection and private connection. A concurrent guest credential edit is retained
+rather than overwritten, with incomplete rollback reported explicitly.
 
 Attach installs a
 private connection at `~/.config/dim/llm-router.json` and a self-contained
