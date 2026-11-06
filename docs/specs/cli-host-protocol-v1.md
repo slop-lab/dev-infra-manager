@@ -10,9 +10,11 @@ their own compatibility requirements.
 
 The host executable is `dim-host`. A local caller invokes
 `dim-host __host ENCODED`; an SSH caller invokes `dim __host ENCODED` through the
-installer facade, with the existing fixed mise bootstrap when needed. The
-facade routes this reserved entrypoint to its host runtime even when no CLI is
-installed. Executables and connection configuration are operator-controlled;
+public installed entry, with the existing fixed mise bootstrap when needed. Both
+the normal installed core CLI and installer facade route this reserved entry to
+the local host endpoint without wrapping it as another user command or applying
+client host selection. The facade also works when no presentation CLI is installed.
+Executables and connection configuration are operator-controlled;
 repositories cannot select an endpoint executable.
 
 `ENCODED` is base64url-encoded UTF-8 JSON, passed as one argument without shell

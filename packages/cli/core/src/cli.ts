@@ -2,7 +2,7 @@
 import { Command, CommanderError } from "commander";
 import { CliHostProtocolError, cliHostProtocol, createHostRequest } from "@slop-lab/dim-contracts-cli-host";
 import { HostContextError, HostContextStore } from "./host-context.js";
-import { HostTransportError, negotiateHost, streamHost } from "./host-transport.js";
+import { HostTransportError, negotiateHost, streamHost, streamLocalHostEntry } from "./host-transport.js";
 import { forwardWorkspace } from "./port-forward.js";
 import { packageVersion } from "./package-version.js";
 import { copyHelp, copyWorkspace } from "./copy.js";
@@ -13,6 +13,10 @@ try {
   if (args.length === 1 && ["--version", "-V"].includes(args[0]!)) console.log(packageVersion);
   else if (args.length === 1 && args[0] === "--host-protocol") {
     console.log(JSON.stringify({ protocol: cliHostProtocol, versions: [1] }));
+  } else if (args[0] === "__host") {
+    const encoded = args[1];
+    if (args.length !== 2 || encoded === undefined) throw new CliHostProtocolError("internal host entry requires exactly one encoded request");
+    await withSignals(async (signal) => { process.exitCode = await streamLocalHostEntry(encoded, { signal }); });
   } else {
     const selected = hostArguments(args), hosts = new HostContextStore();
     if (selected.args[0] === "host") await clientHostCommands(hosts).parseAsync(selected.args, { from: "user" });

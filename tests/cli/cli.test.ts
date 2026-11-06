@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { HostContextStore } from "../../packages/cli/core/src/host-context.js";
+import { createHostRequest, encodeHostRequest } from "@slop-lab/dim-contracts-cli-host";
 
 const cli = fileURLToPath(new URL("../../packages/cli/core/src/cli.ts", import.meta.url));
 const noHostRuntime = `data:text/javascript,${encodeURIComponent('import {registerHooks} from "node:module";registerHooks({resolve(s,c,n){if(s.startsWith("@slop-lab/dim-host-core")||s.startsWith("@slop-lab/dim-control-plane-"))throw Error("CLI must not import a host runtime");return n(s,c)}})')}`;
@@ -58,6 +59,17 @@ test("installation protocol probe and client version work without contacting a h
     const probe=await run(["--host-protocol"],env);assert.equal(probe.status,0);assert.deepEqual(JSON.parse(probe.stdout),{protocol:"dim.cli-host",versions:[1]});
     const version=await run(["--version"],env);assert.equal(version.status,0);assert.equal(version.stdout.trim(),"0.10.0");
     for(const option of ["--help","-h"]){const help=await run(["cp",option],env);assert.equal(help.status,0,help.stderr);assert.match(help.stdout,/Usage: dim cp/);assert.match(help.stdout,/WORKSPACE:PATH/);}
+  });
+});
+
+test("reserved host requests enter the installed local endpoint once without client host selection", async () => {
+  await fixture(async (run) => {
+    await run(["host", "add", "must-not-contact", "--ssh", "unreachable.invalid"]);
+    await run(["host", "use", "must-not-contact"]);
+    const request = createHostRequest("command", { args: ["future", "", "literal;$(false)", "--host", "not-a-client-selection"], terminal: false });
+    const result = await run(["__host", encodeHostRequest(request)]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { request });
   });
 });
 

@@ -41,6 +41,10 @@ export function hostInvocation(
       args: [options.terminal ? "-tt" : "-T", "--", target.ssh, remoteHostCommand(encoded)]
     };
   }
+  return localHostInvocation(encoded, options);
+}
+
+function localHostInvocation(encoded: string, options: HostTransportOptions): { file: string; args: string[] } {
   const executable = process.env.DIM_HOST_EXECUTABLE;
   if (executable !== undefined && !path.isAbsolute(executable)) throw new HostTransportError("DIM_HOST_EXECUTABLE must select an absolute trusted host executable", 2);
   const local = options.localCommand ?? { file: executable ?? "dim-host" };
@@ -114,11 +118,18 @@ export async function streamHost(
   request: HostRequest,
   options: HostTransportOptions = {}
 ): Promise<number> {
+  return streamInvocation(target, hostInvocation(target, request, options), options);
+}
+
+export async function streamLocalHostEntry(encoded: string, options: HostTransportOptions = {}): Promise<number> {
+  return streamInvocation({ name: "local" }, localHostInvocation(encoded, options), options);
+}
+
+async function streamInvocation(target: HostTarget, invocation: { readonly file: string; readonly args: readonly string[] }, options: HostTransportOptions): Promise<number> {
   if (options.signal?.aborted) throw new HostTransportError("host connection cancelled", 130);
   if (options.terminal && (options.stdin || options.stdout)) {
     throw new HostTransportError("custom byte streams cannot use a terminal", 2);
   }
-  const invocation = hostInvocation(target, request, options);
   const child = spawn(invocation.file, invocation.args, {
     stdio: [options.stdin ? "pipe" : "inherit", options.stdout ? "pipe" : "inherit", options.stderr ? "pipe" : "inherit"]
   });
