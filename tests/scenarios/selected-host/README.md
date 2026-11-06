@@ -6,7 +6,8 @@ or more `--host NAME` arguments are mandatory, and every selected name must have
 an exact profile in a private reviewed configuration file.
 
 The full run creates one uniquely suffixed `dim-smoke-*` workspace per host from
-an explicitly provisioned disposable managed Project at the profile's distinct
+an explicit ordinary repository (absolute selected-host path or credential-free
+HTTPS URL), or a separately provisioned disposable managed Project, at its distinct
 `workspaceSourceSha`; `installedSourceSha` remains installation provenance only.
 It verifies the selected host version and required plugins, the exact candidate
 checkout SHA, actual guest Git fetch and ordinary-branch push/readback, guest plugin
@@ -23,6 +24,8 @@ identity, and waits for all planned jobs plus a nonempty required-job gate to
 succeed. The Project must have Git-CI policy and real registered worker capacity.
 Missing policy, failed/stale/unavailable jobs or bounded pending timeout fail;
 the runner never publishes fabricated worker evidence or cancels other work.
+This Git push/CI subjourney runs only for `dim://` sources. Ordinary Git sources
+need no managed Project, branch publication, Git-CI policy or worker capacity.
 
 Its randomly named branch is deleted only with an explicit Git lease for the
 exact commit it pushed, after matching remote readback. If the branch changed,
@@ -92,6 +95,9 @@ candidate, with ordinary branch write/delete permission and no application
 work in progress. The runner does not create or delete this operator-owned
 Project: the current public Project API has no deletion capability. Its lifecycle
 cleanup remains an explicit operator/VM-fixture gate, not a claimed runner result.
+These Project prerequisites apply only to `dim://` profiles. An ordinary profile
+can use `/srv/disposable/dim-smoke-repo` or a credential-free HTTPS repository;
+the runner acquires the exact committed ref and never writes its original source.
 Full execution creates with the profile's `--ref workspaceSourceSha` and checks
 the guest checkout against that SHA. This commit is the freshly provisioned
 smoke seed and may intentionally differ from `installedSourceSha`.
@@ -99,13 +105,31 @@ smoke seed and may intentionally differ from `installedSourceSha`.
 client version. The source SHA is operator-declared provenance, independently
 checked against the acquired candidate; a matching checkout alone does not
 attest the installed host build. Retain the installation manifest mapping that
-SHA to the exact host version with the run evidence. Plugin names are the names returned by `dim plugins`; the four
-capability plugins above are mandatory rather than optional. A profile may also
+SHA to the exact host version with the run evidence. Plugin names are the names returned by `dim plugins`; `agent-tools`,
+`host-llm-router` and `external-urls` are mandatory. `native-git` is mandatory only
+for managed sources. A profile may also
 select `kvm`; when it does, the ordinary smoke workspace requires KVM discovery
 to remain blocked with `runtime-grant-required`. Without selected KVM, the smoke
 does not invent a KVM requirement. It never invokes the KVM verification
 operation or claims host delegation. Actual VM-fd effect belongs only to a
 separately authorized `container-kvm` workspace.
+
+The separate auxiliary VM lane is selected with the `vm` plugin and optional
+host field `vm: {image: "FULL_REVIEWED_INCUS_IMAGE_FINGERPRINT"}`. It provisions
+one reviewed exact-image VM through the operator CLI, grants only the new owned
+workspace, and verifies agent discovery, code syntax/test execution, artifact
+return, lifecycle readiness, revocation and UUID-pinned cleanup. This lane does
+not require `/dev/kvm` in the ordinary agent container. Missing VM selection is
+reported as `BLOCKED`, not passed or inferred from host device availability.
+
+The optional top-level `isolatedUpdate` object selects absolute local paths for
+`beforeFacade`, `beforeBundle`, `afterFacade`, `afterBundle`, plus an exact
+`sha256:` local workspace image ID. It creates a private isolated installation
+on the disposable runtime host invoking the tool, without inheriting live DIM
+configuration or Node preloads, and updates that installation while a workspace
+and its private authenticated service remain running. Selected fleet hosts are
+never installed/restarted. No update input means a `BLOCKED` lane; it is not
+full acceptance. Both bundles and facades must be reviewed and paired before use.
 
 `sshPublicKey` is one reviewed OpenSSH public key, not a private key or host
 credential. The smoke configures the guest's loopback SSH service, retains its
@@ -245,7 +269,7 @@ pnpm --dir tests exec tsx ../scripts/checks/selected-host-usability-smoke.ts \
 ```
 
 Repeat `--host` to run the same checks sequentially on multiple reviewed hosts.
-The runner emits credential-free `ok`, `unavailable`, and `pass` records. It does
+The runner emits credential-free progress and per-lane `PASS`/`BLOCKED` records. It does
 not publish tool output, server credentials, route grants, or backend stderr.
 When a live command fails, rerun that exact surface interactively on the named
 host to inspect its private diagnostics.

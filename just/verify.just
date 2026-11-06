@@ -1,5 +1,9 @@
 set shell := ["bash", "-uc"]
 
+# Real selected-host user journey; every host and scoped connection is explicit.
+selected-host-smoke *args:
+    cd .. && pnpm --dir tests exec tsx ../scripts/checks/selected-host-usability-smoke.ts {{args}}
+
 # Requires QEMU and writable /dev/kvm; installs Sysbox in one clean VM.
 environments-kvm verbose="":
     cd .. && bash scripts/checks/kvm-host-install-smoke.bash "{{verbose}}"
