@@ -14,7 +14,9 @@ import { openWorkspaceServiceChannel } from "../workspace/serviceChannel.js";
 import { maintainWorkspaceServiceChannel } from "../workspace/serviceChannelReconnect.js";
 import { workspaceServiceEndpoint, workspaceServicePort } from "../workspace/serviceEndpoint.js";
 import { privateJson, parseStoredConfiguration, parseConfiguration, workspaceAgentGeneration, type AgentConfiguration, type StoredAgentConfiguration } from "./workspace-agent-state.js";
-import { deployWorkspaceDiscovery, workspaceDiscovery } from "./workspace-discovery.js";
+import { workspaceDiscovery } from "./workspace-discovery.js";
+import { prepareWorkspaceReadiness } from "./workspace-readiness.js";
+import { prepareWorkspacePlugins } from "./workspace-plugins.js";
 export { workspaceAgentGeneration } from "./workspace-agent-state.js";
 
 interface AgentReady { endpoint: string; workspaceId: string }
@@ -24,6 +26,13 @@ function directory(store: WorkspaceStore, id: string): string { return path.join
 
 /** A small per-workspace process survives CLI/SSH disconnects. It has no host-admin route. */
 export async function ensureWorkspaceAgent(record: WorkspaceRecord, context: AgentHostContext): Promise<void> {
+  await prepareWorkspaceReadiness(record, context.store, async () => {
+    await ensureWorkspaceIntegration(record, context);
+    await prepareWorkspaceAgent(record, context);
+  });
+}
+
+async function prepareWorkspaceAgent(record: WorkspaceRecord, context: AgentHostContext): Promise<void> {
   await context.store.withLock(record.name, async () => {
     const current = await context.store.read(record.name);
     if (current.id !== record.id || current.phase !== "running") throw new UserError("workspace changed before its scoped service bridge was ready");
@@ -78,14 +87,6 @@ export async function ensureWorkspaceAgent(record: WorkspaceRecord, context: Age
   await prepareWorkspacePlugins(record, context);
 }
 
-async function prepareWorkspacePlugins(record: WorkspaceRecord, context: AgentHostContext): Promise<void> {
-  const installed = await loadHostPlugins();
-  const pluginContext = { ...context, extensions: hostPluginExtensions(installed) };
-  for (const plugin of installed) await plugin.workspaceReady?.(record, pluginContext);
-  await deployWorkspaceDiscovery({ workspace: record, plugins: installed,
-    context: { ...pluginContext, generation: await workspaceAgentGeneration() } });
-}
-
 async function agentReady(root: string, config: AgentConfiguration): Promise<AgentReady | undefined> {
   try {
     const raw = await privateJson(path.join(root, "ready.json"));
@@ -116,8 +117,10 @@ export async function runWorkspaceAgent(file: string): Promise<void> {
   const current = await store.read(config.workspaceName);
   if (current.id !== config.workspaceId || !current.initialized || current.phase !== "running") throw new UserError("workspace bridge no longer matches its runtime");
   const server = createWorkspaceAgentServer(config, context, async (updated) => {
-    await ensureWorkspaceIntegration(updated, context);
-    await prepareWorkspacePlugins(updated, context);
+    await prepareWorkspaceReadiness(updated, store, async () => {
+      await ensureWorkspaceIntegration(updated, context);
+      await prepareWorkspacePlugins(updated, context);
+    });
   });
   const close = () => { abort.abort(); server.close(); server.closeAllConnections(); };
   process.once("SIGTERM", close); process.once("SIGINT", close); process.once("SIGHUP", close);

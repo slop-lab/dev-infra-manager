@@ -30,6 +30,14 @@ Command execution requires an initialized running workspace. Transport
 cancellation terminates the host command process group; it is not a promise to
 terminate arbitrary detached processes inside the workspace.
 
+Runtime `running` does not imply every optional integration is usable. Failed
+agent/plugin preparation returns a command failure and retains a running
+workspace with an explicit integration error, leaving its processes and data
+untouched. Show exposes that error; online discovery reports the failed
+preparation without exposing private configuration. A successful preparation
+retry clears its recorded failure. A concurrent stop or identity replacement
+must not be overwritten by a delayed preparation result.
+
 Discard records intent and deletes only exact owned runtime resources. The
 record is removed after cleanup succeeds. Interrupted or failed cleanup remains
 retryable. Missing data on an initialized record is an error; DIM never replaces

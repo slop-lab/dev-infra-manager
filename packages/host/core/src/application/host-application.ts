@@ -10,7 +10,7 @@ import { WorkspaceService } from "../workspace/service.js";
 import { WorkspaceStore } from "../workspace/store.js";
 import { acquireWorkspaceSource } from "../workspace/source.js";
 import { checkWorkspaceHost } from "../workspace/doctor.js";
-import { createWorkspaceOnHost, ensureWorkspaceIntegration, type WorkspaceHostCreateInput } from "./workspace-composition.js";
+import { createWorkspaceOnHost, type WorkspaceHostCreateInput } from "./workspace-composition.js";
 import { composeWorkspaceRuntime, loadHostPlugins, resolveHostExecutionRouting, hostPluginExtensions } from "./host-plugins.js";
 import { ensureWorkspaceAgent } from "./workspace-agent.js";
 import { installRequiredPlugins, workspaceRequirements } from "./workspace-requirements.js";
@@ -108,20 +108,17 @@ async function dispatchHostOperation(request: HostOperationRequest, signal: Abor
     }
     case "start": {
       const record = await service.start(string(input.name, "name"), expectedId);
-      await ensureWorkspaceIntegration(record, context);
       await ensureWorkspaceAgent(record, agentContext);
       result = record; break;
     }
     case "stop": result = await service.stop(string(input.name, "name"), expectedId); break;
     case "restart": {
       const record = await service.restart(string(input.name, "name"), expectedId);
-      await ensureWorkspaceIntegration(record, context);
       await ensureWorkspaceAgent(record, agentContext);
       result = record; break;
     }
     case "recreate": {
       const record = await service.recreate(string(input.name, "name"), expectedId);
-      await ensureWorkspaceIntegration(record, context);
       await ensureWorkspaceAgent(record, agentContext);
       result = record; break;
     }
@@ -133,7 +130,6 @@ async function dispatchHostOperation(request: HostOperationRequest, signal: Abor
         ...(resources.pidsLimit === undefined ? {} : { pidsLimit: string(resources.pidsLimit, "pidsLimit") })
       }, expectedId);
       if (updated.recreated && updated.workspace.phase === "running") {
-        await ensureWorkspaceIntegration(updated.workspace, context);
         await ensureWorkspaceAgent(updated.workspace, agentContext);
       }
       result = updated;
@@ -144,7 +140,6 @@ async function dispatchHostOperation(request: HostOperationRequest, signal: Abor
     case "exec": {
       if (!Array.isArray(input.command) || input.command.some((v) => typeof v !== "string")) throw new UserError("command must be an argument array");
       const name = string(input.name, "name");
-      await ensureWorkspaceIntegration(await store.read(name), context);
       await ensureWorkspaceAgent(await store.read(name), agentContext);
       process.exitCode = await service.exec(name, input.command as string[], {
         signal, stdin: process.stdin, ...(input.interactive === true ? { terminal: true } : {})

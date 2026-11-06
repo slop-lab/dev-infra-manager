@@ -5,6 +5,7 @@ import { packageVersion } from "../package-version.js";
 import { UserError, deployGuestIntegration, workspaceEnvironmentSkillAsset, workspaceServiceEndpoint, type WorkspaceRecord, type WorkspaceRuntime } from "../workspace.js";
 import type { WorkspaceHostPlugin, WorkspaceHostPluginContext, WorkspaceCapabilityFact } from "../plugin-api.js";
 import { hostPluginManifestFingerprint } from "./workspace-agent-state.js";
+import { workspacePreparationFailurePrefix } from "./workspace-readiness.js";
 
 export interface WorkspaceDiscoveryContext extends WorkspaceHostPluginContext {
   readonly generation: string;
@@ -71,6 +72,9 @@ export async function workspaceDiscovery(input: WorkspaceDiscoveryInput): Promis
       version: packageVersion, refresh: "workspace-readiness" } },
     workspace: { id: workspace.id, name: workspace.name, runtime: workspace.runtime, image: workspace.image,
       phase: workspace.phase, updatedAt: workspace.updatedAt, resources: workspace.resources,
+      preparation: workspace.error?.startsWith(workspacePreparationFailurePrefix)
+        ? { state: "failed", action: "Inspect dim show WORKSPACE and run the owning plugin's recovery command on the selected host" }
+        : { state: "no-recorded-failure" },
       source: { ref: workspace.source.ref, commit: workspace.source.commit,
         freshness: { state: "recorded", recordUpdatedAt: workspace.updatedAt, fingerprint: sourceFingerprint },
         ...(workspace.source.workingDirectory === undefined ? {} : { workingDirectory: workspace.source.workingDirectory }),
