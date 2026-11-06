@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { CommandResult } from "../web-lifecycle/process.js";
 import { OperatorInputError, type OwnedWorkspace } from "./config.js";
+import { selectExposureUrl } from "./exposure.js";
 
 export async function startSmokeApplication(input: {
   readonly workspace: OwnedWorkspace; readonly ingress: string; readonly challenge: string;
@@ -17,9 +18,9 @@ export async function startSmokeApplication(input: {
     await input.run("application service registration", ["exec", input.workspace.name, "--", "dim-workspace", "service", "register", "--name", "selected-host-application", "--", "node", "/home/dim/selected-host-application.mjs"]);
     await input.run("application service resume", ["exec", input.workspace.name, "--", "dim-workspace", "service", "resume"]);
     const output: unknown = JSON.parse((await input.run("application external route", ["exec", input.workspace.name, "--", "dim-expose", "--name", "selected-host-application", "--port", "3000", "--ingress", input.ingress])).stdout);
-    if (!output || typeof output !== "object" || !("url" in output) || typeof output.url !== "string") throw new OperatorInputError("application route returned no URL");
-    await expectSmokeApplication(output.url, input.challenge);
-    return output.url;
+    const url = selectExposureUrl(output, { workspace: input.workspace.name, ingress: input.ingress, port: 3000, protocol: "http", containers: [] });
+    await expectSmokeApplication(url, input.challenge);
+    return url;
   } finally { await rm(root, { recursive: true, force: true }); }
 }
 
