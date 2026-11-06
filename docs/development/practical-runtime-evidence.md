@@ -50,7 +50,7 @@ complete strict compiler checks are the available replacement.
 | Disposable runc container preflight | BLOCKED | Immutable local Alpine image run failed at overlay mount creation (`function not implemented`); exact test container name was absent afterward |
 | Local/SSH Sysbox user journey | BLOCKED | Local daemon lists runc only, no Sysbox; reviewed disposable host/profile needed |
 | Real scoped provider inference / OpenCode / application ingress | BLOCKED | No reviewed disposable project/account/gateway/ingress profile supplied; live application or fleet credentials were not inspected |
-| Existing task workspace provider/file-tool consumer | PASS, limited scope | Actual `dim-agent opencode run --format json` completed a read and patch through the already selected connection, exited 0 and produced byte-identical owned input/output. OpenCode 1.18.31; sanitized private receipt at `provider-probe/receipt.json`. This is not a disposable-host attach/restart/ingress/update acceptance result |
+| Historical task workspace file-tool consumer | File/tool evidence only, routing not qualified | `dim-agent opencode run --format json` exited 0 with byte-identical input/output. That old-candidate receipt has no explicit DIM provider/model plus nonce-correlated admission proof and therefore does not establish scoped DIM-router inference or qualify this successor |
 | Agent-discovered auxiliary VM | BLOCKED | No reviewed Incus runtime host/image profile supplied; guest `/dev/kvm` absence is not being interpreted as host unavailability |
 | Isolated CLI/core/enabled-plugin activation | PASS, limited scope | Nine real private-prefix stages passed: base CLI/core install, exact base host version, agent-tools enablement, core and enabled-plugin update, exact updated host version, CLI update, installed help and empty workspace list. Private `isolated-installer-receipt.json` retains exact versions and stage exits. No workspace/service continuity was exercised |
 | Isolated installation update with retained running workspace | BLOCKED | Reviewed before/after bundles and facades are prepared and their private activation passed. Still requires an approved disposable Sysbox execution surface and immutable local image; no fleet installation was attempted |
@@ -158,6 +158,28 @@ The remaining coordinator-side input is the approved disposable selected-host
 command surface and small host bindings, not source versions, plugin lists or
 artifact preparation. Separate CP/host VMs, scoped provider/ingress, Incus image
 and immutable Sysbox image must still be exercised through their real boundaries.
+
+## Required runtime/CI successor qualification
+
+Subsequent actual VM findings invalidate any inference that the old canonical
+file challenge alone proved DIM routing: its isolated project's admitted request
+count remained zero. Catalogue HTTP and file tools are not routing/account proof.
+The successor requires explicit DIM provider/model, fresh session identity/model
+metadata and a nonce joined to exact workspace/project/principal/route admission
+and settled accounting. Historical real-provider receipts remain tied to their
+old sources and are not new-candidate provider qualification.
+
+The existing trusted `examples-vm` lane now derives its normal local/public-CLI
+SSH, shared-ingress, deterministic routed model/tool/session, real Incus and
+isolated-update bindings from disposable provisioning. Its completion receipt
+is mandatory, as is the existing `vm-runtime-acceptance` receipt. The contract is
+`.github/required-runtime-checks.json`; no development-push hardware jobs are
+added. Fixture code/providers live under `tests/`, not production packages.
+
+Workflow configuration and local source checks do not mean those required CI
+jobs executed or branch rules were configured. Exact dispatched CI status and
+runtime receipts must be supplied by the coordinator/hardware runner. Until
+then the new full required runtime gate is unqualified, not a passing skip.
 
 ## Recovery rollback follow-up
 
