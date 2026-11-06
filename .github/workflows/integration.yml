@@ -74,6 +74,15 @@ jobs:
         env:
           DIM_VM_ACCEPTANCE_ROOT: ${{ runner.temp }}/vm-runtime-acceptance
         run: just verify vm-runtime-prepare --run
+      - name: Require exact-source runtime completion receipt
+        env:
+          DIM_VM_ACCEPTANCE_ROOT: ${{ runner.temp }}/vm-runtime-acceptance
+        run: |
+          node --input-type=module - "$DIM_VM_ACCEPTANCE_ROOT/acceptance.json" "$GITHUB_SHA" "$(git rev-parse 'HEAD^{tree}')" <<'JS'
+          import { readFileSync } from 'node:fs';
+          const value = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          if (value.outcome !== 'passed' || value.sourceSha !== process.argv[3] || value.sourceTree !== process.argv[4] || value.probe?.outcome !== 'passed-in-container-kvm-test') throw Error('required VM runtime coverage is missing or stale');
+          JS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

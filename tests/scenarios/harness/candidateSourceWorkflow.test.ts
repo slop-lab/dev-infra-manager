@@ -16,11 +16,13 @@ type WorkflowStep = {
 };
 
 type WorkflowJob = {
+  readonly "runs-on"?: string;
   readonly env?: Readonly<Record<string, string>>;
   readonly steps: readonly WorkflowStep[];
 };
 
 type Workflow = {
+  readonly on?: { readonly push?: { readonly branches?: readonly string[]; readonly tags?: readonly string[] }; readonly merge_group?: { readonly branches?: readonly string[] }; readonly pull_request?: unknown };
   readonly jobs: Readonly<Record<string, WorkflowJob>>;
   readonly permissions: Readonly<Record<string, string>>;
 };
@@ -128,6 +130,23 @@ describe("candidate source workflows", () => {
         }
       }
     }
+  });
+
+  it("requires practical runtime receipts on trusted existing gates without development-push hardware dispatch", async () => {
+    const { workflow } = await readWorkflow("examples"), job = workflow.jobs["examples-vm"];
+    assert(job !== undefined);
+    expect(workflow.on?.push?.branches).toEqual(["main"]);
+    expect(workflow.on?.push?.tags).toEqual(["v*"]);
+    expect(workflow.on?.merge_group?.branches).toEqual(["main"]);
+    expect(workflow.on?.pull_request).toBeUndefined();
+    expect(job["runs-on"]).toBe("dim-native-qemu");
+    const runtime = job.steps.findIndex((step) => step.run === "bash scripts/checks/examples-vm-smoke.bash");
+    const required = job.steps.findIndex((step) => step.run?.startsWith("node tests/scenarios/selected-host/ci/verifyEvidence.ts"));
+    expect(runtime).toBeGreaterThan(-1); expect(required).toBeGreaterThan(runtime);
+    expect(job.steps[required]?.if).toBeUndefined();
+    expect(job.steps.filter((step) => step.uses?.startsWith("actions/upload-artifact@")).every((step) => step.with?.["if-no-files-found"] === "error")).toBe(true);
+    const contract: unknown = JSON.parse(await readFile(resolve(workspaceRoot, ".github/required-runtime-checks.json"), "utf8"));
+    expect(contract).toMatchObject({ requiredChecks: ["examples-vm", "vm-runtime-acceptance"], developmentPushHardwareRuns: false, missingHardwareOrReceipt: "pending-or-failure-never-successful-skip" });
   });
 
   it("has no obsolete candidate assembly entry point in the tracked source layout", async () => {

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "requiredChecks": ["examples-vm", "vm-runtime-acceptance"],
+  "trustedEvents": ["merge_group:main", "push:main", "push:v*", "workflow_dispatch"],
+  "developmentPushHardwareRuns": false,
+  "examplesReceipt": "practical-runtime.json",
+  "requiredPracticalCoverage": ["local", "normal-installed-public-cli-real-ssh", "nonce-correlated-scoped-router-accounting", "fresh-owned-opencode-session-monitor", "production-urls-envelope-http-and-opencode", "real-incus-kvm-code-artifact-revoke", "isolated-running-workspace-update-continuity"],
+  "providerQualification": "not-assessed: TEST-ONLY deterministic protocol/tool fixture; optional authorized account lane is separate",
+  "missingHardwareOrReceipt": "pending-or-failure-never-successful-skip",
+  "repositoryRulesConfiguredExternally": true
+}

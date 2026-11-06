@@ -38,13 +38,17 @@ jobs:
         env:
           DIM_EXAMPLES_VM_LOG_ROOT: ${{ runner.temp }}/dim-examples-vm-logs
         run: bash scripts/checks/examples-vm-smoke.bash
+      - name: Require practical local SSH router session ingress Incus and update coverage
+        env:
+          DIM_EXAMPLES_VM_LOG_ROOT: ${{ runner.temp }}/dim-examples-vm-logs
+        run: node tests/scenarios/selected-host/ci/verifyEvidence.ts "$DIM_EXAMPLES_VM_LOG_ROOT" "$GITHUB_SHA" "$(git rev-parse 'HEAD^{tree}')"
       - name: Upload examples VM logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: examples-vm-logs-${{ github.sha }}
           path: ${{ runner.temp }}/dim-examples-vm-logs
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
       - name: Upload exact-tree evidence
         if: always()
