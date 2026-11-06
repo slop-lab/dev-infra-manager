@@ -27,7 +27,7 @@ it("inspects an existing parent and child through real read-only HTTP without DI
     if (request.headers.authorization !== `Basic ${Buffer.from(`fixture:${password}`).toString("base64")}`) { response.writeHead(401).end("PRIVATE_AUTH_DIAGNOSTIC"); return; }
     const url = new URL(request.url ?? "/", "http://fixture"); paths.push(url.pathname);
     const data: Record<string, unknown> = {
-      "/experimental/tool/ids": [], "/session/status": { ses_child: { type: "busy" } },
+      "/experimental/tool/ids": [], "/question": [], "/permission": [], "/session/status": { ses_child: { type: "busy" } },
       "/session": [{ id: "ses_parent" }, { id: "ses_child", parentID: "ses_parent" }], "/session/ses_parent": { id: "ses_parent" },
       "/session/ses_parent/message": [], "/session/ses_parent/children": [{ id: "ses_child", parentID: "ses_parent" }],
       "/session/ses_child/children": [], "/session/ses_child/message": [{ info: { role: "assistant", time: { created: Date.now() } }, parts: [

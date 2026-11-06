@@ -42,7 +42,7 @@ type SessionInput = {
 };
 
 export type MonitorEvidence = {
-  readonly state: "active" | "idle" | "error" | "unknown" | "unreachable";
+  readonly state: "active" | "waiting" | "idle" | "error" | "unknown" | "unreachable";
   readonly reason?: "api-unavailable";
   readonly completion: "not-assessed";
   readonly parent: Activity | "unknown";
@@ -51,6 +51,8 @@ export type MonitorEvidence = {
   readonly currentFailures: number;
   readonly historicalFailures: number;
   readonly unknownSessions: number;
+  readonly pendingQuestions: number | null;
+  readonly pendingPermissions: number | null;
   readonly discovery: "complete-child-tree" | "partial" | "bounded-truncated";
   readonly requestCount: number | null;
   readonly teamToolInventory: "present" | "absent" | "unknown";
@@ -67,7 +69,7 @@ export async function inspectOpenCodeMonitor(options: MonitorOptions, team: OmoT
   catch (error) {
     return {
       state: error instanceof MonitorLimitError ? "unknown" : "unreachable", ...(error instanceof MonitorLimitError ? {} : { reason: "api-unavailable" as const }), completion: "not-assessed", parent: "unknown",
-      activeChildren: 0, staleActive: 0, currentFailures: 0, historicalFailures: 0, unknownSessions: 0,
+      activeChildren: 0, staleActive: 0, currentFailures: 0, historicalFailures: 0, unknownSessions: 0, pendingQuestions: null, pendingPermissions: null,
       discovery: error instanceof MonitorLimitError ? "bounded-truncated" : "partial", requestCount: error instanceof MonitorLimitError ? error.requestCount : null, teamToolInventory: "unknown", team: safeTeam, sessions: []
     };
   }
@@ -155,9 +157,14 @@ async function inspect(options: MonitorOptions, team: OmoTeamMetadata, client: M
     }
   }
   if (queue.length > 0) truncated = true;
+  const pendingCount = async (path: string): Promise<number | null> => {
+    try { return array(await get(path)).filter((value) => { const id = sessionId(record(value)["sessionID"]); return id !== null && visited.has(id); }).length; }
+    catch (error) { if (error instanceof MonitorLimitError) truncated = true; else partial = true; return null; }
+  };
+  const pendingQuestions = await pendingCount("/question"), pendingPermissions = await pendingCount("/permission");
   const incomplete = partial || truncated;
   const active = rows.filter(({ activity }) => activity === "active" || activity === "active-stale" || activity === "retrying");
-  const state = active.length > 0 ? "active" : incomplete ? "unknown"
+   const state = (pendingQuestions ?? 0) + (pendingPermissions ?? 0) > 0 ? "waiting" : active.length > 0 ? "active" : incomplete ? "unknown"
     : rows.some(({ activity }) => activity === "error") ? "error"
       : rows.some(({ activity }) => activity === "unknown") ? "unknown" : "idle";
   return {
@@ -168,7 +175,7 @@ async function inspect(options: MonitorOptions, team: OmoTeamMetadata, client: M
     historicalFailures: rows.filter(({ activity }) => activity === "historical-error").length,
     unknownSessions: rows.filter(({ activity }) => activity === "unknown").length,
     discovery: truncated ? "bounded-truncated" : partial ? "partial" : "complete-child-tree",
-    requestCount, teamToolInventory, team, sessions: rows
+    requestCount, pendingQuestions, pendingPermissions, teamToolInventory, team, sessions: rows
   };
 }
 

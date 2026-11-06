@@ -152,6 +152,11 @@ only validated session IDs, timestamps, roles, safe tool names/statuses and
 error names/status codes; prompt/thinking text and tool arguments/output are
 never retained. Parent idle plus child busy aggregates to active. Quiet busy
 work remains `active-stale`; current and historical failures remain separate.
+It also reads the public read-only `/question` and `/permission` collections,
+counts only requests belonging to visited task sessions, and reports `waiting`
+when input is pending. Question text, permission patterns and request payloads
+are never retained. Unreadable pending-input metadata makes discovery partial;
+busy/idle alone cannot establish an absence of pending questions or permissions.
 Truncated or partial idle discovery is `unknown`, and API failure is
 `unreachable`. Completion is always `not-assessed` because status monitoring is
 not task acceptance.

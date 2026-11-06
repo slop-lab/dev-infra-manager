@@ -10,7 +10,7 @@ export function authenticatedMonitorClient(base: string, credentials: { readonly
   const authorization = `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64")}`;
   return { async get(pathname, timeoutMs) {
     const url = new URL(pathname, endpoint.origin);
-    if (!pathname.startsWith("/") || pathname.startsWith("//") || url.username || url.password || url.hash || url.origin !== endpoint.origin || !/^\/(?:experimental\/tool\/ids|session(?:\/status|\/ses_[A-Za-z0-9]{1,100}(?:\/(?:message|children))?)?)$/.test(url.pathname)
+    if (!pathname.startsWith("/") || pathname.startsWith("//") || url.username || url.password || url.hash || url.origin !== endpoint.origin || !/^\/(?:question|permission|experimental\/tool\/ids|session(?:\/status|\/ses_[A-Za-z0-9]{1,100}(?:\/(?:message|children))?)?)$/.test(url.pathname)
       || [...url.searchParams].some(([name, value]) => name !== "limit" || !/^[1-9][0-9]{0,2}$/.test(value) || Number(value) > 200)) {
       throw new Error("monitor request must select a bounded read-only session metadata endpoint");
     }

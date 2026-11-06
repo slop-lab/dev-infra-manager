@@ -17,6 +17,7 @@ const options: MonitorOptions = {
 
 function client(values: Readonly<Record<string, unknown>>): MonitorClient {
   return { async get(path) {
+    if ((path === "/question" || path === "/permission") && !(path in values)) return [];
     if (!(path in values)) throw new Error(`unexpected fixture request: ${path}`);
     return values[path];
   } };
@@ -25,6 +26,25 @@ function client(values: Readonly<Record<string, unknown>>): MonitorClient {
 const noTeams: OmoTeamMetadata = { source: "unavailable", enabled: null, teams: [], truncated: false, unreadable: false };
 
 describe("inspectOpenCodeMonitor", () => {
+  it("does not report idle when pending input metadata is unreadable", async () => {
+    const result = await inspectOpenCodeMonitor(options, noTeams, client({
+      "/experimental/tool/ids": [], "/session/status": {}, "/session?limit=8": [{ id: "ses_parent" }],
+      "/session/ses_parent": { id: "ses_parent" }, "/session/ses_parent/message?limit=4": [], "/session/ses_parent/children": [], "/question": null
+    }));
+    expect(result).toMatchObject({ state: "unknown", pendingQuestions: null, discovery: "partial" });
+  });
+
+  it("reports pending questions and permissions for the visited task without retaining their payloads", async () => {
+    const result = await inspectOpenCodeMonitor(options, noTeams, client({
+      "/experimental/tool/ids": [], "/session/status": {}, "/session?limit=8": [{ id: "ses_parent" }],
+      "/session/ses_parent": { id: "ses_parent" }, "/session/ses_parent/message?limit=4": [], "/session/ses_parent/children": [],
+      "/question": [{ sessionID: "ses_parent", questions: ["PRIVATE-QUESTION"] }, { sessionID: "ses_unrelated" }],
+      "/permission": [{ sessionID: "ses_parent", patterns: ["PRIVATE-PERMISSION"] }]
+    }));
+    expect(result).toMatchObject({ state: "waiting", pendingQuestions: 1, pendingPermissions: 1, completion: "not-assessed" });
+    expect(JSON.stringify(result)).not.toMatch(/PRIVATE-QUESTION|PRIVATE-PERMISSION|ses_unrelated/);
+  });
+
   it("Given an idle parent and recursively discovered busy child, when inspected, then aggregate activity remains active", async () => {
     const result = await inspectOpenCodeMonitor(options, noTeams, client({
       "/session/status": { ses_parent: { type: "idle" }, ses_child: { type: "busy" } },

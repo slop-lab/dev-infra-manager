@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   const credentials = parseMonitorCredentials(await credentialInput(), names);
   const report = await inspectMonitorTargets(targets, credentials, json ? undefined : (name, phase) => { process.stdout.write(`${name}\t${phase}\n`); });
   if (json) process.stdout.write(`${JSON.stringify(report)}\n`);
-  else for (const row of report.results) process.stdout.write(`${row.target}\tstate=${row.evidence.state}\tdiscovery=${row.evidence.discovery}\tactiveChildren=${row.evidence.activeChildren}\tcurrentFailures=${row.evidence.currentFailures}\thistoricalFailures=${row.evidence.historicalFailures}\tcompletion=not-assessed\n`);
+  else for (const row of report.results) process.stdout.write(`${row.target}\tstate=${row.evidence.state}\tdiscovery=${row.evidence.discovery}\tactiveChildren=${row.evidence.activeChildren}\tpendingQuestions=${row.evidence.pendingQuestions ?? "unknown"}\tpendingPermissions=${row.evidence.pendingPermissions ?? "unknown"}\tcurrentFailures=${row.evidence.currentFailures}\thistoricalFailures=${row.evidence.historicalFailures}\tcompletion=not-assessed\n`);
   if (report.outcome !== "inspected") process.exitCode = 2;
 }
 async function credentialInput(): Promise<unknown> {
