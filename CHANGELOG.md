@@ -7,6 +7,15 @@ All notable changes to this project are documented here.
 Target: `0.10.0` internal development candidate. No publication or deployment
 is implied by these source changes.
 
+- Recover retained workspace LLM connections through their explicitly selected
+  original gateway without issuing new principals or rotating scoped credentials.
+  Report missing gateway selection with `dim llm recover` guidance; preserve a
+  running workload and expose failed integration preparation instead of hiding
+  readiness failure behind an unqualified running state. Extend the explicit
+  selected-host real-use gate to ordinary repositories, real application schema
+  handoff, scoped auxiliary VMs and isolated installation updates, reporting
+  unavailable acceptance lanes as blocked rather than passing skips.
+
 - Make Git services independently composable through DIM-independent
   `@slop-lab/gs-*` packages. Support standalone durable repository policy and
   protected promotion, review/merge, optional diff/blame, PR/discussions, CI and
