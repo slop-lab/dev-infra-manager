@@ -1,7 +1,7 @@
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 
-const requiredCapabilityPlugins = ["agent-tools", "host-llm-router", "external-urls", "native-git"] as const;
+const requiredCapabilityPlugins = ["agent-tools", "host-llm-router", "external-urls"] as const;
 const shaPattern = /^[0-9a-f]{40}$/;
 const hostPattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$/;
 const workspacePattern = /^dim-smoke-[a-z0-9][a-z0-9-]{0,37}$/;
@@ -38,13 +38,16 @@ export type HostProfile = {
   readonly ingress: string;
   readonly sshPublicKey: string;
   readonly llm: { readonly configFile: string; readonly project: string; readonly route: string };
+  readonly vm?: { readonly image: string };
   readonly monitor?: MonitorProfile;
 };
 
 export type SmokeConfiguration = {
   readonly installedSourceSha: string;
   readonly hosts: readonly HostProfile[];
+  readonly isolatedUpdate?: IsolatedUpdateProfile;
 };
+export type IsolatedUpdateProfile = { readonly beforeFacade: string; readonly beforeBundle: string; readonly afterFacade: string; readonly afterBundle: string; readonly image: string };
 
 export type OwnedWorkspace = { readonly name: string; readonly id: string };
 export function smokeWorkspaceName(prefix: string): string {
@@ -89,7 +92,7 @@ export function parseOperatorArguments(values: readonly string[]): OperatorArgum
 
 export function parseSmokeConfiguration(value: unknown): SmokeConfiguration {
   const root = object(value, "configuration");
-  exactKeys(root, ["schemaVersion", "installedSourceSha", "hosts"], "configuration");
+  exactKeys(root, ["schemaVersion", "installedSourceSha", "hosts", "isolatedUpdate"], "configuration", ["schemaVersion", "installedSourceSha", "hosts"]);
   if (root["schemaVersion"] !== 1) throw new OperatorInputError("configuration schemaVersion must be 1");
   const installedSourceSha = string(root["installedSourceSha"], "installedSourceSha");
   if (!shaPattern.test(installedSourceSha)) throw new OperatorInputError("installedSourceSha must be an exact lowercase 40-hex commit");
@@ -97,7 +100,16 @@ export function parseSmokeConfiguration(value: unknown): SmokeConfiguration {
   const hosts = root["hosts"].map((entry, index) => parseHostProfile(entry, index));
   if (new Set(hosts.map(({ name }) => name)).size !== hosts.length) throw new OperatorInputError("configuration host names must be unique");
   if (new Set(hosts.map(({ workspace }) => workspace)).size !== hosts.length) throw new OperatorInputError("workspace names must be unique across selected hosts");
-  return { installedSourceSha, hosts };
+  let isolatedUpdate: IsolatedUpdateProfile | undefined;
+  if (root["isolatedUpdate"] !== undefined) {
+    const update = object(root["isolatedUpdate"], "isolatedUpdate");
+    exactKeys(update, ["beforeFacade", "beforeBundle", "afterFacade", "afterBundle", "image"], "isolatedUpdate");
+    const beforeFacade = string(update["beforeFacade"], "beforeFacade"), beforeBundle = string(update["beforeBundle"], "beforeBundle");
+    const afterFacade = string(update["afterFacade"], "afterFacade"), afterBundle = string(update["afterBundle"], "afterBundle"), image = string(update["image"], "image");
+    if (![beforeFacade, beforeBundle, afterFacade, afterBundle].every((value) => path.isAbsolute(value) && !/[\x00-\x1f\x7f]/.test(value)) || !/^sha256:[a-f0-9]{64}$/.test(image)) throw new OperatorInputError("isolatedUpdate requires absolute reviewed facades/bundles and an exact local image ID");
+    isolatedUpdate = { beforeFacade, beforeBundle, afterFacade, afterBundle, image };
+  }
+  return { installedSourceSha, hosts, ...(isolatedUpdate === undefined ? {} : { isolatedUpdate }) };
 }
 
 export function ownedWorkspaceName(expectedName: string, value: unknown): OwnedWorkspace {
@@ -123,7 +135,7 @@ export function ownedPartialWorkspace(claim: { readonly name: string; readonly s
 
 function parseHostProfile(value: unknown, index: number): HostProfile {
   const label = `hosts[${index}]`, entry = object(value, label);
-  exactKeys(entry, ["name", "workspace", "source", "workspaceSourceSha", "expectedHostVersion", "requiredPlugins", "ingress", "sshPublicKey", "llm", "monitor"], label,
+  exactKeys(entry, ["name", "workspace", "source", "workspaceSourceSha", "expectedHostVersion", "requiredPlugins", "ingress", "sshPublicKey", "llm", "monitor", "vm"], label,
     ["name", "workspace", "source", "workspaceSourceSha", "expectedHostVersion", "requiredPlugins", "ingress", "sshPublicKey", "llm"]);
   const name = string(entry["name"], `${label}.name`);
   const workspace = string(entry["workspace"], `${label}.workspace`);
@@ -134,7 +146,7 @@ function parseHostProfile(value: unknown, index: number): HostProfile {
   const sshPublicKey = string(entry["sshPublicKey"], `${label}.sshPublicKey`);
   if (!hostPattern.test(name)) throw new OperatorInputError(`${label}.name is invalid`);
   if (!workspacePattern.test(workspace)) throw new OperatorInputError(`${label}.workspace must use the dim-smoke- ownership namespace`);
-  if (!/^dim:\/\/dim-smoke-[a-z0-9][a-z0-9-]{0,37}$/.test(source)) throw new OperatorInputError(`${label}.source must select an operator-provisioned disposable dim://dim-smoke-PROJECT`);
+  if (!validSmokeSource(source)) throw new OperatorInputError(`${label}.source must select an absolute host repository, credential-free HTTPS repository or disposable dim://dim-smoke-PROJECT`);
   if (!shaPattern.test(workspaceSourceSha)) throw new OperatorInputError(`${label}.workspaceSourceSha must be an exact lowercase 40-hex commit`);
   if (!expectedHostVersion.trim()) throw new OperatorInputError(`${label}.expectedHostVersion is required`);
   if (!ingressPattern.test(ingress)) throw new OperatorInputError(`${label}.ingress is invalid`);
@@ -143,15 +155,30 @@ function parseHostProfile(value: unknown, index: number): HostProfile {
     throw new OperatorInputError(`${label}.requiredPlugins must be a string array`);
   }
   const requiredPlugins = [...entry["requiredPlugins"]];
-  for (const required of requiredCapabilityPlugins) {
+  for (const required of [...requiredCapabilityPlugins, ...(source.startsWith("dim://") ? ["native-git"] : [])]) {
     if (!requiredPlugins.includes(required)) throw new OperatorInputError(`${label}.requiredPlugins must include ${required}`);
   }
   const monitor = entry["monitor"] === undefined ? undefined : parseMonitorProfile(entry["monitor"], `${label}.monitor`);
   const llm = object(entry["llm"], `${label}.llm`); exactKeys(llm, ["configFile", "project", "route"], `${label}.llm`);
   const configFile = string(llm["configFile"], "LLM config path"), project = string(llm["project"], "LLM project"), route = string(llm["route"], "LLM route");
   if (!path.isAbsolute(configFile) || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(project) || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(route)) throw new OperatorInputError("invalid explicit LLM attachment selection");
+  let vm: HostProfile["vm"];
+  if (entry["vm"] !== undefined) {
+    const selection = object(entry["vm"], `${label}.vm`); exactKeys(selection, ["image"], `${label}.vm`);
+    const image = string(selection["image"], `${label}.vm.image`);
+    if (!/^[a-f0-9]{64}$/.test(image) || !requiredPlugins.includes("vm")) throw new OperatorInputError("VM lane requires the vm plugin and a reviewed exact Incus image fingerprint");
+    vm = { image };
+  }
   return { name, workspace, source, workspaceSourceSha, expectedHostVersion, requiredPlugins, ingress, sshPublicKey,
-    llm: { configFile, project, route }, ...(monitor === undefined ? {} : { monitor }) };
+    llm: { configFile, project, route }, ...(monitor === undefined ? {} : { monitor }), ...(vm === undefined ? {} : { vm }) };
+}
+
+function validSmokeSource(source: string): boolean {
+  if (/[\x00-\x1f\x7f]/.test(source)) return false;
+  if (path.posix.isAbsolute(source)) return true;
+  if (source.startsWith("dim://")) return /^dim:\/\/dim-smoke-[a-z0-9][a-z0-9-]{0,37}$/.test(source);
+  try { const url = new URL(source); return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash; }
+  catch { return false; }
 }
 
 export function parseMonitorProfile(value: unknown, label: string): MonitorProfile {

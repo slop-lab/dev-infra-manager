@@ -49,6 +49,26 @@ describe("parseSmokeConfiguration", () => {
     expect(parsed.installedSourceSha).not.toBe(parsed.hosts[0]?.workspaceSourceSha);
   });
 
+  it("accepts an ordinary reviewed repository without Native Git or CI plugins", () => {
+    const ordinary = structuredClone(configuration);
+    ordinary.hosts[0]!.source = "/srv/disposable/dim-smoke-repo";
+    ordinary.hosts[0]!.requiredPlugins = ["agent-tools", "host-llm-router", "external-urls"];
+    expect(parseSmokeConfiguration(ordinary).hosts[0]?.source).toBe("/srv/disposable/dim-smoke-repo");
+  });
+
+  it("requires immutable images for isolated updates before any runtime operation", () => {
+    const isolatedUpdate = { beforeFacade: "/old/dim", beforeBundle: "/old/bundle", afterFacade: "/new/dim", afterBundle: "/new/bundle", image: "latest" };
+    expect(() => parseSmokeConfiguration({ ...configuration, isolatedUpdate })).toThrow(/isolatedUpdate/);
+    expect(parseSmokeConfiguration({ ...configuration, isolatedUpdate: { ...isolatedUpdate, image: `sha256:${"a".repeat(64)}` } }).isolatedUpdate?.beforeFacade).toBe("/old/dim");
+  });
+
+  it("rejects inline repository credentials and implicit relative host paths", () => {
+    for (const source of ["./repo", "https://operator:secret@example.invalid/repo.git"]) {
+      const ordinary = structuredClone(configuration); ordinary.hosts[0]!.source = source;
+      expect(() => parseSmokeConfiguration(ordinary)).toThrow(/source/);
+    }
+  });
+
   it.each(["workspaceSourceSha", "sshPublicKey"] as const)(
     "Given a profile missing %s, when parsed, then the live check cannot silently reuse another input",
     (field) => {
