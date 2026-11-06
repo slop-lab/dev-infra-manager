@@ -12,8 +12,8 @@ manifest, avoiding a self-referential source receipt.
 | Full strict workspace check | PASS | `pnpm workspace:check`, all 76 checked workspace projects, Node 24.22.1 / pnpm 10.13.1 |
 | Affected builds | PASS | host core/contracts, host LLM-router and VM packages |
 | LLM recovery and generic transport/wire | PASS | 5 files / 32 tests: gateway/control-plane HTTP fixtures, real stdio helper processes and frozen CLI-host contract tests; not provider inference or KVM |
-| Selected-host scenario boundaries | PASS | 14 files / 55 tests: `pnpm --dir tests exec vitest run scenarios/selected-host --exclude 'scenarios/selected-host/runtimeStdio.test.ts' --no-file-parallelism`; includes ordinary/managed profiles, application HTTP schema, isolated environment, cleanup, command-evidence redaction, VM cleanup order, nested probe argument boundary and monitor checks |
-| Example verify command | PASS | `node scripts/examples/run.ts examples/features/ordinary-workspace verify`; 3 files / 19 tests, a subset of the preceding source checks |
+| Selected-host scenario boundaries | PASS | Latest continuation: 15 files / 61 tests: `pnpm --dir tests exec vitest run scenarios/selected-host --exclude 'scenarios/selected-host/runtimeStdio.test.ts' --no-file-parallelism`; includes artifact-derived profiles and pending question/permission state as well as the preceding lifecycle, application, isolation, cleanup and monitor boundaries |
+| Example verify command | PASS | `node scripts/examples/run.ts examples/features/ordinary-workspace verify`; latest continuation 4 files / 23 tests, a subset of the preceding source checks |
 | Public driver surface | PASS | real terminal help; invalid/missing arguments return JSON `OperatorInputError`, exit 2, without creating resources |
 
 Source evidence logs are retained outside the checkout under
@@ -49,6 +49,7 @@ complete strict compiler checks are the available replacement.
 | Disposable runc container preflight | BLOCKED | Immutable local Alpine image run failed at overlay mount creation (`function not implemented`); exact test container name was absent afterward |
 | Local/SSH Sysbox user journey | BLOCKED | Local daemon lists runc only, no Sysbox; reviewed disposable host/profile needed |
 | Real scoped provider inference / OpenCode / application ingress | BLOCKED | No reviewed disposable project/account/gateway/ingress profile supplied; live application or fleet credentials were not inspected |
+| Existing task workspace provider/file-tool consumer | PASS, limited scope | Actual `dim-agent opencode run --format json` completed a read and patch through the already selected connection, exited 0 and produced byte-identical owned input/output. OpenCode 1.18.31; sanitized private receipt at `provider-probe/receipt.json`. This is not a disposable-host attach/restart/ingress/update acceptance result |
 | Agent-discovered auxiliary VM | BLOCKED | No reviewed Incus runtime host/image profile supplied; guest `/dev/kvm` absence is not being interpreted as host unavailability |
 | Isolated installation update | BLOCKED | Requires distinct reviewed before/after facades and complete local bundles plus immutable image on the disposable runtime host; no fleet installation was attempted |
 
@@ -105,3 +106,42 @@ That snapshot passed workspace-agent (14), VM grants (9), source preparation
 (1), and readiness (4): 28/28 tests across 4 files. This is source behavioral
 evidence, not provider/ingress/Incus/update runtime acceptance and not a claim
 that subsequent edits or a later commit were executed on the healthy host.
+
+## Follow-up implementation and prepared inputs
+
+- Checkpoint `003753fbb911bc4c203f2769a92ae7bf392a9281`, tree
+  `b56e643ca9db72ecd81e94130db7c5cac3b828fd`, was committed cleanly and handed
+  off in a verified private Git bundle. Later verification changes use new commits.
+- Actual source packing succeeded for both canonical base and that checkpoint:
+  74 artifacts per bundle, distinct exact source-bound versions, complete package
+  dependency manifests and per-artifact SHA-256 receipts. Private facade copies
+  executed help/version without a production installation. The runtime-input
+  archive and `artifact-inputs.json` are under the private task directory.
+- The ordinary recipe now has a real `verify-vm` stage consumed by the existing
+  installed examples runner. It invokes the same smoke and refuses preflight-only
+  qualification. Actual provider/ingress/Incus bindings are still required; merely
+  reaching that stage does not qualify the separate-VM journey.
+- Minimal explicit host bindings can feed the existing recipe. The source-bound
+  artifact manifest supplies expected versions and source identity; the generator
+  supplies names, plugin requirements and an owned test SSH key. It retains host
+  scope, repository path, LLM selection, ingress and reviewed VM image as explicit
+  selections. A real module driver consumed the built checkpoint manifest and
+  generated a validated profile without contacting a host.
+- The selected facade is honored through `DIM_BIN`, matching the existing recipe
+  runner. Isolated updates execute the reviewed shell facade directly rather than
+  incorrectly treating that executable as JavaScript.
+- Monitoring now checks read-only pending question/permission collections, keeps
+  only counts scoped to visited sessions and reports `waiting`. Unreadable input
+  metadata cannot produce an unqualified idle result. Tools/tests strict checks,
+  61 selected-host tests, 7 recipe/separate-VM boundary tests and the 23-test recipe
+  verify command passed after these changes.
+- The current task guest's read-only discovery journey found an older helper that
+  rejects `dim-workspace discovery`; `dim-workspace plugins` works and reports
+  scoped LLM/tools/ingress readiness but no VM plugin. There is no `dim` or `dim-vm`
+  executable here. No helper, credentials or running service was changed to bypass
+  that boundary; this says nothing about the coordinator's root-host capabilities.
+
+The remaining coordinator-side input is the approved disposable selected-host
+command surface and small host bindings, not source versions, plugin lists or
+artifact preparation. Separate CP/host VMs, scoped provider/ingress, Incus image
+and immutable Sysbox image must still be exercised through their real boundaries.
