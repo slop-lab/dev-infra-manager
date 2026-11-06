@@ -1,7 +1,7 @@
 import { request } from "node:http";
 import { request as requestHttps } from "node:https";
 import { randomBytes } from "node:crypto";
-import { ownedPartialWorkspace, ownedWorkspaceName, smokeWorkspaceName, OperatorInputError, SmokeFailure, type HostProfile, type OwnedWorkspace } from "./config.js";
+import { ownedPartialWorkspace, ownedWorkspaceName, smokeWorkspaceName, ownedMonitorDefaults, OperatorInputError, SmokeFailure, type HostProfile, type OwnedWorkspace } from "./config.js";
 import type { MonitorEvidence } from "./monitor.js";
 import { authenticatedMonitorClient } from "./monitorClient.js";
 import { monitorInspection } from "./monitorCommand.ts";
@@ -12,47 +12,15 @@ import { expectSmokeApplication, startSmokeApplication } from "./applicationEndp
 import { verifyAuxiliaryVm } from "./auxiliaryVm.js";
 import { inspectConfiguredMonitor } from "./monitorScenario.js";
 import { dim, selectedCommandTracker, type CommandEvidence } from "./selectedCommand.js";
+import { selectExposureUrl } from "./exposure.js";
+import { array, json, parsePlugins, record, text } from "./scenarioValues.js";
+import { executeOwnedInference, verifyOwnedSessionModel } from "./ownedInference.js";
+import { configureCiConsumer } from "./ci/consumer.js";
+export { preflightHost } from "./preflight.js";
 
-type PluginEntry = { readonly name: string; readonly state?: string; readonly commands: readonly string[] };
-type PreflightResult = { readonly ok: boolean; readonly details: readonly string[] };
 type SmokeOptions = { readonly onProgress?: (step: string, phase: "pass" | "progress" | "incomplete") => void; readonly onCommand?: (evidence: CommandEvidence) => void; readonly onRuntimeVersions?: (versions: OrdinaryRuntimeVersions) => void };
 type EndpointEvidence = { readonly kind: "application" | "coding-agent"; readonly url: string; readonly disposition: "verified-then-discarded" };
-export type SmokeResult = { readonly workspace: OwnedWorkspace; readonly runtimeVersions: OrdinaryRuntimeVersions; readonly monitor: MonitorEvidence | null; readonly commands: readonly CommandEvidence[]; readonly endpoints: readonly EndpointEvidence[]; readonly lanes: readonly { readonly name: string; readonly status: "PASS" | "BLOCKED"; readonly reason?: string }[] };
-
-export async function preflightHost(profile: HostProfile, installedSourceSha: string): Promise<PreflightResult> {
-  const details: string[] = [];
-  const version = await dim(profile.name, ["--version"], true);
-  const actualVersion = version.stdout.trim();
-  details.push(actualVersion === profile.expectedHostVersion
-    ? `host-version=${/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][a-zA-Z0-9._-]{1,180})?$/.test(actualVersion) ? actualVersion : "validated selection"}`
-    : "host-version does not match the reviewed selected-host profile");
-
-  const doctor = await dim(profile.name, ["doctor", "--json"], true);
-  const checks = array(json(doctor.stdout, "doctor output"), "doctor output");
-  let doctorReady = checks.length > 0;
-  for (const value of checks) {
-    const check = record(value, "doctor check");
-    const name = text(check["name"], "doctor check name");
-    const ok = check["ok"] === true;
-    doctorReady &&= ok;
-    const detail = text(check["detail"], "doctor check detail");
-    details.push(`${ok ? "ok" : "unavailable"}: ${/^[a-zA-Z0-9 ._-]{1,80}$/.test(name) ? name : "host check"}`);
-  }
-
-  const plugins = parsePlugins((await dim(profile.name, ["plugins"], true)).stdout);
-  for (const required of profile.requiredPlugins) {
-    details.push(plugins.some(({ name }) => name === required) ? `plugin=${required}` : `missing-plugin=${required}`);
-  }
-
-  const listed = array(json((await dim(profile.name, ["list", "--json"], true)).stdout, "workspace list"), "workspace list");
-  const workspaceAvailable = !listed.some((value) => record(value, "workspace")["name"] === profile.workspace);
-  details.push(workspaceAvailable ? `workspace-name available=${profile.workspace}` : `workspace-name already exists=${profile.workspace}`);
-  details.push(`operator-declared-source-sha=${installedSourceSha}`);
-  const ready = version.exitCode === 0 && actualVersion === profile.expectedHostVersion
-    && doctor.exitCode === 0 && doctorReady && profile.requiredPlugins.every((required) => plugins.some(({ name }) => name === required))
-    && workspaceAvailable;
-  return { ok: ready, details };
-}
+export type SmokeResult = { readonly workspace: OwnedWorkspace; readonly runtimeVersions: OrdinaryRuntimeVersions; readonly auxiliaryVm: Awaited<ReturnType<typeof verifyAuxiliaryVm>> | null; readonly inference: Awaited<ReturnType<typeof executeOwnedInference>>; readonly sessionModel: Awaited<ReturnType<typeof verifyOwnedSessionModel>>; readonly monitor: MonitorEvidence | null; readonly commands: readonly CommandEvidence[]; readonly endpoints: readonly EndpointEvidence[]; readonly lanes: readonly { readonly name: string; readonly status: "PASS" | "BLOCKED"; readonly reason?: string }[] };
 
 export async function runHostSmoke(selected: HostProfile, options: SmokeOptions = {}): Promise<SmokeResult> {
   const profile = { ...selected, workspace: smokeWorkspaceName(selected.workspace) };
@@ -63,15 +31,19 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
   const startedAt = Date.now(), branch = `smoke/${randomBytes(16).toString("hex")}`;
   let monitorEvidence: MonitorEvidence | null = null;
   let runtimeVersions: OrdinaryRuntimeVersions;
+  let inference: Awaited<ReturnType<typeof executeOwnedInference>>;
+  let sessionModel: Awaited<ReturnType<typeof verifyOwnedSessionModel>>;
+  let auxiliaryVm: Awaited<ReturnType<typeof verifyAuxiliaryVm>> | null = null;
   const lanes: Array<{ readonly name: string; readonly status: "PASS" | "BLOCKED"; readonly reason?: string }> = [];
   const progress = (step: string, phase: "pass" | "progress" | "incomplete" = "pass"): void => { options.onProgress?.(step, phase); };
   try {
     attemptedCreate = true;
     const created = await checked(profile, "workspace creation", [
-      "create", profile.source, profile.workspace, "--ref", profile.workspaceSourceSha,
+      "create", profile.source, profile.workspace, "--ref", profile.workspaceSourceSha, ...(profile.image === undefined ? [] : ["--image", profile.image]),
       "--git-user-name", "DIM selected-host smoke", "--git-user-email", "dim-smoke@example.invalid", "--json"
     ]);
     owned = ownedWorkspaceName(profile.workspace, json(created.stdout, "created workspace"));
+    if (profile.image !== undefined && record(json(created.stdout, "created workspace"), "created workspace").image !== profile.image) throw new OperatorInputError("created workspace did not retain the exact immutable image binding");
     progress("workspace creation");
     runtimeVersions = await verifyOrdinaryLifecycle({ workspace: owned, run: (step, args, timeout) => checked(profile, step, args, timeout) });
     options.onRuntimeVersions?.(runtimeVersions);
@@ -115,6 +87,7 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
 
     await checked(profile, "owned workspace LLM attachment", ["llm", "attach", owned.name, "--config", profile.llm.configFile, "--project", profile.llm.project, "--route", profile.llm.route]);
     await checked(profile, "owned workspace OpenCode setup", ["tools", "setup", owned.name, "opencode"], 10 * 60_000);
+    if (process.env.DIM_PRACTICAL_CI_REQUIRED === "1") await configureCiConsumer({ workspace: owned, profile, run: (step, args) => checked(profile, step, args) });
 
     const guestPlugins = parsePlugins((await checked(profile, "guest plugin discovery", ["exec", owned.name, "--", "dim-workspace", "plugins"])).stdout);
     for (const required of profile.requiredPlugins) {
@@ -130,12 +103,11 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     parseLlmChannelEvidence((await checked(profile, "shared service channel HTTP", ["exec", owned.name, "--", "node", "-e", guestLlmChannelProbe], 60_000)).stdout);
     progress("actual guest HTTP request through the shared stdio service channel");
 
-    const prompt = `Use your file tools to read selected-host-input.txt. Create selected-host-llm.txt containing exactly the same token and no other text. Do not answer until the file is written.`;
-    await checked(profile, "actual LLM and tool execution", ["tools", "run", owned.name, "opencode", "run", prompt], 10 * 60_000);
+    inference = await executeOwnedInference({ profile, workspace: owned, run: (step, args, timeout) => checked(profile, step, args, timeout) });
     const llmToken = (await checked(profile, "LLM tool result", ["exec", owned.name, "--", "cat", "selected-host-llm.txt"])).stdout.trim();
     if (llmToken !== token) throw new SmokeFailure(profile.name, "LLM tool result", "the model did not reproduce the private challenge through a file tool");
-    progress("actual LLM and file-tool execution");
-    lanes.push({ name: "scoped-real-llm-model-and-tool", status: "PASS" });
+    progress("explicit DIM provider/model, owned session, concrete file tools and nonce-correlated scoped router accounting");
+    lanes.push({ name: "scoped-router-model-tool-accounting", status: "PASS" });
     const connectionFingerprint = ["exec", owned.name, "--", "node", "-e", 'const fs=require("node:fs"),crypto=require("node:crypto"),path=require("node:path");const value=JSON.parse(fs.readFileSync(path.join(process.env.HOME,".config/dim/llm-router.json"),"utf8"));process.stdout.write(crypto.createHash("sha256").update(JSON.stringify([value.workspaceId,value.projectId,value.principalId,value.token])).digest("hex"))'];
     const beforeBinding = (await checked(profile, "durable LLM binding fingerprint", connectionFingerprint)).stdout;
     await checked(profile, "attached workspace interruption", ["restart", owned.name, "--expect-id", owned.id, "--json"], 180_000);
@@ -154,30 +126,33 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     progress("owned OpenCode server");
 
     const exposure = record(json((await checked(profile, "shared ingress request", ["exec", owned.name, "--", "dim-expose", "--name", "opencode", "--port", "4096", "--ingress", profile.ingress])).stdout, "exposure"), "exposure");
-    const url = text(exposure["url"], "exposure URL");
+    const url = selectExposureUrl(exposure, { workspace: owned.name, ingress: profile.ingress, port: 4096, protocol: "http", containers: [] });
     await expectAuthenticationBoundary(url);
     progress("shared ingress credential boundary");
     const credentialOutput = await checked(profile, "OpenCode public capability credentials", ["tools", "console", "invoke", "server.credentials", "--input", JSON.stringify({ workspace: owned.name, workspaceId: owned.id }), "--json"]);
     const credentials = record(json(credentialOutput.stdout, "server credentials"), "server credentials");
-    const client = authenticatedMonitorClient(url, { username: text(credentials["username"], "server username"), password: text(credentials["password"], "server password") }, "/workspace");
-    const sessionIds = array(await client.get("/session", 30_000), "authenticated OpenCode sessions").map((session) => text(record(session, "OpenCode session")["id"], "session id"));
-    if (sessionIds.length === 0) throw new SmokeFailure(profile.name, "OpenCode session", "real model/tool run produced no authenticated session");
+    const client = authenticatedMonitorClient(url, { username: text(credentials["username"], "server username"), password: text(credentials["password"], "server password") }, inference.directory);
+    const session = record(await client.get(`/session/${inference.sessionId}`, 30_000), "owned authenticated OpenCode session");
+    if (session.id !== inference.sessionId) throw new SmokeFailure(profile.name, "OpenCode session", "authenticated API did not return this run's exact fresh session");
+    sessionModel = await verifyOwnedSessionModel(client, inference);
     progress("authenticated OpenCode session through shared ingress");
     endpoints.push({ kind: "coding-agent", url, disposition: "verified-then-discarded" });
     lanes.push({ name: "opencode-authenticated-session-ingress", status: "PASS" });
     if (profile.vm !== undefined) {
-      await verifyAuxiliaryVm({ workspace: owned, image: profile.vm.image, challenge: token,
+      auxiliaryVm = await verifyAuxiliaryVm({ workspace: owned, image: profile.vm.image, challenge: token,
         run: (step, args, timeout) => checked(profile, step, args, timeout),
         rejected: async (step, args) => { const result = await dim(profile.name, args, true); if (result.exitCode === 0) throw new SmokeFailure(profile.name, step, "revoked operation unexpectedly succeeded"); } });
       lanes.push({ name: "auxiliary-kvm-vm", status: "PASS" });
     } else lanes.push({ name: "auxiliary-kvm-vm", status: "BLOCKED", reason: "Profile requires vm plugin, reviewed Incus host/image and explicit operator provisioning authority" });
 
-    if (profile.monitor !== undefined) {
+    {
       progress("OpenCode monitor: reading bounded public session metadata", "progress");
-      monitorEvidence = await inspectConfiguredMonitor({ profile: profile.monitor, workspace: owned.name, endpoint: url,
+      monitorEvidence = await inspectConfiguredMonitor({ profile: profile.monitor ?? ownedMonitorDefaults, workspace: owned.name, endpoint: url, sessionId: inference.sessionId, directory: inference.directory,
         credentials: { username: text(credentials["username"], "server username"), password: text(credentials["password"], "server password") },
         run: (step, args, timeout) => checked(profile, step, args, timeout) });
       progress(`OpenCode monitor: ${monitorEvidence.state}; discovery=${monitorEvidence.discovery}; completion=${monitorEvidence.completion}`, monitorInspection(monitorEvidence) === "inspected" ? "pass" : "incomplete");
+      if (!monitorEvidence.sessions.some(({ sessionId }) => sessionId === inference.sessionId)) throw new OperatorInputError("monitor did not inspect the fresh owned inference session");
+      lanes.push({ name: "owned-opencode-session-monitor", status: monitorInspection(monitorEvidence) === "inspected" ? "PASS" : "BLOCKED", ...(monitorInspection(monitorEvidence) === "inspected" ? {} : { reason: "fresh-session metadata inspection is incomplete" }) });
     }
 
     const recreated = ownedWorkspaceName(profile.workspace, json((await checked(profile, "workspace recreate", ["recreate", owned.name, "--expect-id", owned.id, "--json"], 180_000)).stdout, "recreated workspace"));
@@ -195,8 +170,8 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     if (recreatedDiscovery.generation !== discovery.generation) throw new SmokeFailure(profile.name, "recreated generic workspace discovery", "workspace bridge generation changed without an installed source change");
     await waitForAuthenticationBoundary(url);
     await expectSmokeApplication(applicationUrl, token);
-    const recoveredSessions = array(await client.get("/session", 30_000), "recovered authenticated sessions").map((session) => text(record(session, "OpenCode session")["id"], "session id"));
-    if (!sessionIds.every((id) => recoveredSessions.includes(id))) throw new SmokeFailure(profile.name, "OpenCode recovery", "authentication or saved sessions did not survive recreation");
+    const recoveredSession = record(await client.get(`/session/${inference.sessionId}`, 30_000), "recovered owned session");
+    if (recoveredSession.id !== inference.sessionId) throw new SmokeFailure(profile.name, "OpenCode recovery", "authentication or the owned session did not survive recreation");
     progress("recreate, reconnect, helper rediscovery, shared-channel HTTP, SSH identity and retained data");
     lanes.push({ name: "recreation-and-service-reconnection", status: "PASS" });
   } finally {
@@ -214,20 +189,9 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
       progress("exact owned cleanup");
     }
   }
-  return { workspace: owned, runtimeVersions, monitor: monitorEvidence, lanes, commands, endpoints };
+  return { workspace: owned, runtimeVersions, auxiliaryVm, inference, sessionModel, monitor: monitorEvidence, lanes, commands, endpoints };
 }
 
-function parsePlugins(output: string): readonly PluginEntry[] {
-  const parsed = json(output, "plugin discovery");
-  const entries = Array.isArray(parsed) ? parsed : record(parsed, "guest plugin discovery")["plugins"];
-  return array(entries, "plugin discovery").map((value) => {
-    const plugin = record(value, "plugin");
-    const state = plugin["state"];
-    if (state !== undefined && typeof state !== "string") throw new OperatorInputError("plugin state must be a string");
-    const commands = plugin["commands"] === undefined ? [] : array(plugin["commands"], "plugin commands").map((entry) => text(record(entry, "plugin command")["name"], "plugin command name"));
-    return { name: text(plugin["name"], "plugin name"), commands, ...(state === undefined ? {} : { state }) };
-  });
-}
 
 async function expectAuthenticationBoundary(urlValue: string): Promise<void> {
   const url = new URL(urlValue);
@@ -249,21 +213,4 @@ async function waitForAuthenticationBoundary(url: string): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new OperatorInputError("shared ingress did not reconnect to the recreated owned server", { cause: last });
-}
-
-function json(output: string, label: string): unknown {
-  try { return JSON.parse(output); }
-  catch (error) { throw new OperatorInputError(`${label} is not JSON`, { cause: error }); }
-}
-function record(value: unknown, label: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new OperatorInputError(`${label} must be an object`);
-  return Object.fromEntries(Object.entries(value));
-}
-function array(value: unknown, label: string): readonly unknown[] {
-  if (!Array.isArray(value)) throw new OperatorInputError(`${label} must be an array`);
-  return value;
-}
-function text(value: unknown, label: string): string {
-  if (typeof value !== "string" || value.length === 0) throw new OperatorInputError(`${label} must be a non-empty string`);
-  return value;
 }

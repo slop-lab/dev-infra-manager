@@ -57,9 +57,9 @@ async function main(): Promise<void> {
         if (!input.json) process.stdout.write(`runtime-versions\t${profile.name}\tnode=${versions.node}\tkernel=${versions.kernel}\tnested-docker=${versions.nestedDocker}\n`);
       }, ...(input.json ? {} : { onProgress: (step: string, phase: "pass" | "progress" | "incomplete"): void => { process.stdout.write(`${phase}\t${profile.name}\t${step}\n`); } }) };
     try {
-      const { workspace, runtimeVersions, monitor, lanes, commands, endpoints } = await runHostSmoke(profile, smokeOptions);
+      const { workspace, runtimeVersions, auxiliaryVm, inference, sessionModel, monitor, lanes, commands, endpoints } = await runHostSmoke(profile, smokeOptions);
       const outcome = lanes.some((lane) => lane.status === "BLOCKED") || monitor !== null && monitorInspection(monitor) !== "inspected" ? "incomplete" : "passed";
-      results.push({ host: profile.name, workspace, runtimeVersions, outcome, completion: "not-assessed", monitor, lanes, commands, endpoints });
+      results.push({ host: profile.name, workspace, runtimeVersions, auxiliaryVm, inference, sessionModel, outcome, completion: "not-assessed", monitor, lanes, commands, endpoints });
       if (!input.json) for (const lane of lanes) process.stdout.write(`${lane.status}\t${profile.name}\t${lane.name}${lane.reason === undefined ? "" : `: ${lane.reason}`}\n`);
     } catch (error) {
       const step = error instanceof SmokeFailure ? error.step : "runtime-or-owned-cleanup";
