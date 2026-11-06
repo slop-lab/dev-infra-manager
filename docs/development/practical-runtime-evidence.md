@@ -12,6 +12,7 @@ manifest, avoiding a self-referential source receipt.
 | Full strict workspace check | PASS | `pnpm workspace:check`, all 76 checked workspace projects, Node 24.22.1 / pnpm 10.13.1 |
 | Affected builds | PASS | host core/contracts, host LLM-router and VM packages |
 | LLM recovery and generic transport/wire | PASS | 5 files / 32 tests: gateway/control-plane HTTP fixtures, real stdio helper processes and frozen CLI-host contract tests; not provider inference or KVM |
+| Follow-up LLM recovery rollback | PASS, source integration | Actual guest endpoint publication followed by a reported failure reproduced lost rollback. Two new regressions prove prior-byte restoration and concurrent-edit preservation; focused attach/recovery selection 19/19, complete LLM owner suite 16 files / 144 tests after building its CP fixture dependencies. No real provider or disposable-host qualification is inferred |
 | Selected-host scenario boundaries | PASS | Latest continuation: 15 files / 61 tests: `pnpm --dir tests exec vitest run scenarios/selected-host --exclude 'scenarios/selected-host/runtimeStdio.test.ts' --no-file-parallelism`; includes artifact-derived profiles and pending question/permission state as well as the preceding lifecycle, application, isolation, cleanup and monitor boundaries |
 | Example verify command | PASS | `node scripts/examples/run.ts examples/features/ordinary-workspace verify`; latest continuation 4 files / 23 tests, a subset of the preceding source checks |
 | Public driver surface | PASS | real terminal help; invalid/missing arguments return JSON `OperatorInputError`, exit 2, without creating resources |
@@ -157,3 +158,31 @@ The remaining coordinator-side input is the approved disposable selected-host
 command surface and small host bindings, not source versions, plugin lists or
 artifact preparation. Separate CP/host VMs, scoped provider/ingress, Incus image
 and immutable Sysbox image must still be exercised through their real boundaries.
+
+## Recovery rollback follow-up
+
+The post-publication regression failed before the fix: a failed repair left the
+guest endpoint changed to the shared channel while its host selection was rolled
+back. Recovery now attempts both selection and guarded snapshot restoration,
+preserves a concurrent guest token edit, and aggregates incomplete rollback
+errors without issuing/revoking principals or rotating credentials. The existing
+snapshot helper owns the token fence; no new migration or retry path was added.
+
+Production fix: `6e841f3ba15037bf25d2bfb6a940e24bf9e2fa0d`. A fresh exact-source
+74-package bundle and facade were built in the private task directory as
+`recovery-packages/` and `recovery-facade/`, version
+`0.10.0-local-d5695584fdbd19e97864d38e9e57ccad8a98f307bd3e8243880c3354dbcaa3e4`.
+Older checkpoint artifacts remain historical and do not contain this fix.
+`recovery-artifact-inputs.json` records every package hash. Rebuilding the owner
+plugin and strict-checking the plugin/tests passed. Initial owner-suite failures
+were missing compiled CP fixture artifacts; after building that closure, all
+144 tests passed without changing their assertions.
+
+The new reviewed core/CLI and enabled agent-tools plugin were activated in the
+already isolated private installation, and the new LLM plugin was installed
+there. Exact versions matched, a public `llm recover` invocation rejected missing
+configuration, and the workspace list remained empty. Its private receipt is
+`recovery-activation-receipt.json`. This is package/CLI activation and invalid-input
+evidence, not running-workspace recovery or full live acceptance. First-failure,
+fixed-after and owner-suite logs are retained privately as `recovery-rollback-*`
+and `recovery-owner-suite*`; they contain only disposable fixture credentials.
