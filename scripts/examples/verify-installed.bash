@@ -23,15 +23,7 @@ if [[ -z "${DIM_EXAMPLE_PACKAGE_BUNDLE:-}" ]]; then
   node scripts/pack-local-packages.ts "$repo_root" "$trial/packages"
   export DIM_EXAMPLE_PACKAGE_BUNDLE="$trial/packages"
 fi
-installer="$(node --input-type=module - "$DIM_EXAMPLE_PACKAGE_BUNDLE" <<'JS'
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-const root = process.argv[2], manifest = JSON.parse(readFileSync(join(root, 'packages.json'), 'utf8'));
-const entry = manifest.packages.find((entry) => entry.name === '@slop-lab/dim-installer');
-if (!entry || entry.version !== '0.10.0') throw new Error('examples require the exact recipe artifact version');
-console.log(join(root, entry.file));
-JS
-)"
+installer="$(node scripts/examples/installer-artifact.ts "$DIM_EXAMPLE_PACKAGE_BUNDLE")"
 npm install --prefix "$trial/facade" --no-save --no-audit --no-fund "$installer"
 export DIM_EXAMPLE_DIM_BIN="$trial/facade/node_modules/.bin/dim"
 export XDG_CONFIG_HOME="$trial/config" XDG_DATA_HOME="$trial/data" XDG_STATE_HOME="$trial/state" XDG_RUNTIME_DIR="$trial/run"
