@@ -8,7 +8,7 @@ export async function verifyAuxiliaryVm(input: {
   readonly workspace: OwnedWorkspace; readonly image: string; readonly challenge: string;
   readonly run: (step: string, args: readonly string[], timeout?: number) => Promise<CommandResult>;
   readonly rejected: (step: string, args: readonly string[]) => Promise<void>;
-}): Promise<void> {
+}): Promise<{ readonly name: string; readonly id: string; readonly image: string }> {
   const name = smokeWorkspaceName("dim-smoke-vm"), root = await mkdtemp(path.join(tmpdir(), "dim-smoke-vm-source-"));
   let id: string | undefined, granted = false, failure: unknown;
   const guest = (...command: string[]) => ["exec", input.workspace.name, "--", ...command];
@@ -39,6 +39,7 @@ export async function verifyAuxiliaryVm(input: {
     if ((await input.run("immediate post-start retained VM artifact", guest("dim-vm", "exec", name, "--", "cat", "/home/dim/acceptance/result"))).stdout !== input.challenge) throw new OperatorInputError("VM did not retain data or immediate guest readiness");
     await input.run("exact VM workspace revocation", ["vm", "revoke", name, input.workspace.id]); granted = false;
     await input.rejected("revoked VM access denial", guest("dim-vm", "status", name));
+    return { name, id, image: input.image };
   } catch (error) {
     failure = error;
     throw new OperatorInputError(`auxiliary VM scenario failed for ${name} (${id ?? "identity unavailable; no unproven VM was discarded"}): ${error instanceof Error ? error.message : "unknown failure"}`, { cause: error });

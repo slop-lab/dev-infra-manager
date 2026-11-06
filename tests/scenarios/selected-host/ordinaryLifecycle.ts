@@ -5,7 +5,7 @@ import type { CommandResult } from "../web-lifecycle/process.js";
 import { OperatorInputError, type OwnedWorkspace } from "./config.js";
 import { guestNestedData } from "./nestedData.js";
 
-export type OrdinaryRuntimeVersions = { readonly node: string; readonly kernel: string; readonly nestedDocker: string };
+export type OrdinaryRuntimeVersions = { readonly node: string; readonly kernel: string; readonly nestedDocker: string; readonly image: string };
 
 export async function verifyOrdinaryLifecycle(input: {
   readonly workspace: OwnedWorkspace;
@@ -36,7 +36,8 @@ export async function verifyOrdinaryLifecycle(input: {
     if (!shown || typeof shown !== "object" || !("resources" in shown) || !shown.resources || typeof shown.resources !== "object"
       || !("cpuCount" in shown.resources) || shown.resources.cpuCount !== "1" || !("memory" in shown.resources) || shown.resources.memory !== "2g"
       || !("pidsLimit" in shown.resources) || shown.resources.pidsLimit !== "1024") throw new OperatorInputError("resource readback differs from requested limits");
-    const versions = { node: (await run("guest Node version", ["exec", workspace.name, "--", "node", "--version"])).stdout.trim(),
+    if (!("image" in shown) || typeof shown.image !== "string") throw new OperatorInputError("workspace image readback is unavailable");
+    const versions = { image: shown.image, node: (await run("guest Node version", ["exec", workspace.name, "--", "node", "--version"])).stdout.trim(),
       kernel: (await run("guest kernel version", ["exec", workspace.name, "--", "uname", "-r"])).stdout.trim(),
       nestedDocker: (await run("private Docker version", ["exec", workspace.name, "--", "docker", "version", "--format", "{{.Server.Version}}"])).stdout.trim() };
     if (!/^v(?:24|26)\.\d+\.\d+$/.test(versions.node) || !/^\d+\.\d+[a-zA-Z0-9.+_-]*$/.test(versions.kernel)
