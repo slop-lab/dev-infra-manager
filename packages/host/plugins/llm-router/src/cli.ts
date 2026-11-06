@@ -58,7 +58,8 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
       const selected = await selectWorkspaceGateway(workspace, context, configFile);
       try { await deployRouterHelpers(workspace, context); await repairRouterConnectionEndpoint(workspace, context); }
       catch (error) {
-        const rollback = await Promise.allSettled([selected.rollback(), restoreRouterConnection({ workspace, context, previous, token: retained.token })]);
+        const expected = JSON.stringify({ ...retained, endpoint: workspaceServiceEndpoint("llm-router") });
+        const rollback = await Promise.allSettled([selected.rollback(), restoreRouterConnection({ workspace, context, previous, expected })]);
         const failures = rollback.flatMap((result) => result.status === "rejected" ? [result.reason] : []);
         if (failures.length) throw new AggregateError([error, ...failures], "LLM recovery failed and rollback was incomplete");
         throw error;
@@ -75,7 +76,7 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
   const issued = await issuePrincipal(config.connection, scope, context.signal);
   let attachment: Awaited<ReturnType<typeof createAttachment>> | undefined;
   let selected: Awaited<ReturnType<typeof selectWorkspaceGateway>> | undefined;
-  let deliveryAttempted = false;
+  let deliveredConnection: string | undefined;
   try {
     attachment = await createAttachment(config, scope, issued);
     const connection = { schemaVersion: 1, workspaceId: workspace.id, projectId: scope.projectId, principalId: issued.principalId,
@@ -84,9 +85,9 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
     await validateGatewayAdoption(config, workspace, previousConnection);
     await deployRouterHelpers(workspace, context);
     // Credentials are committed only after every public helper asset succeeds.
-    deliveryAttempted = true;
+    deliveredConnection = JSON.stringify(connection);
     await deployGuestIntegration({ service: context.service, workspace, signal: context.signal }, {
-      name: "llm-router-connection", files: [{ path: ".config/dim/llm-router.json", contents: JSON.stringify(connection), mode: 0o600 }]
+      name: "llm-router-connection", files: [{ path: ".config/dim/llm-router.json", contents: deliveredConnection, mode: 0o600 }]
     });
     const previous = await attachment.activate();
     selected = undefined;
@@ -96,7 +97,7 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
   } catch (error) {
     const rollback = await Promise.allSettled([
       ...(selected === undefined ? [] : [selected.rollback()]),
-      ...(!deliveryAttempted || attachment === undefined ? [] : [restoreRouterConnection({ workspace, context, previous: previousConnection, token: attachment.token })]),
+      ...(deliveredConnection === undefined ? [] : [restoreRouterConnection({ workspace, context, previous: previousConnection, expected: deliveredConnection })]),
       ...(attachment === undefined ? [] : [attachment.remove()]),
       revokePrincipal(config.connection, scope, AbortSignal.timeout(5000)),
     ]);
