@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "name": "ordinary-workspace-real-use",
+  "plugins": {
+    "host": ["@slop-lab/dim-host-plugin-agent-tools@0.10.0", "@slop-lab/dim-host-plugin-llm-router@0.10.0", "@slop-lab/dim-host-plugin-external-urls@0.10.0", "@slop-lab/dim-host-plugin-vm@0.10.0"],
+    "controlPlane": []
+  },
+  "repositories": [],
+  "commands": {
+    "verify": {"argv": ["bash", "scripts/verify.bash"]},
+    "dev": {"argv": ["bash", "scripts/dev.bash"]}
+  }
+}
