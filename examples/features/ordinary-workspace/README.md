@@ -23,6 +23,53 @@ The recipe's fast `verify` stage proves parser, isolation and local HTTP boundar
 behavior only. Remove `DIM_SMOKE_PREFLIGHT_ONLY` for the explicit real-use journey;
 that is not run by ordinary source CI.
 
+The recipe also declares `verify-vm`, so the existing installed examples runner
+actually invokes this smoke instead of omitting it. That stage rejects
+`DIM_SMOKE_PREFLIGHT_ONLY=1`: provisioning or preflight alone is not VM acceptance.
+The separate-VM harness still owns separate control-plane and workspace-host VMs;
+this recipe neither replaces them with containers nor implicitly selects a host.
+
+### Prepare from reviewed artifacts and small host bindings
+
+Instead of hand-authoring source hashes, versions, plugin lists, workspace names
+and SSH keys in a full profile, supply `DIM_SMOKE_BINDINGS` and
+`DIM_EXAMPLE_PACKAGE_BUNDLE`. The latter is the existing source-build bundle
+containing `packages.json` and `.dim-source-state`. For example:
+
+```json
+{
+  "schemaVersion": 1,
+  "hosts": [{
+    "name": "disposable-host",
+    "source": "/srv/reviewed/dim-source",
+    "ingress": "shared",
+    "llm": {"configFile": "/private/host/gateway.json", "project": "smoke", "route": "default"},
+    "vm": {"image": "REVIEWED_64_HEX_INCUS_FINGERPRINT"}
+  }]
+}
+```
+
+The repository on each selected host must contain the bundle's source commit;
+an ordinary seed at another commit can explicitly set `workspaceSourceSha`.
+Only explicit names in this file are selected. Gateway config paths refer to
+files already on their selected host, not files copied into an agent container.
+The generator validates the same full profile contract, creates a fresh test
+SSH key and owner-only profile in a temporary directory, then removes those
+local inputs when the existing smoke exits. It does not provision provider
+authentication, approve ingress or configure Incus.
+
+```sh
+DIM_SMOKE_BINDINGS=/absolute/private/bindings.json \
+DIM_EXAMPLE_PACKAGE_BUNDLE=/absolute/reviewed/packages \
+  node scripts/examples/run.ts examples/features/ordinary-workspace verify-vm
+```
+
+The stock separate-VM gate requires these real bindings to be provisioned for
+its installed host before the recipe can pass. Missing bindings are an explicit
+failed prerequisite, not a skipped recipe or live qualification. A pre-existing
+complete `DIM_SMOKE_CONFIG` with explicit `DIM_SMOKE_HOSTS` remains the direct
+entry point for coordinator-prepared acceptance fixtures.
+
 The normal workspace discovery and built-in `dim-environment` skill identify
 available owner clients. The smoke uses those same `dim-workspace`, `dim-vm`,
 OpenCode and `dim-expose` surfaces, not hidden host sockets or operator tokens.

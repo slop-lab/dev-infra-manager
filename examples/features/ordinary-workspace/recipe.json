@@ -8,6 +8,7 @@
   "repositories": [],
   "commands": {
     "verify": {"argv": ["bash", "scripts/verify.bash"]},
-    "dev": {"argv": ["bash", "scripts/dev.bash"]}
+    "dev": {"argv": ["bash", "scripts/dev.bash"]},
+    "verify-vm": {"argv": ["bash", "scripts/verify-vm.bash"]}
   }
 }
