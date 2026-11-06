@@ -11,7 +11,7 @@ Run inside the DIM workspace, then: just verify examples-vm
 On the selected DIM host, prepare an explicitly KVM-enabled workspace:
   dim installer install plugin @slop-lab/dim-host-plugin-kvm@0.10.0
   dim kvm configure
-  dim create SOURCE dim-verify --runtime container-kvm --cpus 4 --memory 12g --pids 8192
+  dim create SOURCE dim-verify --runtime container-kvm --cpus 4 --memory 20g --pids 8192
 
 Inside that workspace, install the verification tools if missing:
   bash scripts/dev.bash setup-vm
@@ -63,7 +63,7 @@ finally:
     const mountedLimit = readFileSync("/sys/fs/cgroup/memory.max", "utf8").trim();
     if (/^[1-9][0-9]*$/.test(mountedLimit)) memory = Math.min(memory, Number(mountedLimit));
   } catch { /* Non-cgroup-v2 hosts still use libuv's detected constraint. */ }
-  add("memory budget", memory >= 8 * 1024 ** 3, `${(memory / 1024 ** 3).toFixed(1)} GiB; at least 8 GiB required, 12 GiB recommended for the two VMs`);
+  add("memory budget", memory >= 16 * 1024 ** 3, `${(memory / 1024 ** 3).toFixed(1)} GiB; at least 16 GiB required for separate CP/host VMs and the nested real Incus VM, 20 GiB recommended`);
   try {
     const disk = statfsSync(tmpdir());
     const free = disk.bavail * disk.bsize;
