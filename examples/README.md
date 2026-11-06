@@ -8,6 +8,7 @@ the documentation is not a second plugin inventory.
 | Recipe | What its fast stage establishes | VM journey |
 | --- | --- | --- |
 | [Ordinary development](projects/basic-development/README.md) | Checked-in ordinary repository script | Installed CLI, workspace and script |
+| [Ordinary multi-host real use](features/ordinary-workspace/README.md) | Profile boundaries, real application HTTP schema checks and isolated installation environment | Explicit local/SSH LLM, OpenCode, ingress, auxiliary VM and isolated-update profiles |
 | [Native basic](projects/native-basic-root/README.md) | Declared plugins, real Git import/grant, pinned workflow script | Installed CLI, native source and workspace script |
 | [Multiple repositories](projects/native-multiple-repositories/README.md) | Actual public/private trees and policies, exact CI inputs, isolation and incompatible combination | Both selected repositories and integration script |
 | [Codex](use-cases/codex/README.md) | Real helper installation and workspace identity fencing | Explicit tool/network/account prerequisites |

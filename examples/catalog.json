@@ -7,6 +7,7 @@
   "features/external-url-route-policy",
   "features/shared-ingress",
   "features/shared-execution",
+  "features/ordinary-workspace",
   "features/security-review",
   "features/review-tracing",
   "features/scheduled-review"
