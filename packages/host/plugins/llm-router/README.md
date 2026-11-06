@@ -53,7 +53,7 @@ explicitly. Restoration keeps the private-file and anchored-directory checks.
 
 Attach installs a
 private connection at `~/.config/dim/llm-router.json` and a self-contained
-OpenCode adapter at `~/.config/opencode/plugins/dim-llm-router.js`, preserving
+OpenCode adapter at `~/.config/opencode/plugins/dim-llm-router.mjs`, preserving
 unrelated configuration files. `dim tools run WORKSPACE opencode`, its saved
 continuation, and `dim tools server WORKSPACE` route the native `openai/*`
 provider through the scoped workspace gateway. OMO's role-specific model names,
@@ -126,6 +126,20 @@ workspace, `dim-workspace plugins` advertises the integration and reports
 whether its local connection can reach the gateway. An unattached workspace
 shows setup instructions rather than an active router. Deleting the private
 connection requires an explicit host-side attachment again.
+
+The launch hook registers the explicit ES-module URL while retaining existing
+plugin/model configuration. Pinned OpenCode must not reinterpret this adapter as
+a CommonJS export. Catalogue readiness alone does not prove routed inference.
+
+`DIM_LLM_ROUTER_REQUEST_NONCE` optionally supplies a 32-character lowercase hex
+correlation value for one client run. The adapter sends it only to its gateway;
+the gateway and router validate it and record an admission-linked audit event.
+Authenticated read-only `requests` metadata includes that nonce, immutable
+workspace/project/principal/route and attempt identities plus model/accounting
+state. It is diagnostic metadata, not authorization, idempotency or a quota bypass;
+it is not forwarded upstream. Existing ledger history/schema is preserved.
+Successful file output without matching scoped request accounting is not evidence
+that the DIM router handled model execution.
 
 ## Verify the OpenCode configuration consumer
 
