@@ -90,8 +90,8 @@ async function runVmCommand(args: string[], context: WorkspaceHostPluginContext)
       process.stdout.write(`${JSON.stringify({ name: record.name, id: record.id, running: false })}\n`); return;
     }
     case "start": case "stop": case "discard": {
-      if (!name || args.length !== 2) throw new UserError(`usage: dim vm ${command} NAME`);
-      await service[command](name); process.stdout.write(`${JSON.stringify({ operation: command, name })}\n`); return;
+      if (!name || args.length !== 2 && (args.length !== 4 || argument !== "--expect-id" || !args[3])) throw new UserError(`usage: dim vm ${command} NAME [--expect-id UUID]`);
+      await service[command](name, args[3]); process.stdout.write(`${JSON.stringify({ operation: command, name })}\n`); return;
     }
     case "allocation": {
       const scope = name, target = argument;

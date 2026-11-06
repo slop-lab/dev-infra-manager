@@ -139,6 +139,11 @@ dim vm stop desktop
 dim vm discard desktop
 ```
 
+Automation should pin the UUID returned by creation with
+`dim vm start|stop|discard NAME --expect-id UUID`; the VM lock revalidates the
+identity before mutation so a reused display name cannot be cleaned up as an
+older run's resource.
+
 Auxiliary VMs have separate records and disks and survive workspace discard.
 Access grants bind a core workspace UUID and current initialized/running
 state, so name reuse cannot inherit access. Grant issues a private scoped

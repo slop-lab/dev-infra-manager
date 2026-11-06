@@ -101,4 +101,11 @@ describe("persistent VM scoped access", () => {
     expect(runner.exists).toBe(false);
     await expect(service.read("desktop")).rejects.toThrow("does not exist");
   });
+  it("rejects stale auxiliary VM identity before destructive smoke cleanup", async () => {
+    const { service, runner, record } = await fixture();
+    await expect(service.discard(record.name, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")).rejects.toThrow("identity changed");
+    expect(runner.exists).toBe(true);
+    await service.discard(record.name, record.id);
+    expect(runner.exists).toBe(false);
+  });
 });

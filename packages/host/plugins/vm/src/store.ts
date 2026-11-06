@@ -76,9 +76,9 @@ export class PersistentVmService {
       return next;
     });
   }
-  async discard(name: string): Promise<void> {
+  async discard(name: string, expectedId?: string): Promise<void> {
     await this.lock(name, async () => {
-      const record = await this.read(name);
+      const record = await this.read(name); requireVmIdentity(record, expectedId);
       await this.machines.remove(record, { keepData: false });
       await rm(this.file(name));
     });
