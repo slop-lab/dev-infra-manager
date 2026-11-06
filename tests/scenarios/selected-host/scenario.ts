@@ -1,19 +1,23 @@
 import { request } from "node:http";
 import { request as requestHttps } from "node:https";
 import { randomBytes } from "node:crypto";
-import type { HostProfile } from "./config.js";
-import { ownedPartialWorkspace, ownedWorkspaceName, smokeWorkspaceName, OperatorInputError, SmokeFailure, type OwnedWorkspace } from "./config.js";
-import { runCommand, type CommandResult } from "../web-lifecycle/process.js";
-import { inspectOpenCodeMonitor, parseOmoTeamMetadata, type MonitorEvidence, type OmoTeamMetadata } from "./monitor.js";
+import { ownedPartialWorkspace, ownedWorkspaceName, smokeWorkspaceName, OperatorInputError, SmokeFailure, type HostProfile, type OwnedWorkspace } from "./config.js";
+import type { MonitorEvidence } from "./monitor.js";
 import { authenticatedMonitorClient } from "./monitorClient.js";
 import { monitorInspection } from "./monitorCommand.ts";
 import { cleanupOwnedSmokeWorkspace } from "./cleanup.js";
-import { CandidateCiError, verifyWorkspaceCandidateCi } from "./candidateCi.js";
 import { guestLlmChannelProbe, parseLlmChannelEvidence, parseSshHostKey, parseWorkspaceDiscoveryEvidence } from "./runtimeEvidence.js";
+import { verifyOrdinaryLifecycle, type OrdinaryRuntimeVersions } from "./ordinaryLifecycle.js";
+import { expectSmokeApplication, startSmokeApplication } from "./applicationEndpoint.js";
+import { verifyAuxiliaryVm } from "./auxiliaryVm.js";
+import { inspectConfiguredMonitor } from "./monitorScenario.js";
+import { dim, selectedCommandTracker, type CommandEvidence } from "./selectedCommand.js";
 
 type PluginEntry = { readonly name: string; readonly state?: string; readonly commands: readonly string[] };
 type PreflightResult = { readonly ok: boolean; readonly details: readonly string[] };
-type SmokeOptions = { readonly onProgress?: (step: string, phase: "pass" | "progress" | "incomplete") => void };
+type SmokeOptions = { readonly onProgress?: (step: string, phase: "pass" | "progress" | "incomplete") => void; readonly onCommand?: (evidence: CommandEvidence) => void; readonly onRuntimeVersions?: (versions: OrdinaryRuntimeVersions) => void };
+type EndpointEvidence = { readonly kind: "application" | "coding-agent"; readonly url: string; readonly disposition: "verified-then-discarded" };
+export type SmokeResult = { readonly workspace: OwnedWorkspace; readonly runtimeVersions: OrdinaryRuntimeVersions; readonly monitor: MonitorEvidence | null; readonly commands: readonly CommandEvidence[]; readonly endpoints: readonly EndpointEvidence[]; readonly lanes: readonly { readonly name: string; readonly status: "PASS" | "BLOCKED"; readonly reason?: string }[] };
 
 export async function preflightHost(profile: HostProfile, installedSourceSha: string): Promise<PreflightResult> {
   const details: string[] = [];
@@ -50,12 +54,16 @@ export async function preflightHost(profile: HostProfile, installedSourceSha: st
   return { ok: ready, details };
 }
 
-export async function runHostSmoke(selected: HostProfile, options: SmokeOptions = {}): Promise<MonitorEvidence | null> {
+export async function runHostSmoke(selected: HostProfile, options: SmokeOptions = {}): Promise<SmokeResult> {
   const profile = { ...selected, workspace: smokeWorkspaceName(selected.workspace) };
+  const { checked, commands } = selectedCommandTracker(options.onCommand);
+  const endpoints: EndpointEvidence[] = [];
   let owned: OwnedWorkspace | undefined;
   let attemptedCreate = false, branchAttempted = false, candidateCommit: string | undefined;
   const startedAt = Date.now(), branch = `smoke/${randomBytes(16).toString("hex")}`;
   let monitorEvidence: MonitorEvidence | null = null;
+  let runtimeVersions: OrdinaryRuntimeVersions;
+  const lanes: Array<{ readonly name: string; readonly status: "PASS" | "BLOCKED"; readonly reason?: string }> = [];
   const progress = (step: string, phase: "pass" | "progress" | "incomplete" = "pass"): void => { options.onProgress?.(step, phase); };
   try {
     attemptedCreate = true;
@@ -65,6 +73,10 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     ]);
     owned = ownedWorkspaceName(profile.workspace, json(created.stdout, "created workspace"));
     progress("workspace creation");
+    runtimeVersions = await verifyOrdinaryLifecycle({ workspace: owned, run: (step, args, timeout) => checked(profile, step, args, timeout) });
+    options.onRuntimeVersions?.(runtimeVersions);
+    progress("ordinary identity, binary copy, resources, stop/start/idempotent-start/restart and retained data");
+    lanes.push({ name: "ordinary-workspace-lifecycle-copy-resources", status: "PASS" });
 
     const sourceSha = (await checked(profile, "fresh source checkout", ["exec", owned.name, "--", "git", "rev-parse", "HEAD"])).stdout.trim();
     if (sourceSha !== profile.workspaceSourceSha) throw new SmokeFailure(profile.name, "candidate checkout", "checkout did not match the fresh workspace source SHA");
@@ -82,21 +94,24 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     const token = randomBytes(16).toString("hex");
     await checked(profile, "guest Git write", ["exec", owned.name, "--", "sh", "-c",
       "printf '%s\\n' \"$1\" > selected-host-input.txt && git add selected-host-input.txt && git commit -m 'selected-host smoke write' >/dev/null", "smoke", token]);
-    await checked(profile, "guest Git fetch", ["exec", owned.name, "--", "git", "fetch", "origin"]);
-    candidateCommit = (await checked(profile, "guest commit identity", ["exec", owned.name, "--", "git", "rev-parse", "HEAD"])).stdout.trim();
-    if (!/^[a-f0-9]{40}$/.test(candidateCommit)) throw new SmokeFailure(profile.name, "guest commit identity", "invalid candidate commit");
-    branchAttempted = true;
-    await checked(profile, "guest ordinary-branch push", ["exec", owned.name, "--", "git", "push", "origin", `HEAD:refs/heads/${branch}`]);
-    await checked(profile, "guest remote branch readback", ["exec", owned.name, "--", "git", "fetch", "origin", `refs/heads/${branch}`]);
-    const fetchedCommit = (await checked(profile, "guest fetched identity", ["exec", owned.name, "--", "git", "rev-parse", "FETCH_HEAD"])).stdout.trim();
-    if (candidateCommit !== fetchedCommit) throw new SmokeFailure(profile.name, "guest Git read/write", "remote readback did not match the exact pushed commit");
-    progress("actual guest Git fetch, ordinary-branch push and exact readback");
-    const available = parsePlugins((await checked(profile, "CI helper discovery", ["exec", owned.name, "--", "dim-workspace", "plugins"])).stdout);
-    if (!available.some((plugin) => plugin.name === "native-git" && plugin.state === "ready" && plugin.commands.includes("dim-ci"))) throw new SmokeFailure(profile.name, "CI helper discovery", "the scoped candidate CI helper is not advertised");
-    progress("scoped candidate CI helper discovered");
-    try { await verifyWorkspaceCandidateCi({ workspace: owned.name, candidateRef: `refs/heads/${branch}`, candidateCommit,
-      run: (step, args, timeout) => checked(profile, step, args, timeout), progress }); }
-    catch (error) { if (error instanceof CandidateCiError) throw new SmokeFailure(profile.name, "workspace candidate CI", error.message); throw error; }
+    if (profile.source.startsWith("dim://")) {
+      const { CandidateCiError, verifyWorkspaceCandidateCi } = await import("./candidateCi.js");
+      await checked(profile, "guest Git fetch", ["exec", owned.name, "--", "git", "fetch", "origin"]);
+      candidateCommit = (await checked(profile, "guest commit identity", ["exec", owned.name, "--", "git", "rev-parse", "HEAD"])).stdout.trim();
+      if (!/^[a-f0-9]{40}$/.test(candidateCommit)) throw new SmokeFailure(profile.name, "guest commit identity", "invalid candidate commit");
+      branchAttempted = true;
+      await checked(profile, "guest ordinary-branch push", ["exec", owned.name, "--", "git", "push", "origin", `HEAD:refs/heads/${branch}`]);
+      await checked(profile, "guest remote branch readback", ["exec", owned.name, "--", "git", "fetch", "origin", `refs/heads/${branch}`]);
+      const fetchedCommit = (await checked(profile, "guest fetched identity", ["exec", owned.name, "--", "git", "rev-parse", "FETCH_HEAD"])).stdout.trim();
+      if (candidateCommit !== fetchedCommit) throw new SmokeFailure(profile.name, "guest Git read/write", "remote readback did not match the exact pushed commit");
+      progress("actual guest Git fetch, ordinary-branch push and exact readback");
+      const available = parsePlugins((await checked(profile, "CI helper discovery", ["exec", owned.name, "--", "dim-workspace", "plugins"])).stdout);
+      if (!available.some((plugin) => plugin.name === "native-git" && plugin.state === "ready" && plugin.commands.includes("dim-ci"))) throw new SmokeFailure(profile.name, "CI helper discovery", "the scoped candidate CI helper is not advertised");
+      progress("scoped candidate CI helper discovered");
+      try { await verifyWorkspaceCandidateCi({ workspace: owned.name, candidateRef: `refs/heads/${branch}`, candidateCommit,
+        run: (step, args, timeout) => checked(profile, step, args, timeout), progress }); }
+      catch (error) { if (error instanceof CandidateCiError) throw new SmokeFailure(profile.name, "workspace candidate CI", error.message); throw error; }
+    }
 
     await checked(profile, "owned workspace LLM attachment", ["llm", "attach", owned.name, "--config", profile.llm.configFile, "--project", profile.llm.project, "--route", profile.llm.route]);
     await checked(profile, "owned workspace OpenCode setup", ["tools", "setup", owned.name, "opencode"], 10 * 60_000);
@@ -105,7 +120,8 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     for (const required of profile.requiredPlugins) {
       const plugin = guestPlugins.find(({ name }) => name === required);
       if (plugin === undefined) throw new SmokeFailure(profile.name, "guest plugin discovery", `${required} is not delivered`);
-      if (plugin.state !== (required === "kvm" ? "unconfigured" : "ready")) {
+      const unattached = required === "kvm" || required === "vm" || required === "native-git" && !profile.source.startsWith("dim://");
+      if (plugin.state !== (unattached ? "unconfigured" : "ready")) {
         throw new SmokeFailure(profile.name, "guest plugin discovery", "a required guest plugin is not ready for the owned workspace");
       }
     }
@@ -119,6 +135,18 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     const llmToken = (await checked(profile, "LLM tool result", ["exec", owned.name, "--", "cat", "selected-host-llm.txt"])).stdout.trim();
     if (llmToken !== token) throw new SmokeFailure(profile.name, "LLM tool result", "the model did not reproduce the private challenge through a file tool");
     progress("actual LLM and file-tool execution");
+    lanes.push({ name: "scoped-real-llm-model-and-tool", status: "PASS" });
+    const connectionFingerprint = ["exec", owned.name, "--", "node", "-e", 'const fs=require("node:fs"),crypto=require("node:crypto"),path=require("node:path");const value=JSON.parse(fs.readFileSync(path.join(process.env.HOME,".config/dim/llm-router.json"),"utf8"));process.stdout.write(crypto.createHash("sha256").update(JSON.stringify([value.workspaceId,value.projectId,value.principalId,value.token])).digest("hex"))'];
+    const beforeBinding = (await checked(profile, "durable LLM binding fingerprint", connectionFingerprint)).stdout;
+    await checked(profile, "attached workspace interruption", ["restart", owned.name, "--expect-id", owned.id, "--json"], 180_000);
+    if ((await checked(profile, "recovered LLM binding fingerprint", connectionFingerprint)).stdout !== beforeBinding) throw new SmokeFailure(profile.name, "LLM recovery", "workspace restart rotated the retained LLM identity");
+    parseLlmChannelEvidence((await checked(profile, "recovered scoped LLM channel", ["exec", owned.name, "--", "node", "-e", guestLlmChannelProbe], 60_000)).stdout);
+    lanes.push({ name: "scoped-llm-restart-recovery", status: "PASS" });
+    const applicationUrl = await startSmokeApplication({ workspace: owned, ingress: profile.ingress, challenge: token,
+      run: (step, args) => checked(profile, step, args) });
+    progress("distinct application endpoint: real shared-ingress schema and challenge response");
+    endpoints.push({ kind: "application", url: applicationUrl, disposition: "verified-then-discarded" });
+    lanes.push({ name: "application-endpoint", status: "PASS" });
 
     await checked(profile, "OpenCode server start", ["tools", "server", owned.name], 180_000);
     const server = record(json((await checked(profile, "OpenCode server status", ["tools", "server", owned.name, "status", "--json"])).stdout, "server status"), "server status");
@@ -129,25 +157,26 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     const url = text(exposure["url"], "exposure URL");
     await expectAuthenticationBoundary(url);
     progress("shared ingress credential boundary");
+    const credentialOutput = await checked(profile, "OpenCode public capability credentials", ["tools", "console", "invoke", "server.credentials", "--input", JSON.stringify({ workspace: owned.name, workspaceId: owned.id }), "--json"]);
+    const credentials = record(json(credentialOutput.stdout, "server credentials"), "server credentials");
+    const client = authenticatedMonitorClient(url, { username: text(credentials["username"], "server username"), password: text(credentials["password"], "server password") }, "/workspace");
+    const sessionIds = array(await client.get("/session", 30_000), "authenticated OpenCode sessions").map((session) => text(record(session, "OpenCode session")["id"], "session id"));
+    if (sessionIds.length === 0) throw new SmokeFailure(profile.name, "OpenCode session", "real model/tool run produced no authenticated session");
+    progress("authenticated OpenCode session through shared ingress");
+    endpoints.push({ kind: "coding-agent", url, disposition: "verified-then-discarded" });
+    lanes.push({ name: "opencode-authenticated-session-ingress", status: "PASS" });
+    if (profile.vm !== undefined) {
+      await verifyAuxiliaryVm({ workspace: owned, image: profile.vm.image, challenge: token,
+        run: (step, args, timeout) => checked(profile, step, args, timeout),
+        rejected: async (step, args) => { const result = await dim(profile.name, args, true); if (result.exitCode === 0) throw new SmokeFailure(profile.name, step, "revoked operation unexpectedly succeeded"); } });
+      lanes.push({ name: "auxiliary-kvm-vm", status: "PASS" });
+    } else lanes.push({ name: "auxiliary-kvm-vm", status: "BLOCKED", reason: "Profile requires vm plugin, reviewed Incus host/image and explicit operator provisioning authority" });
 
     if (profile.monitor !== undefined) {
-      const monitorDeadline = Date.now() + profile.monitor.deadlineSeconds * 1000;
       progress("OpenCode monitor: reading bounded public session metadata", "progress");
-      const credentialOutput = await checked(profile, "OpenCode monitor credentials", ["tools", "console", "invoke", "server.credentials", "--input", JSON.stringify({ workspace: owned.name, workspaceId: owned.id }), "--json"], Math.max(1, monitorDeadline - Date.now()));
-      const credentials = record(json(credentialOutput.stdout, "server credentials"), "server credentials");
-      const username = text(credentials["username"], "server credential username");
-      const password = text(credentials["password"], "server credential password");
-      let team: OmoTeamMetadata = { source: "unavailable", enabled: null, teams: [], truncated: false, unreadable: false };
-      if (profile.monitor.omoMetadataPath !== undefined) {
-        const rawTeam = await checked(profile, "optional OMO metadata adapter", ["exec", owned.name, "--", "cat", profile.monitor.omoMetadataPath], Math.max(1, monitorDeadline - Date.now()));
-        team = parseOmoTeamMetadata(json(rawTeam.stdout, "OMO metadata"), profile.monitor.maxSessions, profile.monitor.maxSessions);
-      }
-      monitorEvidence = await inspectOpenCodeMonitor({
-        parentSessionId: profile.monitor.parentSessionId, directory: profile.monitor.directory,
-        maxSessions: profile.monitor.maxSessions, maxDepth: profile.monitor.maxDepth, maxRequests: profile.monitor.maxRequests,
-        recentMessages: profile.monitor.recentMessages, staleMinutes: profile.monitor.staleMinutes,
-        deadlineMs: Math.max(1, monitorDeadline - Date.now()), requestTimeoutMs: profile.monitor.requestTimeoutSeconds * 1_000
-      }, team, authenticatedMonitorClient(url, { username, password }, profile.monitor.directory));
+      monitorEvidence = await inspectConfiguredMonitor({ profile: profile.monitor, workspace: owned.name, endpoint: url,
+        credentials: { username: text(credentials["username"], "server username"), password: text(credentials["password"], "server password") },
+        run: (step, args, timeout) => checked(profile, step, args, timeout) });
       progress(`OpenCode monitor: ${monitorEvidence.state}; discovery=${monitorEvidence.discovery}; completion=${monitorEvidence.completion}`, monitorInspection(monitorEvidence) === "inspected" ? "pass" : "incomplete");
     }
 
@@ -156,7 +185,7 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     const retained = (await checked(profile, "recreated Git state", ["exec", owned.name, "--", "cat", "selected-host-llm.txt"])).stdout.trim();
     if (retained !== token) throw new SmokeFailure(profile.name, "recreated Git state", "guest data was not retained");
     const rediscovered = parsePlugins((await checked(profile, "recreated helper discovery", ["exec", owned.name, "--", "dim-workspace", "plugins"])).stdout);
-    if (!rediscovered.some((plugin) => plugin.name === "native-git" && plugin.state === "ready" && plugin.commands.includes("dim-ci"))) throw new SmokeFailure(profile.name, "recreated helper discovery", "native Git helper did not reconnect after recreation");
+    if (profile.source.startsWith("dim://") && !rediscovered.some((plugin) => plugin.name === "native-git" && plugin.state === "ready" && plugin.commands.includes("dim-ci"))) throw new SmokeFailure(profile.name, "recreated helper discovery", "native Git helper did not reconnect after recreation");
     parseLlmChannelEvidence((await checked(profile, "recreated shared service channel HTTP", ["exec", owned.name, "--", "node", "-e", guestLlmChannelProbe], 60_000)).stdout);
     const recreatedSshHostKey = parseSshHostKey((await checked(profile, "recreated SSH host key", ["exec", owned.name, "--", "dim-workspace-ssh", "host-key"])).stdout);
     if (recreatedSshHostKey !== sshHostKey) throw new SmokeFailure(profile.name, "recreated SSH host key", "persistent SSH host identity changed");
@@ -165,7 +194,11 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
         requiredPlugins: profile.requiredPlugins });
     if (recreatedDiscovery.generation !== discovery.generation) throw new SmokeFailure(profile.name, "recreated generic workspace discovery", "workspace bridge generation changed without an installed source change");
     await waitForAuthenticationBoundary(url);
+    await expectSmokeApplication(applicationUrl, token);
+    const recoveredSessions = array(await client.get("/session", 30_000), "recovered authenticated sessions").map((session) => text(record(session, "OpenCode session")["id"], "session id"));
+    if (!sessionIds.every((id) => recoveredSessions.includes(id))) throw new SmokeFailure(profile.name, "OpenCode recovery", "authentication or saved sessions did not survive recreation");
     progress("recreate, reconnect, helper rediscovery, shared-channel HTTP, SSH identity and retained data");
+    lanes.push({ name: "recreation-and-service-reconnection", status: "PASS" });
   } finally {
     if (owned === undefined && attemptedCreate) {
       const partial = await dim(profile.name, ["show", profile.workspace, "--json"], true);
@@ -181,19 +214,7 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
       progress("exact owned cleanup");
     }
   }
-  return monitorEvidence;
-}
-
-async function checked(profile: HostProfile, step: string, args: readonly string[], timeoutMs = 120_000): Promise<CommandResult> {
-  let result: CommandResult;
-  try { result = await dim(profile.name, args, true, timeoutMs); }
-  catch { throw new SmokeFailure(profile.name, step, "selected-host transport, output bound or deadline failed; inspect private host diagnostics"); }
-  if (result.exitCode !== 0) throw new SmokeFailure(profile.name, step, `command exited ${result.exitCode}; inspect this selected host interactively`);
-  return result;
-}
-
-function dim(host: string, args: readonly string[], acceptFailure: boolean, timeoutMs = 120_000): Promise<CommandResult> {
-  return runCommand("dim", ["--host", host, ...args], { acceptFailure, timeoutMs });
+  return { workspace: owned, runtimeVersions, monitor: monitorEvidence, lanes, commands, endpoints };
 }
 
 function parsePlugins(output: string): readonly PluginEntry[] {
@@ -211,7 +232,7 @@ function parsePlugins(output: string): readonly PluginEntry[] {
 async function expectAuthenticationBoundary(urlValue: string): Promise<void> {
   const url = new URL(urlValue);
   const client = url.protocol === "https:" ? requestHttps : url.protocol === "http:" ? request : undefined;
-  if (client === undefined) throw new OperatorInputError("shared ingress returned a non-HTTP URL");
+  if (client === undefined || url.username || url.password || url.search || url.hash) throw new OperatorInputError("shared ingress must return a credential-free HTTP(S) URL");
   const status = await new Promise<number>((resolve, reject) => {
     const call = client(url, { method: "GET", signal: AbortSignal.timeout(30_000) }, (response) => { response.resume(); resolve(response.statusCode ?? 0); });
     call.once("error", reject); call.end();
