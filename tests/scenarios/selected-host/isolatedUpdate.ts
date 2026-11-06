@@ -18,7 +18,7 @@ export async function verifyIsolatedInstallationUpdate(profile: IsolatedUpdatePr
   await mkdir(home, { mode: 0o700 });
   const env = isolatedEnvironment(root, home), run = createInstallCommand(env), name = smokeWorkspaceName("dim-smoke-update");
   let owned: OwnedWorkspace | undefined, completed = false, failure: unknown;
-  const facade = (entry: string, args: readonly string[]) => checked(run, process.execPath, [entry, ...args]);
+  const facade = (entry: string, args: readonly string[]) => checked(run, entry, args);
   try {
     const source = path.join(root, "source"); await mkdir(source);
     await checked(run, "git", ["init", "--initial-branch=main", source]);
