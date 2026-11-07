@@ -70,12 +70,12 @@ export async function handleWorkspaceCandidateCi(context: RepositoryExtensionCon
         const status = await publishedStatus({ runtime: currentRuntime, request: stored, reviewId: completed.reviewId });
         if (evidenceSuffix === undefined) return { status };
         if (!evidenceClient || stored.generationId !== runtime.expectedGenerationId || status.status.state === "stale") return;
-        const target = await resolveAuthoritativeNativeRepositoryTarget(currentRuntime, { projectId, repositoryId,
-          ...(stored.protectedRef === undefined ? {} : { protectedRef: stored.protectedRef }) });
+        const target = await currentEvidenceTarget(currentRuntime, stored);
+        if (target === undefined) return;
         const evidence = await workspaceCiEvidence({ client: evidenceClient, target, request: stored, reviewId: completed.reviewId, suffix: evidenceSuffix });
         // Network reads do not extend authority: revalidate the reviewed candidate and policy afterward.
-        const final = await publishedStatus({ runtime: { ...runtime, authoritativeTargetProofs: new Map() }, request: stored, reviewId: completed.reviewId });
-        return final.status.state === "stale" || evidence === undefined ? undefined : { evidence };
+        const final = await currentEvidenceTarget({ ...runtime, authoritativeTargetProofs: new Map() }, stored);
+        return final === undefined || evidence === undefined ? undefined : { evidence };
       });
       await context.authorizeWorkspaceLease(request, { projectId, repositoryId });
       if (result === undefined) sendNotFound(response);
@@ -157,6 +157,22 @@ async function publishedStatus(input: { readonly runtime: GitCiRuntime; readonly
   const scopedStatus = request.generationId === runtime.expectedGenerationId ? status : { ...status, state: "stale" as const, reason: "request-generation-stale" };
   return { schemaVersion: 1, requestId: request.requestId, candidateRef: request.candidateRef, generationId: request.generationId, currentGenerationId: runtime.expectedGenerationId,
     candidateCommit: request.candidateCommit, candidateTree: request.candidateTree, protectedRef: target.currentHead.protectedRef, reviewId, status: scopedStatus };
+}
+
+/** Status is diagnostic; removed CI or changed policy must independently revoke evidence reads. */
+async function currentEvidenceTarget(runtime: GitCiRuntime, request: StoredRequest) {
+  if (request.generationId !== runtime.expectedGenerationId) return;
+  const selector = { projectId: request.projectId, repositoryId: request.repositoryId,
+    ...(request.protectedRef === undefined ? {} : { protectedRef: request.protectedRef }) };
+  const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, selector);
+  if (!Object.hasOwn(target.imported.policy.extensions, "git-ci") || target.imported.policyDigest !== request.policyDigest
+    || target.currentHead.commit !== request.expectedProtectedHead) return;
+  await assertAuthoritativeNativeReviewRefs({ gitExecutable: runtime.gitExecutable, gitIdentity: runtime.gitIdentity,
+    repository: target.repository, signal: AbortSignal.timeout(30_000), protectedRef: target.currentHead.protectedRef,
+    proposalRef: request.candidateRef, expectedProtectedHead: request.expectedProtectedHead,
+    candidateCommit: request.candidateCommit, candidateTree: request.candidateTree });
+  await assertAuthoritativeNativeRepositoryTargetCurrent({ runtime: { ...runtime, authoritativeTargetProofs: new Map() }, selector, target });
+  return target;
 }
 
 async function optionalRequest(file: string): Promise<StoredRequest | undefined> {

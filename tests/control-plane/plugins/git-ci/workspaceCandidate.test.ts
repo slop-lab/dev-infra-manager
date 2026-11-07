@@ -10,6 +10,9 @@ import { addCandidateCommit, nativeBundleReviewFixture, publishedReviewEnvelopes
 import { result, slot } from "../../../contracts/ci/executionFixture.js";
 import { authoritativePolicy } from "../git-repositories/authoritativeNativeCandidateFixture.js";
 import { gitPolicy } from "../../../support/git-policy.js";
+import { parseRepositoryPolicy } from "@slop-lab/gs-repository-contracts";
+import { authorization as importerAuthorization } from "../git-repositories/nativeRootImportFinalizeFixture.js";
+import { z } from "zod";
 
 afterEach(cleanupFinalizeFixtures);
 
@@ -17,7 +20,7 @@ it("reads failed candidate jobs, logs and artifacts only through the owning work
   const details: Map<string, object> = new Map();
   const payload = Buffer.from('{"failure":"expected test failure"}\n'), artifactId = createHash("sha256").update("failure.json").digest("hex");
   const queryCredential = { username: "workspace-evidence-query", password: Buffer.alloc(32, 99).toString("base64url") };
-  let manifest: object | undefined, wrongGeneration = false;
+  let manifest: object | undefined, wrongGeneration = false, onQuery: (() => Promise<void>) | undefined;
   const reads: string[] = [];
   const scheduler = createServer(async (request, response) => {
     if (request.method === "POST") { request.resume(); response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end("{}"); return; }
@@ -27,6 +30,7 @@ it("reads failed candidate jobs, logs and artifacts only through the owning work
     const event = /^\/v1\/jobs\/by-event\/([0-9a-f]{64})$/.exec(request.url ?? "");
     let body: unknown;
     if (event) {
+      const during = onQuery; onQuery = undefined; await during?.();
       const detail = details.get(event[1]!);
       body = { jobs: detail === undefined ? [] : [wrongGeneration ? { ...detail, job: { ...Reflect.get(detail, "job"), generationId: "f".repeat(64) } } : detail] };
     } else if (request.url?.endsWith("/artifacts")) body = manifest;
@@ -75,6 +79,35 @@ it("reads failed candidate jobs, logs and artifacts only through the owning work
     expect(await (await fetch(`${own}/jobs/${executionId}/logs`, { headers })).json()).toMatchObject({ result: { result: "failure", completion: { exitCode: 1 }, logs: { stdout: { base64: payload.toString("base64") } } } });
     expect(await (await fetch(`${own}/jobs/${executionId}/artifacts`, { headers })).json()).toMatchObject({ artifacts: [{ id: artifactId }] });
     expect(Buffer.from(await (await fetch(`${own}/jobs/${executionId}/artifacts/${artifactId}`, { headers })).arrayBuffer())).toEqual(payload);
+    const policyEndpoint = `${fixture.service.origin}/v1/projects/project-a/repositories/root/policy`;
+    const policyHeaders = { authorization: importerAuthorization, "x-dim-generation-id": generationId, "content-type": "application/json" };
+    const policyState = async () => {
+      const response = await fetch(policyEndpoint, { headers: policyHeaders }); expect(response.status).toBe(200);
+      return z.object({ policy: z.unknown(), policyDigest: z.string(), currentHead: z.object({ commit: z.string() }) }).parse(await response.json());
+    };
+    const originalPolicy = parseRepositoryPolicy((await policyState()).policy);
+    const changePolicy = async (policy: unknown) => {
+      const before = await policyState();
+      const updated = await fetch(policyEndpoint, { method: "POST", headers: policyHeaders, body: JSON.stringify({ schemaVersion: 1,
+        expectedPolicyDigest: before.policyDigest, expectedProtectedHead: before.currentHead.commit, policy }) });
+      expect(updated.status, await updated.clone().text()).toBe(200);
+    };
+    // Removed CI is a revocation, not permission to expose historical execution evidence.
+    const { "git-ci": _ci, ...withoutCi } = originalPolicy.extensions;
+    await changePolicy(gitPolicy(withoutCi));
+    const beforeDenied = reads.length;
+    const removed = await fetch(`${own}/jobs`, { headers });
+    expect([404, 409]).toContain(removed.status); expect(await removed.text()).not.toContain(executionId);
+    expect(reads).toHaveLength(beforeDenied);
+    await changePolicy(originalPolicy);
+    // Revoke policy while the scoped adapter is awaiting its private scheduler read.
+    onQuery = () => changePolicy(gitPolicy(withoutCi));
+    const revokedDuring = await fetch(`${own}/jobs/${executionId}/artifacts/${artifactId}`, { headers });
+    expect([404, 409]).toContain(revokedDuring.status); expect(await revokedDuring.text()).not.toContain("expected test failure");
+    await changePolicy(originalPolicy);
+    await changePolicy(gitPolicy({ ...originalPolicy.extensions, "git-ci": { ciRepositoryIds: ["root"], requiredJobs: [] } }));
+    expect([404, 409]).toContain((await fetch(`${own}/jobs`, { headers })).status);
+    await changePolicy(originalPolicy);
     const foreign = await issueWorkspaceLease(fixture.service.origin, fixture.repositoryId, Buffer.alloc(32, 17).toString("base64url"));
     for (const path of ["/jobs", `/jobs/${executionId}/logs`, `/jobs/${executionId}/artifacts/${artifactId}`]) {
       expect((await fetch(`${own}${path}`, { headers: { authorization: `Basic ${Buffer.from(`${foreign.username}:${foreign.password}`).toString("base64")}` } })).status).toBe(404);
