@@ -15,6 +15,15 @@ import {
   type GitCiPlan
 } from "../../../../packages/gs/ci/src/plan-store.js";
 
+// Exercise the real eviction/attestation path without creating 1,024 disk-backed reviews.
+// Only this file's cache capacity changes; all cache methods and byte bounds stay real.
+vi.mock("../../../../packages/gs/ci/src/plan-projection-cache.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../../packages/gs/ci/src/plan-projection-cache.js")>();
+  return { ...actual, BoundedProjectionCache: class<Key, Value> extends actual.BoundedProjectionCache<Key, Value> {
+    constructor(maximumEntries: number, maximumBytes: number) { super(Math.min(maximumEntries, 2), maximumBytes); }
+  } };
+});
+
 const roots: string[] = [];
 
 afterEach(async () => {
@@ -125,7 +134,7 @@ it("does not let a paused warm hit resurrect an evicted projection", async () =>
   });
   const warm = readVerifiedGitCiDeliveryProjection(fixture.repository, source);
   await warmPaused.promise;
-  for (let index = 1; index <= 1_024; index += 1) {
+  for (let index = 1; index <= 2; index += 1) {
     await readVerifiedGitCiDeliveryProjection(fixture.repository, await reviewSource(fixture, index));
   }
   const readsBeforeRetry = bodyReads;
@@ -137,7 +146,7 @@ it("does not let a paused warm hit resurrect an evicted projection", async () =>
 
   // Then
   expect(bodyReads).toBe(readsBeforeRetry + 1);
-}, 60_000);
+});
 
 type ProjectionFixture = {
   readonly repository: string;

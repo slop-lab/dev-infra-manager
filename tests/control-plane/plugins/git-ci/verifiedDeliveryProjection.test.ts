@@ -23,6 +23,15 @@ import {
 import { nativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";
 import { decodeDimLegacyReviewEnvelope } from "../../../../packages/gs/review-contracts/src/dim-legacy-codec.js";
 
+// Exercise the real eviction/attestation path without creating 1,024 disk-backed reviews.
+// Only this file's cache capacity changes; all cache methods and byte bounds stay real.
+vi.mock("../../../../packages/gs/ci/src/plan-projection-cache.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../../packages/gs/ci/src/plan-projection-cache.js")>();
+  return { ...actual, BoundedProjectionCache: class<Key, Value> extends actual.BoundedProjectionCache<Key, Value> {
+    constructor(maximumEntries: number, maximumBytes: number) { super(Math.min(maximumEntries, 2), maximumBytes); }
+  } };
+});
+
 const roots: string[] = [];
 
 afterEach(async () => {
@@ -108,7 +117,7 @@ describe("verified Git CI delivery projection", () => {
     await readVerifiedGitCiDeliveryProjection(fixture.repository, source);
     const { reviewId: _reviewId, createdAt: _createdAt, workspaceId: _workspaceId,
       proposalRef: _proposalRef, ...baseIdentity } = fixture.review.review;
-    for (let index = 1; index <= 1_024; index += 1) {
+    for (let index = 1; index <= 2; index += 1) {
       const workspaceId = Buffer.alloc(32);
       workspaceId.writeUInt32BE(index, 28);
       const encodedWorkspaceId = workspaceId.toString("base64url");
@@ -132,7 +141,7 @@ describe("verified Git CI delivery projection", () => {
 
     // When / Then
     await expect(readVerifiedGitCiDeliveryProjection(fixture.repository, source)).rejects.toThrow(/plan|version|changed/i);
-  }, 60_000);
+  });
 
   it("rejects a non-private Git CI plan directory", async () => {
     // Given
