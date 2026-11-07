@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { requirePracticalReport } from "./requiredReport.ts";
+import { requireIncusForwarding } from "./fixtureNetwork.ts";
 
 const [root, sourceSha, sourceTree] = process.argv.slice(2);
 if (!root?.startsWith("/") || !sourceSha || !/^[a-f0-9]{40}$/.test(sourceSha) || !sourceTree || !/^[a-f0-9]{40}$/.test(sourceTree)) throw new Error("absolute evidence root and exact source commit/tree required");
@@ -18,5 +19,8 @@ for (const binding of [value.artifacts.before, value.artifacts.after]) {
     || !("packageCount" in binding) || binding.packageCount !== 74) throw new Error("required complete artifact closure is malformed");
 }
 if (!("incus" in value) || !value.incus || typeof value.incus !== "object" || !("hostMachineId" in value.incus) || value.incus.hostMachineId !== host
-  || !("imageType" in value.incus) || value.incus.imageType !== "virtual-machine" || !("kvmProbe" in value.incus) || value.incus.kvmProbe !== "KVM_CREATE_VM") throw new Error("required Incus preparation is not tied to the actual host VM");
+   || !("imageType" in value.incus) || value.incus.imageType !== "virtual-machine" || !("kvmProbe" in value.incus) || value.incus.kvmProbe !== "KVM_CREATE_VM") throw new Error("required Incus preparation is not tied to the actual host VM");
+if (!("forwarding" in value.incus) || !("forwardingCleanup" in value) || value.forwardingCleanup !== "exact-owned-rules-removed") throw new Error("owned Incus forwarding or cleanup receipt is missing");
+const forwarding = requireIncusForwarding(value.incus.forwarding, { machine: host, sourceSha });
+if (forwarding.inserted.length !== 2) throw new Error("complete owned Incus forwarding preparation is missing");
 console.log(`PASS required practical CI receipt for exact source=${sourceSha}; deterministic protocol/tool fixture, external provider qualification NOT ASSESSED`);

@@ -3,6 +3,7 @@ import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { userInfo } from "node:os";
 import { runCommand } from "../../web-lifecycle/process.ts";
+import { cleanupIncusForwarding, incusPackages, prepareIncusForwarding } from "./fixtureNetwork.ts";
 
 const [output, image, imageSha, machine] = process.argv.slice(2), repository = resolve(import.meta.dirname, "../../../..");
 if (!output?.startsWith("/") || !image?.startsWith("/") || !imageSha || !/^[a-f0-9]{64}$/.test(imageSha)
@@ -14,7 +15,9 @@ const incus = (...args: string[]) => run("sudo", ["incus", "--force-local", "--p
 const sourceSha = await run("git", ["rev-parse", "HEAD"]);
 await run("test", ["-c", "/dev/kvm"]);
 await run("sudo", ["apt-get", "update"]);
-await run("sudo", ["apt-get", "install", "-y", "incus", "qemu-system-x86", "qemu-utils", "ovmf", "build-essential"]);
+await run("sudo", ["apt-get", "install", "-y", ...incusPackages]);
+await run("genisoimage", ["--version"]);
+await run("test", ["-x", "/usr/bin/mkisofs"]);
 const probe = join(output, "kvm-probe");
 await writeFile(`${probe}.c`, '#include <fcntl.h>\n#include <linux/kvm.h>\n#include <sys/ioctl.h>\n#include <unistd.h>\nint main(void){int f=open("/dev/kvm",O_RDWR|O_CLOEXEC|O_NOFOLLOW);if(f<0||ioctl(f,KVM_GET_API_VERSION,0)!=12)return 2;int v=ioctl(f,KVM_CREATE_VM,0);if(v<0)return 3;close(v);close(f);return 0;}\n', { mode: 0o600, flag: "wx" });
 await run("cc", ["-O2", "-Wall", "-Wextra", "-Werror", "-o", probe, `${probe}.c`]); await run("sudo", [probe]);
@@ -25,6 +28,11 @@ await run("sudo", ["usermod", "-aG", "incus-admin,kvm,docker", "dim"]);
 await run("sudo", ["incus", "project", "create", "practical-ci", "-c", "features.images=true", "-c", "features.profiles=true", "-c", "features.networks=false"]);
 await run("sudo", ["incus", "storage", "create", "practical-ci", "dir"]);
 await run("sudo", ["incus", "network", "create", "practical-ci", "ipv4.address=10.211.42.1/24", "ipv4.nat=true", "ipv6.address=none"]);
+const identity = { machine, sourceSha }, execute = (file: string, args: readonly string[]) => runCommand(file, args, { acceptFailure: true, timeoutMs: 30_000 });
+const forwarding = await prepareIncusForwarding(identity, execute);
+let prepared = false;
+try {
+await writeFile(join(output, "forwarding.json"), JSON.stringify(forwarding), { mode: 0o600, flag: "wx" });
 await writeFile(join(output, "metadata.yaml"), `architecture: x86_64\ncreation_date: ${Math.floor(Date.now() / 1000)}\nproperties:\n  description: DIM test-only pinned Ubuntu CI seed\n  os: Ubuntu\n  release: noble\n`, { mode: 0o600, flag: "wx" });
 await run("tar", ["-cJf", join(output, "metadata.tar.xz"), "-C", output, "metadata.yaml"]);
 await incus("image", "import", join(output, "metadata.tar.xz"), image, "--alias", "practical-base");
@@ -64,10 +72,15 @@ const published: unknown = JSON.parse(await incus("query", `/1.0/images/${alias.
 if (!published || typeof published !== "object" || !("fingerprint" in published) || typeof published.fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(published.fingerprint)
   || !("type" in published) || published.type !== "virtual-machine") throw new Error("prepared Incus image has no immutable VM fingerprint");
 await incus("delete", "practical-ci-image-builder");
-await run("sudo", ["systemd-run", "--unit=dim-practical-budget", "--property=Delegate=yes", "--property=CPUAccounting=yes", "--property=MemoryAccounting=yes", "--property=TasksAccounting=yes", "--property=RuntimeMaxSec=10800", "/usr/bin/sleep", "10800"]);
+await run("sudo", ["systemd-run", "--unit=dim-practical-budget", "--property=Delegate=yes", "--property=DelegateSubgroup=supervisor", "--property=CPUAccounting=yes", "--property=MemoryAccounting=yes", "--property=TasksAccounting=yes", "--property=RuntimeMaxSec=10800", "/usr/bin/sleep", "10800"]);
 const group = await run("systemctl", ["show", "dim-practical-budget.service", "--property=ControlGroup", "--value"]);
 if (!/^\/system\.slice\/dim-practical-budget\.service$/.test(group)) throw new Error("fixture cgroup delegation identity mismatch");
 const cgroupRoot = "/sys/fs/cgroup" + group;
+const subgroup = await run("systemctl", ["show", "dim-practical-budget.service", "--property=DelegateSubgroup", "--value"]);
+const keeper = await run("systemctl", ["show", "dim-practical-budget.service", "--property=MainPID", "--value"]);
+if (subgroup !== "supervisor" || !/^[1-9][0-9]*$/.test(keeper)
+  || (await readFile(cgroupRoot + "/cgroup.procs", "utf8")).trim() !== ""
+  || (await readFile(cgroupRoot + "/supervisor/cgroup.procs", "utf8")).trim() !== keeper) throw new Error("fixture budget keeper must occupy only its delegated supervisor subgroup before enabling controllers");
 await run("sudo", ["sh", "-c", 'printf "+cpu +memory +pids\\n" > "$1/cgroup.subtree_control"', "ci-budget", cgroupRoot]);
 const budget = join(output, "budget-root.json"); await writeFile(budget, JSON.stringify({ schemaVersion: 1, project: "practical-ci", incusSocket: "/var/lib/incus/unix.socket", cgroupRoot, qemuExecutable: await realpath("/usr/bin/qemu-system-x86_64") }), { mode: 0o600, flag: "wx" });
 await run("sudo", ["bash", join(repository, "packages/host/plugins/vm/scripts/install-budget-helper.bash"), await realpath(process.execPath), budget, "dim"]);
@@ -75,7 +88,9 @@ await run("sudo", ["systemctl", "daemon-reload"]); await run("sudo", ["systemctl
 await writeFile(join(output, "host.json"), JSON.stringify({ schemaVersion: 1, project: "practical-ci", storagePool: "practical-ci", network: "practical-ci", guest: { cpuCount: 2, memory: "2GiB", disk: "16GiB" },
   cgroupRoot, budgetHelper: "/usr/local/bin/dim-vm-budget", incusSocket: "/var/lib/incus/unix.socket" }), { mode: 0o600, flag: "wx" });
 await writeFile(join(output, "image.json"), JSON.stringify({ schemaVersion: 1, sourceSha, hostMachineId: machine, baseImageSha256: imageSha, imageFingerprint: published.fingerprint, imageType: published.type, nodeSha256: nodeSha,
-  kvmProbe: "KVM_CREATE_VM", incusVersion: await run("incus", ["--version"]), nodeVersion: process.versions.node, fixture: "real-incus-kvm" }), { mode: 0o600, flag: "wx" });
+  kvmProbe: "KVM_CREATE_VM", incusVersion: await run("incus", ["--version"]), nodeVersion: process.versions.node, fixture: "real-incus-kvm", forwarding }), { mode: 0o600, flag: "wx" });
 const manager = await runCommand("systemctl", ["is-active", "--quiet", "user@1001.service"], { acceptFailure: true });
 if (manager.exitCode === 0) await run("sudo", ["systemctl", "restart", "user@1001.service"]);
 console.log(`prepared real Incus/KVM fixture image=${published.fingerprint}; subsequent acceptance must use a refreshed SSH login`);
+prepared = true;
+} finally { if (!prepared) await cleanupIncusForwarding(forwarding, identity, execute); }

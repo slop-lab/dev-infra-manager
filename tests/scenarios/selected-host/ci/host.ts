@@ -9,6 +9,7 @@ import { runCommand } from "../../web-lifecycle/process.ts";
 import { fixtureModel } from "./provider.ts";
 import { requirePracticalReport } from "./requiredReport.ts";
 import { fixtureArtifactIdentity } from "./artifacts.ts";
+import { cleanupIncusForwarding } from "./fixtureNetwork.ts";
 
 const repository = resolve(import.meta.dirname, "../../../.."), facade = process.env.DIM_EXAMPLE_DIM_BIN, bundle = process.env.DIM_EXAMPLE_PACKAGE_BUNDLE,
   data = process.env.DIM_DATA_HOME, prefix = process.env.DIM_INSTALL_PREFIX, setup = process.env.DIM_EXAMPLE_REMOTE_SETUP, imageTag = process.env.DIM_EXAMPLE_WORKSPACE_IMAGE;
@@ -41,6 +42,13 @@ await command(["llm", "prepare", gateway, "--control-plane", "http://127.0.0.1:1
 const gatewayLog = await (await import("node:fs/promises")).open(join(root, "gateway.log"), "wx", 0o600);
 const server = spawn(dim, ["--host", "local", "llm", "serve", join(gateway, "gateway.json")], { env, stdio: ["ignore", gatewayLog.fd, gatewayLog.fd] });
 let ssh: Awaited<ReturnType<typeof realSshFixture>> | undefined;
+let forwardingCleaned = false;
+const cleanupForwarding = async () => {
+  const forwarding: unknown = JSON.parse(await readFile("/home/dim/dim/practical-host/forwarding.json", "utf8"));
+  await cleanupIncusForwarding(forwarding, { sourceSha, machine: (await readFile("/etc/machine-id", "utf8")).trim() },
+    (file, args) => runCommand(file, args, { acceptFailure: true, timeoutMs: 30_000 }));
+  forwardingCleaned = true;
+};
 try {
   const remote: Record<string, string> = { PATH: `${join(prefix, "bin")}:${process.env.PATH ?? "/usr/bin:/bin"}`, DIM_WORKSPACE_IMAGE: image };
   for (const name of ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "DIM_CONFIG_PATH", "DIM_DATA_HOME", "DIM_STATE_ROOT", "DIM_MANAGED_STATE_ROOT", "DIM_INSTALL_PREFIX"]) {
@@ -66,11 +74,14 @@ try {
   if (after.sourceSha !== sourceSha || after.sourceTree !== sourceTree || before.closureSha256 === after.closureSha256) throw new Error("practical fixture artifacts do not bind the exact distinct reviewed sources");
   const target = process.env.DIM_PRACTICAL_CI_RECEIPT;
   if (!target?.startsWith("/")) throw new Error("required practical receipt output is missing");
+  await cleanupForwarding();
   await writeFile(target, JSON.stringify({ schemaVersion: 1, status: "PASS", sourceSha, sourceTree, artifactManifestSha256: after.manifestSha256, artifacts: { before, after }, image, incus: prepared,
-    providerFixture: "TEST-ONLY deterministic protocol/tool acceptance; provider/account qualification NOT ASSESSED", publicEntry: { link: dim, target: expectedPublic }, report }), { mode: 0o600, flag: "wx" });
+    providerFixture: "TEST-ONLY deterministic protocol/tool acceptance; provider/account qualification NOT ASSESSED", publicEntry: { link: dim, target: expectedPublic }, forwardingCleanup: "exact-owned-rules-removed", report }), { mode: 0o600, flag: "wx" });
   console.log("PASS required practical local + normal public SSH + scoped router accounting + fresh owned session + shared HTTP + Incus + isolated continuity");
 } finally {
+  try {
   await ssh?.close();
   if (server.exitCode === null && server.signalCode === null) { const closed = once(server, "close"); server.kill("SIGTERM"); await closed; }
   await gatewayLog.close();
+  } finally { if (!forwardingCleaned) await cleanupForwarding(); }
 }
