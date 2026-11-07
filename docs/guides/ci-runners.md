@@ -72,6 +72,13 @@ Single-repository jobs use the same layout. Execution diagnostics and
 joint-job results remain Project-private through existing operator/query roles;
 there is no automatic public artifact export.
 
+Artifact capture currently covers CI executions, not the scheduler's non-CI
+tasks. Its file and byte limits bound each job; they do not bound the total
+retained state volume. Published artifacts survive service restart, with no
+automatic expiration or operator prune command yet. Plan storage accordingly;
+retention and deletion belong to execution storage, independently of repository
+workflow interpretation and merge policy.
+
 ## Configure capacity
 
 The control-plane facade retains its `nativeGit` and `execution` deployment
