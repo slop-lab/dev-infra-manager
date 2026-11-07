@@ -7,7 +7,8 @@ it.each([100, 23])("keeps package setup under the exit trap and returns bootstra
   const source = await readFile(new URL("../../../../packages/host/plugins/execution-worker/src/ubuntu-hardware-runner-assets/guest-run.bash", import.meta.url), "utf8");
   const supervisor = await readFile(new URL("../../../../packages/host/plugins/execution-worker/src/ubuntu-hardware-runner-assets/supervisor.ts", import.meta.url), "utf8");
   expect(source).toContain("chmod 0755 /run/dim");
-  expect(source).toContain("runuser -u dim -- test -x /run/dim/run-job");
+  expect(source).toContain("runuser -u dim -- test -r /run/dim/run-job");
+  expect(source).toContain("--property=TasksMax=@DIM_PIDS@ /bin/bash --noprofile --norc /run/dim/run-job");
   expect(source).not.toContain("https://");
   expect(supervisor).toContain("package_update: false"); expect(supervisor).not.toContain("packages:");
   expect(source.indexOf("trap finish EXIT")).toBeLessThan(source.indexOf("apt_status=100"));

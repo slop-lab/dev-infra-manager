@@ -85,12 +85,12 @@ cd -- "$(cat /run/dim/job/working-directory)"
 exec /bin/bash --noprofile --norc /run/dim/job/script
 JOB
 chmod 0555 /run/dim/run-job
-runuser -u dim -- test -x /run/dim/run-job || {
-  echo "hardware job path is not traversable by dim" >&2
-  stat --format='hardware path mode=%a uid=%u gid=%g path=%n' /run /run/dim /run/dim/run-job >&2
-  findmnt --noheadings --output TARGET,OPTIONS --target /run/dim/run-job >&2
+stat --format='hardware path mode=%a uid=%u gid=%g path=%n' /run /run/dim /run/dim/run-job
+findmnt --noheadings --output TARGET,OPTIONS --target /run/dim/run-job
+runuser -u dim -- test -x /run && runuser -u dim -- test -x /run/dim && runuser -u dim -- test -r /run/dim/run-job || {
+  echo "hardware job path is not readable/traversable by dim" >&2
   exit 2
 }
 runuser -u dim -- test -r /run/dim/job/script || { echo "hardware job script is not readable by dim" >&2; exit 2; }
 runuser -u dim -- test -w /workspace/.dim-ci-artifacts || { echo "hardware artifacts are not writable by dim" >&2; exit 2; }
-systemd-run --unit=dim-hardware-candidate --wait --pipe --uid=dim --property=TasksMax=@DIM_PIDS@ /run/dim/run-job
+systemd-run --unit=dim-hardware-candidate --wait --pipe --uid=dim --property=TasksMax=@DIM_PIDS@ /bin/bash --noprofile --norc /run/dim/run-job
