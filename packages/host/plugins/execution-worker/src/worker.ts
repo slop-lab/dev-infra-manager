@@ -18,13 +18,18 @@ import { ExecutionServiceUnavailableError, isTaskAssignment, parseAssignment, ty
 import type { ExecutionBackend } from "./backend.js";
 
 type Journal = { requestId: string; assignment?: WorkerAssignment;
-  root?: NativeHostPrivateRootIdentity; pendingResult?: import("@slop-lab/dim-contracts-ci/aggregate").ExecutionResult; result?: WorkerResult };
+  root?: NativeHostPrivateRootIdentity; pendingResult?: import("@slop-lab/dim-contracts-ci/aggregate").ExecutionResult;
+  artifactUploadDeadlineAt?: number; result?: WorkerResult };
 export type ExecutionWorkerOptions = { readonly directory: string; readonly client: ExecutionWorkerClient;
   readonly backend?: ExecutionBackend; readonly runner?: StreamingCommandRunner;
   readonly taskHandlers?: readonly ExecutionTaskHandler[];
-  readonly gitEndpoint?: string; readonly gitExecutable?: string; readonly signal: AbortSignal };
+  readonly gitEndpoint?: string; readonly gitExecutable?: string; readonly signal: AbortSignal;
+  /** Trusted worker embedding/test input, never a candidate workflow option. */
+  readonly artifactUploadTimeoutMilliseconds?: number };
 /** One host-selected slot, one durable request and owned resource at a time. */
 export async function runExecutionWorker(options: ExecutionWorkerOptions): Promise<void> {
+  const uploadBudget = options.artifactUploadTimeoutMilliseconds ?? 5 * 60_000;
+  if (!Number.isSafeInteger(uploadBudget) || uploadBudget < 1 || uploadBudget > 5 * 60_000) throw new Error("invalid artifact upload deadline budget");
   await privateDirectory(options.directory);
   const guard = await tryAcquireKernelGuard(join(options.directory, "worker.guard"));
   if (guard === undefined) throw new Error("execution worker slot is already running");
@@ -76,19 +81,19 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
         paths.signal, (authority) => verifyAndMaterializeCandidate({ ...paths, authority,
           descriptor: grant.descriptor, descriptorDigest: grant.descriptorDigest })) });
       const pending = join(options.directory,"artifacts-"+assignment.id);
+      journal.artifactUploadDeadlineAt = Date.now() + uploadBudget;
       try {
         await captureExecutionArtifacts({root:root.path,pending,result});
         journal.pendingResult=result; await writeJournal(journalPath,journal);
-        await retry(()=>uploadExecutionArtifacts(options.client,assignment,pending,signal));
+        return await finishArtifactUpload(journal, assignment, pending, signal);
       } finally {
         if (!await root.cleanup(assignment.id,{runner,grant})) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
       }
-      return result;
     });
     journal.result = result;
     await writeJournal(journalPath, journal);
     await retry(() => options.client.report(assignment, result, options.signal));
-    await rm(join(options.directory,"artifacts-"+assignment.id),{recursive:true,force:true});
+    if (!artifactUploadTimedOut(result)) await rm(join(options.directory,"artifacts-"+assignment.id),{recursive:true,force:true});
     await clear();
   }
   async function executeTask(journal: Journal, assignment: TaskAssignment): Promise<void> {
@@ -134,10 +139,18 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
     if (journal.pendingResult !== undefined && journal.result === undefined && !isTaskAssignment(assignment)) {
       const pending=join(options.directory,"artifacts-"+assignment.id);
       try {
-        await withLease(assignment,signal=>retry(()=>uploadExecutionArtifacts(options.client,assignment,pending,signal)));
-        if (journal.root !== undefined && !await new NativeHostPrivateRoot(options.directory,journal.root).cleanup(assignment.id,{runner:options.runner!,grant:assignment.grant!})) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
-        journal.result=journal.pendingResult;await writeJournal(journalPath,journal);
-      } catch(error) { if (!(error instanceof ExecutionLeaseLostError)) throw error; }
+        await withLease(assignment, async signal => {
+          // Old interrupted journals acquire their budget once; subsequent restarts cannot reset it.
+          if (journal.artifactUploadDeadlineAt === undefined) { journal.artifactUploadDeadlineAt = Date.now() + uploadBudget; await writeJournal(journalPath, journal); }
+          const outcome = await finishArtifactUpload(journal, assignment, pending, signal);
+          if (journal.root !== undefined && !await new NativeHostPrivateRoot(options.directory,journal.root).cleanup(assignment.id,{runner:options.runner!,grant:assignment.grant!})) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
+          journal.result=outcome;await writeJournal(journalPath,journal);
+        });
+      } catch(error) {
+        if (!(error instanceof ExecutionLeaseLostError)) throw error;
+        await writeDurableJson(join(pending, "upload-interrupted.json"), { schemaVersion: 1, executionId: assignment.id,
+          deadlineAt: journal.artifactUploadDeadlineAt, reason: "execution-lease-lost", commandResult: journal.pendingResult });
+      }
     }
     if (journal.result !== undefined) {
       await retry(() => options.client.report(assignment, journal.result!, options.signal));
@@ -155,7 +168,7 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
       }
       await retry(() => options.client.recover(assignment, options.signal));
     }
-    if (!isTaskAssignment(assignment)) await rm(join(options.directory,"artifacts-"+assignment.id),{recursive:true,force:true});
+    if (!isTaskAssignment(assignment) && journal.result !== undefined && !artifactUploadTimedOut(journal.result)) await rm(join(options.directory,"artifacts-"+assignment.id),{recursive:true,force:true});
     await clear();
   }
   function taskHandler(assignment: TaskAssignment): ExecutionTaskHandler {
@@ -176,14 +189,35 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
     }
   }
   function claim(requestId: string) { return retry(() => options.client.claim(requestId, options.signal)); }
-  async function retry<T>(operation: () => Promise<T>): Promise<T> {
+  async function finishArtifactUpload(journal: Journal, assignment: WorkerAssignment, pending: string, signal: AbortSignal) {
+    const original = journal.pendingResult!;
+    const remaining = journal.artifactUploadDeadlineAt! - Date.now();
+    const deadline = AbortSignal.timeout(Math.max(1, remaining));
+    const bounded = AbortSignal.any([signal, deadline]);
+    try {
+      if (remaining <= 0) throw new Error("artifact upload deadline expired");
+      await retry(() => uploadExecutionArtifacts(options.client, assignment, pending, bounded), bounded);
+      bounded.throwIfAborted();
+      return original;
+    } catch (error) {
+      // Shutdown and ownership revocation retain their existing recovery semantics.
+      if (signal.aborted || remaining > 0 && !deadline.aborted) throw error;
+      const failure = executionResultSchema.parse({ ...original, result: "failure",
+        finishedAt: new Date(Math.max(Date.now(), Date.parse(original.finishedAt))).toISOString(),
+        completion: { kind: "executor-failure", code: "artifact-upload-timeout" } });
+      await writeDurableJson(join(pending, "upload-timeout.json"), { schemaVersion: 1, executionId: assignment.id,
+        descriptorDigest: original.descriptorDigest, deadlineAt: journal.artifactUploadDeadlineAt, commandResult: original, reportedFailure: failure });
+      return failure;
+    }
+  }
+  async function retry<T>(operation: () => Promise<T>, signal = options.signal): Promise<T> {
     let backoff = 250;
     for (;;) {
-      options.signal.throwIfAborted();
+      signal.throwIfAborted();
       try { return await operation(); }
       catch (error) {
         if (!(error instanceof ExecutionServiceUnavailableError)) throw error;
-        await delay(backoff, undefined, { signal: options.signal });
+        await delay(backoff, undefined, { signal });
         backoff = Math.min(5_000, backoff * 2);
       }
     }
@@ -208,18 +242,26 @@ async function readJournal(path: string): Promise<Journal | undefined> {
     }
     const raw: unknown = JSON.parse(await handle.readFile("utf8"));
     const row = z.object({ requestId: z.string().uuid(), assignment: z.unknown().optional(),
-      root: z.unknown().optional(), pendingResult: executionResultSchema.optional(), result: z.union([executionResultSchema, taskResultSchema]).optional() }).strict().parse(raw);
+      root: z.unknown().optional(), pendingResult: executionResultSchema.optional(), artifactUploadDeadlineAt: z.number().int().nonnegative().safe().optional(),
+      result: z.union([executionResultSchema, taskResultSchema]).optional() }).strict().parse(raw);
     return { requestId: row.requestId, ...(row.assignment === undefined ? {} : { assignment: parseAssignment(row.assignment) }),
       ...(row.root === undefined ? {} : { root: row.root as NativeHostPrivateRootIdentity }),
       ...(row.pendingResult === undefined ? {} : { pendingResult: row.pendingResult }),
+      ...(row.artifactUploadDeadlineAt === undefined ? {} : { artifactUploadDeadlineAt: row.artifactUploadDeadlineAt }),
       ...(row.result === undefined ? {} : { result: row.result }) };
   } finally { await handle.close(); }
 }
 async function writeJournal(path: string, value: Journal): Promise<void> {
+  await writeDurableJson(path, value);
+}
+async function writeDurableJson(path: string, value: unknown): Promise<void> {
   const staging = `${path}.${randomUUID()}`;
   const handle = await open(staging, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
   try { await handle.writeFile(JSON.stringify(value)); await handle.sync(); } finally { await handle.close(); }
   await rename(staging, path); await syncDirectory(join(path, ".."));
+}
+function artifactUploadTimedOut(result: WorkerResult): boolean {
+  return "completion" in result && result.completion.kind === "executor-failure" && "code" in result.completion && result.completion.code === "artifact-upload-timeout";
 }
 async function syncDirectory(path: string): Promise<void> {
   const handle = await open(path, constants.O_RDONLY | constants.O_DIRECTORY);

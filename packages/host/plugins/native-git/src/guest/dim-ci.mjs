@@ -87,7 +87,10 @@ async function main(args) {
         const bytes = Buffer.from(log.base64, "base64");
         if (bytes.length > 64 * 1024 || bytes.toString("base64") !== log.base64) throw new Error("diagnostic log response exceeds its bound");
         const destination = channel === "stderr" ? process.stderr : process.stdout;
-        destination.write(`[DIM CI ${channel}: diagnostic-prefix; retained log unavailable; truncated=${log.truncated}]\n`);
+        /** @type {unknown} */ const completion = Reflect.get(value.result, "completion");
+        const reason = completion && typeof completion === "object" && "code" in completion && typeof completion.code === "string"
+          && /^[a-z0-9-]{1,128}$/.test(completion.code) ? `; reason=${completion.code}` : "";
+        destination.write(`[DIM CI ${channel}: diagnostic-prefix; retained log unavailable; truncated=${log.truncated}${reason}]\n`);
         destination.write(bytes); if (bytes.at(-1) !== 10) destination.write("\n");
       }
     }

@@ -6,10 +6,11 @@ import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
 import { ExecutionStore } from "../../../packages/control-plane/plugins/execution-scheduler/src/store.js";
 import { runExecutionWorker } from "../../../packages/host/plugins/execution-worker/src/worker.js";
-import type { ExecutionWorkerClient } from "../../../packages/host/plugins/execution-worker/src/client.js";
+import { ExecutionServiceUnavailableError, type ExecutionWorkerClient } from "../../../packages/host/plugins/execution-worker/src/client.js";
+import { NativeOutputCollector, executionDiagnostics } from "../../../packages/host/plugins/execution-worker/src/output.js";
 import type { ExecutionBackend } from "../../../packages/host/plugins/execution-worker/src/backend.js";
 import { ProcessRunner } from "../../../packages/host/core/src/runner.js";
-import { generation, event, grant, result, slot, assignment } from "../../contracts/ci/executionFixture.js";
+import { generation, event, grant, result, slot, assignment, hash } from "../../contracts/ci/executionFixture.js";
 import { runAdmission } from "../../../packages/control-plane/plugins/execution-scheduler/src/admission.js";
 import { setTimeout as delay } from "node:timers/promises";
 const roots: string[] = [];
@@ -206,4 +207,78 @@ it("retries durable artifact uploads after worker restart without reexecuting ca
   expect(launches).toBe(1); expect(finalizations).toBe(2); expect(reports).toBe(1);
   await expect(readFile(join(directory,"execution.json"))).rejects.toMatchObject({code:"ENOENT"});
   await expect(readFile(join(directory,"artifacts-"+authorized.id,"manifest.json"))).rejects.toMatchObject({code:"ENOENT"});
+});
+
+it("closes an upload outage at its persisted deadline despite healthy lease renewals and retains local failure proof", async () => {
+  const directory = await root(), stop = new AbortController();
+  const watchdog = setTimeout(() => stop.abort(new Error("upload deadline did not release the worker")), 2_000);
+  const store = new ExecutionStore(join(directory, "scheduler.sqlite3"), generation, 90);
+  try {
+    store.enqueue(event());
+    const selected = store.reserve("worker-a", slot, randomUUID())!, authorized = store.attachGrant(selected.id, grant(selected));
+    let launches = 0, renewals = 0;
+    const bytes = Buffer.alloc(90_000, 37);
+    const backend: ExecutionBackend = {
+      kind: "ordinary-sysbox",
+      async run(input) {
+        launches++;
+        const output = new NativeOutputCollector(100_000, () => { throw new Error("unexpected output limit"); }, join(input.root, "output"));
+        output.stdout.write(bytes); const captured = output.result();
+        return { ...result(authorized.grant!), stdout: captured.stdoutEvidence, stderr: captured.stderrEvidence, logs: executionDiagnostics(captured) };
+      },
+      async cleanup() { return true; },
+    };
+    const client: ExecutionWorkerClient = {
+      async claim() { return authorized; },
+      async renew(assignment) { renewals++; store.renew(assignment.id, assignment.workerId, assignment.slotId, assignment.leaseToken); return 90; },
+      async candidate() { return { username: "candidate", password: "a".repeat(43), expiresAt: Date.now() + executionCandidateLeaseLifetimeMilliseconds }; },
+      async artifactChunk() { throw new ExecutionServiceUnavailableError("artifact storage unavailable", "unavailable"); },
+      async finalizeArtifacts() { throw new Error("unreachable"); },
+      async exchange() { throw new Error("unused"); }, async recover() { throw new Error("must report failure"); },
+      async report(assignment, completed) { store.finish(assignment.id, assignment.workerId, assignment.slotId, assignment.leaseToken, completed); stop.abort(); },
+    };
+    await runExecutionWorker({ directory, client, backend, runner: new ProcessRunner(), gitEndpoint: "http://127.0.0.1:1234",
+      gitExecutable: "/usr/bin/git", signal: stop.signal, artifactUploadTimeoutMilliseconds: 180 });
+    expect(launches).toBe(1); expect(renewals).toBeGreaterThan(1);
+    const finished = store.get(authorized.id);
+    expect(finished.phase).toBe("finished"); expect(finished.result).toMatchObject({ result: "failure", completion: { kind: "executor-failure", code: "artifact-upload-timeout" } });
+    expect(finished.result && "stdout" in finished.result ? finished.result.stdout : undefined).toEqual({ bytes: "90000", sha256: `sha256:${hash(bytes.toString())}`, truncated: false });
+    const pending = join(directory, `artifacts-${authorized.id}`);
+    expect(await readFile(join(pending, hash("logs/stdout.log")))).toEqual(bytes);
+    const receipt = await readFile(join(pending, "upload-timeout.json"), "utf8");
+    expect(JSON.parse(receipt)).toMatchObject({ commandResult: { result: "success" }, reportedFailure: { result: "failure" } });
+    expect(receipt).not.toContain(authorized.leaseToken);
+    await expect(readFile(join(directory, "execution.json"))).rejects.toMatchObject({ code: "ENOENT" });
+    store.enqueue(event("next")); const next = store.reserve("worker-a", slot, randomUUID());
+    expect(next?.id).not.toBe(authorized.id); expect(next?.event.jobName).toBe("next");
+  } finally { clearTimeout(watchdog); store.close(); }
+});
+
+it("does not renew an interrupted artifact upload's deadline or reexecute its candidate after restart", async () => {
+  const directory = await root(), firstStop = new AbortController(), selected = assignment(), authorized = { ...selected, grant: grant(selected) };
+  let launches = 0, uploads = 0, reports = 0;
+  const backend: ExecutionBackend = { kind: "ordinary-sysbox", async run() { launches++; return result(authorized.grant); }, async cleanup() { return true; } };
+  const client: ExecutionWorkerClient = {
+    async claim() { return authorized; }, async renew() { return 90; },
+    async candidate() { return { username: "candidate", password: "a".repeat(43), expiresAt: Date.now() + executionCandidateLeaseLifetimeMilliseconds }; },
+    async artifactChunk() { uploads++; firstStop.abort(); throw new ExecutionServiceUnavailableError("interrupted upload", "unavailable"); },
+    async finalizeArtifacts() {}, async exchange() { throw new Error("unused"); }, async recover() { throw new Error("must report failure"); },
+    async report(_assignment, completed) { reports++; expect(completed).toMatchObject({ result: "failure", completion: { code: "artifact-upload-timeout" } }); },
+  };
+  const common = { directory, client, backend, runner: new ProcessRunner(), gitEndpoint: "http://127.0.0.1:1234", gitExecutable: "/usr/bin/git", artifactUploadTimeoutMilliseconds: 500 };
+  await expect(runExecutionWorker({ ...common, signal: firstStop.signal })).rejects.toBeDefined();
+  const before = JSON.parse(await readFile(join(directory, "execution.json"), "utf8"));
+  expect(before.artifactUploadDeadlineAt).toEqual(expect.any(Number)); expect(before.pendingResult.result).toBe("success");
+  await delay(Math.max(1, before.artifactUploadDeadlineAt - Date.now() + 10));
+  const nextStop = new AbortController();
+  const watchdog = setTimeout(() => nextStop.abort(new Error("restart reset the upload deadline")), 2_000);
+  client.report = async (_assignment, completed) => {
+    reports++; expect(completed).toMatchObject({ result: "failure", completion: { code: "artifact-upload-timeout" } }); nextStop.abort();
+  };
+  try { await runExecutionWorker({ ...common, signal: nextStop.signal, artifactUploadTimeoutMilliseconds: 300_000 }); }
+  finally { clearTimeout(watchdog); }
+  expect(launches).toBe(1); expect(uploads).toBe(1); expect(reports).toBe(1);
+  const receipt = JSON.parse(await readFile(join(directory, `artifacts-${authorized.id}`, "upload-timeout.json"), "utf8"));
+  expect(receipt.deadlineAt).toBe(before.artifactUploadDeadlineAt);
+  expect(receipt.commandResult).toEqual(before.pendingResult);
 });

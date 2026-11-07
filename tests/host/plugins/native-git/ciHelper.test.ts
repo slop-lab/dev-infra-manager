@@ -41,7 +41,7 @@ it("downloads only explicitly selected, digest-verified request evidence to a ne
           sha256: `sha256:${invalidDigest ? "0".repeat(64) : createHash("sha256").update(bytes).digest("hex")}` }] })); return;
     }
     if (request.url === `${prefix}/jobs/${job}/logs`) {
-      response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ result: { logs: {
+      response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ result: { completion: { kind: "executor-failure", code: "artifact-upload-timeout" }, logs: {
         stdout: { base64: Buffer.from("bounded old prefix").toString("base64"), truncated: true },
         stderr: { base64: "", truncated: false },
       } } })); return;
@@ -90,6 +90,7 @@ it("downloads only explicitly selected, digest-verified request evidence to a ne
     expect((await logs(["--tail-bytes", "32"])).stdout).toContain("collection=unavailable");
     missingLog = true;
     expect((await logs()).stdout).toContain("diagnostic-prefix; retained log unavailable; truncated=true");
+    expect((await logs()).stdout).toContain("reason=artifact-upload-timeout");
     expect((await readdir(root)).sort()).toEqual(["git", "selected-proof.bin", "link.bin", "full-log.bin"].sort());
   } finally {
     await new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
