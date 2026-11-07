@@ -40,6 +40,14 @@ is implied by these source changes.
 
 - Repository imports consistently configure `.dim/` review with the connected reviewer, preserve explicit review and CI policies, and report missing review configuration without silently waiving protection. Initial preparation honors the operation deadline, attests the serving generation, and distinguishes explicit rejection from an unconfirmed write without blind retries or discarding immutable import intent.
 - CI source acquisition reports bounded authentication, transport and timeout failure codes without exposing read credentials; failed acquisition remains failed required evidence.
+- Let workspace agents request exact-candidate DIM CI and inspect job status,
+  verified log tails and downloadable failure artifacts through their scoped
+  `dim-ci` integration. Retain bounded full logs and explicitly selected files
+  after runtime cleanup, resume interrupted uploads without rerunning candidate
+  code, and connect the private execution query role during local installation.
+  Offer an explicit Ubuntu hardware execution profile with nested KVM and
+  disk-backed temporary storage for scheduled practical VM validation; ordinary
+  source checks keep their existing lightweight execution path.
 - Add `dim cp` for explicit operator-machine to workspace file transfer through
   local or SSH-selected hosts. Preserve binary streams, require explicit
   recursive and overwrite choices, pin workspace/runtime identity, and reject
