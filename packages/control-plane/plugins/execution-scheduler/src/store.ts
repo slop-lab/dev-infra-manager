@@ -68,6 +68,10 @@ export class ExecutionStore extends TaskStore<ExecutionEvent | TaskEvent, Execut
       eventId: job.event.eventId, executionId: job.id });
     return executionSummary({ ...job, ...(admission === undefined ? {} : { admission }) });
   }
+  byEvent(eventId: string): Execution[] {
+    return this.database.prepare("SELECT id FROM executions WHERE event_id=? AND generation_id=? AND execution_kind NOT LIKE 'task/%' ORDER BY created_at DESC,rowid DESC LIMIT 32")
+      .all(eventId, this.generationId).map(row => parseExecution(this.get(String(row.id))));
+  }
   recentSummaries(): ExecutionSummary[] {
     // Drop task records and large diagnostics in SQLite before decoding CI summaries.
     return this.database.prepare("SELECT id,event_id,generation_id,phase,worker_id,slot_id,request_id,created_at,retry_of,execution_kind,publication,lease_expires_at,json_remove(body,'$.result.logs','$.grant','$.leaseToken','$.profile') AS body FROM executions WHERE execution_kind NOT LIKE 'task/%' ORDER BY created_at DESC,rowid DESC LIMIT 100")

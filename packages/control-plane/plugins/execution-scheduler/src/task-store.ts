@@ -23,6 +23,11 @@ export class TaskStore<E extends SchedulingEvent, P extends object, G extends Sc
       || (parent.mode & 0o022) !== 0) throw new Error("task state directory is not owned");
     const known = new Set([basename(path), `${basename(path)}-wal`, `${basename(path)}-shm`]);
     for (const name of readdirSync(dirname(path))) {
+      if (name === "artifacts") {
+        const artifactRoot = lstatSync(`${dirname(path)}/artifacts`);
+        if (!artifactRoot.isDirectory() || artifactRoot.isSymbolicLink() || artifactRoot.uid !== process.getuid?.() || (artifactRoot.mode & 0o077) !== 0) throw new Error("task artifact directory is invalid");
+        continue;
+      }
       if (!known.has(name)) throw new Error("task state is unsupported; select a fresh task state directory");
       const metadata = lstatSync(`${dirname(path)}/${name}`);
       if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.uid !== process.getuid?.() || metadata.nlink !== 1) {

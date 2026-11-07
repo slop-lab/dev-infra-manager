@@ -3,6 +3,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
+import { ExecutionArtifactStore } from "./artifacts.js";
+import { executionArtifactManifestSchema } from "@slop-lab/dim-contracts-execution";
 import { executionEventSchema } from "@slop-lab/dim-contracts-ci/execution";
 import type { ExecutionServiceConfig } from "./config.js";
 import { ExecutionStore } from "./store.js";
@@ -27,6 +29,7 @@ export function configuredExecutionServer(input: {
   const activation = createHash("sha256").update(input.activationToken).digest("hex");
   const store = new ExecutionStore(join(input.stateDirectory, "executions.sqlite3"), generation,
     config.claimLeaseMilliseconds, input.now);
+  const artifacts = new ExecutionArtifactStore(join(input.stateDirectory, "artifacts"));
   const registry = new WorkerRegistry(store.database, generation, config, store.now);
   const workers = () => registry.workers().map((worker) => ({ id: worker.workerId, token: worker.token,
     slots: worker.slots.map((slot): ScheduledSlot<ExecutionProfile | TaskProfile> => "taskType" in slot
@@ -128,6 +131,21 @@ export function configuredExecutionServer(input: {
       if (isTaskExecution(store.get(id))) throw new ExecutionConflictError("interactive tasks require a fresh issuer session");
       return send(response, 200, summary(store, store.retry(id, body.requestId)));
     }
+    const eventQuery = /^\/v1\/jobs\/by-event\/([^/]{1,300})$/.exec(url.pathname);
+    const artifactQuery = /^\/v1\/jobs\/([0-9a-f-]{36})\/artifacts(?:\/([0-9a-f]{64}))?$/.exec(url.pathname);
+    if (request.method === "GET" && (eventQuery || artifactQuery)) {
+      if (config.credentials.query === undefined || !basic(request, config.credentials.query.username, config.credentials.query.password)) return unauthorized(response);
+      if (request.headers["x-dim-generation-id"] !== generation) return send(response, 409, { error: "CI query generation is stale" });
+      if (eventQuery) return send(response, 200, { jobs: store.byEvent(executionEventSchema.unwrap().shape.eventId.parse(decodeURIComponent(eventQuery[1]!))).map(job => detail(job)) });
+      const id = artifactQuery![1]!, job = store.find(id);
+      if (!job || isTaskExecution(job) || job.generationId !== generation || job.grant === undefined) return send(response, 404, {});
+      const manifest = await artifacts.manifest(id);
+      if (!manifest || manifest.descriptorDigest !== job.grant.descriptorDigest) return send(response, 404, {});
+      if (!artifactQuery![2]) return send(response, 200, manifest);
+      const bytes = await artifacts.bytes(id, artifactQuery![2]!);
+      if (bytes === undefined) return send(response, 404, {});
+      response.writeHead(200, { "Content-Type": "application/octet-stream", "Cache-Control": "no-store", "Content-Length": bytes.length }); response.end(bytes); return;
+    }
     const query = /^\/v1\/jobs(?:\/([0-9a-f-]{36}))?$/.exec(url.pathname);
     if (request.method === "GET" && query) {
       if (config.credentials.query === undefined) return send(response, 404, {});
@@ -136,7 +154,7 @@ export function configuredExecutionServer(input: {
       if (query[1] === undefined) return send(response, 200, store.recentSummaries());
       const job = store.find(query[1]);
       if (!job || isTaskExecution(job)) return send(response, 404, { error: "CI execution was not found" });
-      return send(response, 200, { job: summary(store, job), ...(job.result === undefined ? {} : { result: job.result }) });
+      return send(response, 200, detail(job));
     }
     const registration = registry.authenticateAuthorization(request.headers.authorization);
     const worker = registration === undefined ? undefined : workers().find((candidate) => candidate.id === registration.workerId);
@@ -171,12 +189,27 @@ export function configuredExecutionServer(input: {
       }
       return send(response, 200, assignment);
     }
-    const match = /^\/v1\/executions\/([0-9a-f-]{36})\/(renew|candidate|result|recover|exchange)$/.exec(url.pathname);
+    const match = /^\/v1\/executions\/([0-9a-f-]{36})\/(renew|candidate|result|recover|exchange|artifacts|artifacts-finalize)$/.exec(url.pathname);
     if (request.method !== "POST" || match === null) return send(response, 404, {});
     const id = match[1]!, action = match[2]!;
     const raw = await read(request);
     const body = ownership.passthrough().parse(raw);
     const assignment = store.owned(id, worker.id, body.slotId, body.leaseToken);
+    if (action === "artifacts" || action === "artifacts-finalize") {
+      if (isTaskExecution(assignment) || assignment.grant === undefined || assignment.generationId !== generation
+        || assignment.cancelRequestedAt !== undefined || !["assigned", "running"].includes(assignment.phase)
+        || (assignment.leaseExpiresAt ?? 0) <= store.now()) throw new ExecutionConflictError("artifact lease is no longer current");
+      const upload = ownership.extend({ artifact: z.unknown() }).strict().parse(raw);
+      if (!upload.artifact || typeof upload.artifact !== "object" || Reflect.get(upload.artifact, "descriptorDigest") !== assignment.grant.descriptorDigest) throw new ExecutionConflictError("artifact descriptor mismatch");
+      const authorize = () => {
+        const current = store.owned(id, worker.id, body.slotId, body.leaseToken);
+        if (current.generationId !== generation || current.cancelRequestedAt !== undefined || !["assigned", "running"].includes(current.phase)
+          || (current.leaseExpiresAt ?? 0) <= store.now()) throw new ExecutionConflictError("artifact lease is no longer current");
+      };
+      if (action === "artifacts") await artifacts.chunk(id, upload.artifact, authorize);
+      else await artifacts.finalize(id, executionArtifactManifestSchema.parse(upload.artifact), authorize);
+      return send(response, 200, { accepted: true });
+    }
     if (action === "renew") {
       ownership.strict().parse(raw);
       const renewed = store.renew(id, worker.id, body.slotId, body.leaseToken);
@@ -207,6 +240,9 @@ export function configuredExecutionServer(input: {
       if (assignment.result === undefined) store.published(id, current ? "accepted" : "stale");
     }
     send(response, 200, { accepted: true });
+  }
+  function detail(job: ReturnType<ExecutionStore["get"]>) {
+    return { job: summary(store, job), ...(job.grant === undefined ? {} : { descriptorDigest: job.grant.descriptorDigest }), ...(job.result === undefined ? {} : { result: job.result }) };
   }
   async function publishResults(): Promise<void> {
     while (!shutdown.signal.aborted) {

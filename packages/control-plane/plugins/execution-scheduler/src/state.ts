@@ -10,7 +10,12 @@ const entries = new Set([executionDatabaseName, `${executionDatabaseName}-wal`, 
 export async function inspectExecutionState(directory: string): Promise<{ readonly stateFormat: 102 }> {
   const metadata = await lstat(directory);
   if (!metadata.isDirectory() || metadata.isSymbolicLink()) throw new Error("Execution state path must be a directory");
-  const names = await readdir(directory);
+  const allNames = await readdir(directory);
+  if (allNames.includes("artifacts")) {
+    const stat = await lstat(join(directory, "artifacts"));
+    if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() || (stat.mode & 0o077) !== 0) throw new Error("Execution artifact directory is invalid");
+  }
+  const names = allNames.filter(name => name !== "artifacts");
   if (!names.includes(executionDatabaseName) || names.some((name) => !entries.has(name))) {
     throw new Error("Execution state is unsupported; select a fresh Execution state directory");
   }

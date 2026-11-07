@@ -3,7 +3,8 @@ import { open } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { ciQueryConnectionSchema, type CiQueryConnection } from "@slop-lab/dim-contracts-ci/connections";
-import { createNodeNativeGitAdmissionHttpClient } from "@slop-lab/dim-contracts-git/http";
+import { createHash } from "node:crypto";
+import { executionArtifactManifestSchema, executionArtifactIdSchema, executionArtifactLimits } from "@slop-lab/dim-contracts-execution";
 import { executionSummarySchema, executionDetailSchema } from "@slop-lab/dim-contracts-ci/query";
 
 export async function createCiQueryClient(file: string) {
@@ -18,30 +19,44 @@ export async function createCiQueryClient(file: string) {
       connection = ciQueryConnectionSchema.parse(JSON.parse(await handle.readFile("utf8")));
     } finally { await handle.close(); }
   } catch (error) { throw new Error(`cannot load private CI query connection '${file}'`, { cause: error }); }
-  const http = createNodeNativeGitAdmissionHttpClient();
-  async function request(target: string): Promise<unknown> {
-    let response;
-    try { response = await http.request({ endpoint: connection.endpoint, path: target, method: "GET",
-      generationId: connection.generationId, authorization: `Basic ${Buffer.from(`${connection.credential.username}:${connection.credential.password}`).toString("base64")}`,
-      signal: AbortSignal.timeout(10_000) }); }
-    catch (error) { throw new Error(`CI service is unavailable at ${connection.endpoint}`, { cause: error }); }
-    if (response.statusCode === 409) throw new Error("CI connection generation is stale; finish the control-plane upgrade and reconnect");
-    if (response.statusCode === 404) throw new Error("CI execution was not found");
-    if (response.statusCode === 401) throw new Error("CI query credential was rejected; reconnect the control plane");
-    if (response.statusCode !== 200 || response.contentType !== "application/json" || response.cacheControl !== "no-store") throw new Error("CI query is unavailable");
-    try { return JSON.parse(response.body.toString("utf8")); } catch { throw new Error("CI returned an invalid query response"); }
+  return createExecutionQueryClient(connection);
+}
+/** Private callers supply a validated connection; credentials never appear in returned data. */
+export function createExecutionQueryClient(raw: CiQueryConnection) {
+  const connection = ciQueryConnectionSchema.parse(raw);
+  async function request(target: string, binary = false): Promise<unknown> {
+    const abort = AbortSignal.timeout(30_000);
+    const response = await fetch(connection.endpoint + target, { redirect: "error", signal: abort,
+      headers: { "X-Dim-Generation-Id": connection.generationId, authorization: `Basic ${Buffer.from(`${connection.credential.username}:${connection.credential.password}`).toString("base64")}` } });
+    if (response.status === 409) throw new Error("CI connection generation is stale");
+    if (response.status === 404) throw new Error("CI execution or artifact is unavailable");
+    if (response.status === 401) throw new Error("CI query credential was rejected");
+    if (response.status !== 200 || response.headers.get("cache-control") !== "no-store"
+      || response.headers.get("content-type") !== (binary ? "application/octet-stream" : "application/json")) throw new Error("CI query is unavailable");
+    const maximum = binary ? executionArtifactLimits.fileBytes : 16 * 1024 * 1024;
+    const reader = response.body?.getReader(); if (!reader) throw new Error("CI returned an empty response");
+    const chunks: Buffer[] = []; let size = 0;
+    try { for (;;) { const {done,value} = await reader.read(); if (done) break; size += value.byteLength; if (size > maximum) throw new Error("CI response exceeds its bound"); chunks.push(Buffer.from(value)); } }
+    finally { await reader.cancel().catch(() => {}); }
+    const bytes = Buffer.concat(chunks); return binary ? bytes : JSON.parse(bytes.toString("utf8"));
   }
+  const id = (value: string) => z.string().uuid().parse(value);
+  async function artifacts(executionId: string) { return executionArtifactManifestSchema.parse(await request(`/v1/jobs/${id(executionId)}/artifacts`)); }
   return {
-    async jobs() {
-      const value = z.array(executionSummarySchema).max(100).safeParse(await request("/v1/jobs"));
-      if (!value.success) throw new Error("CI returned invalid execution summaries");
-      return value.data;
+    async jobs() { return z.array(executionSummarySchema).max(100).parse(await request("/v1/jobs")); },
+    async detail(executionId: string) { return executionDetailSchema.parse(await request(`/v1/jobs/${id(executionId)}`)); },
+    async byEvent(eventId: string) {
+      z.string().regex(/^[0-9a-f]{64}$/).parse(eventId);
+      return z.object({jobs:z.array(executionDetailSchema).max(32)}).strict().parse(await request(`/v1/jobs/by-event/${encodeURIComponent(eventId)}`));
     },
-    async detail(id: string) {
-      if (!z.string().uuid().safeParse(id).success) throw new Error("execution ID must be a UUID");
-      const value = executionDetailSchema.safeParse(await request(`/v1/jobs/${id}`));
-      if (!value.success) throw new Error("CI returned an invalid execution detail");
-      return value.data;
+    artifacts,
+    async artifact(executionId: string, artifactId: string): Promise<Buffer> {
+      executionArtifactIdSchema.parse(artifactId);
+      const manifest = await artifacts(executionId), metadata = manifest.artifacts.find(item => item.id === artifactId);
+      if (!metadata) throw new Error("CI artifact is unavailable");
+      const bytes = await request(`/v1/jobs/${id(executionId)}/artifacts/${artifactId}`, true) as Buffer;
+      if (bytes.length !== metadata.bytes || "sha256:" + createHash("sha256").update(bytes).digest("hex") !== metadata.sha256) throw new Error("CI artifact integrity failure");
+      return bytes;
     }
   };
 }

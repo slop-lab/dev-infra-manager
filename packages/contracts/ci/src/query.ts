@@ -13,7 +13,7 @@ export const executionSummarySchema = z.object({ id: state.id, eventId: event.ev
   finishedAt: executionResultSchema.shape.finishedAt.optional()
 }).strict();
 export type ExecutionSummary = z.infer<typeof executionSummarySchema>;
-export const executionDetailSchema = z.object({ job: executionSummarySchema, result: executionResultSchema.optional() }).strict();
+export const executionDetailSchema = z.object({ job: executionSummarySchema, descriptorDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/).optional(), result: executionResultSchema.optional() }).strict();
 
 /** This projection contains no worker lease, execution grant, script or raw diagnostics. */
 export function executionSummary(job: Pick<Execution, "id" | "event" | "phase" | "generationId" | "createdAt" | "workerId" | "slotId" | "publication" | "retryOf" | "cancelRequestedAt">
