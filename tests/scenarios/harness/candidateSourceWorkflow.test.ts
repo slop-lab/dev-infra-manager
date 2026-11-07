@@ -16,13 +16,15 @@ type WorkflowStep = {
 };
 
 type WorkflowJob = {
+  readonly if?: string;
+  readonly name?: string;
   readonly "runs-on"?: string;
   readonly env?: Readonly<Record<string, string>>;
   readonly steps: readonly WorkflowStep[];
 };
 
 type Workflow = {
-  readonly on?: { readonly push?: { readonly branches?: readonly string[]; readonly tags?: readonly string[] }; readonly merge_group?: { readonly branches?: readonly string[] }; readonly pull_request?: unknown };
+  readonly on?: { readonly workflow_dispatch?: { readonly inputs?: { readonly lane?: { readonly options?: readonly string[] } } }; readonly push?: { readonly branches?: readonly string[]; readonly tags?: readonly string[] }; readonly merge_group?: { readonly branches?: readonly string[] }; readonly pull_request?: unknown };
   readonly jobs: Readonly<Record<string, WorkflowJob>>;
   readonly permissions: Readonly<Record<string, string>>;
 };
@@ -83,9 +85,9 @@ describe("candidate source workflows", () => {
 
     // When / Then
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(Object.keys(workflow.jobs).sort()).toEqual(["ordinary", "qemu-kvm", "vm-runtime-acceptance"]);
+    expect(Object.keys(workflow.jobs).sort()).toEqual(["ordinary", "practical-runtime-manual", "qemu-kvm", "vm-runtime-acceptance"]);
     expect(source).toContain("workflow_dispatch:");
-    expect(source.match(/ref: \$\{\{ github\.sha \}\}/g)).toHaveLength(3);
+    expect(source.match(/ref: \$\{\{ github\.sha \}\}/g)).toHaveLength(4);
     expect(source).toContain("just verify native-ordinary-executor-live");
     expect(source).toContain("just verify native-qemu-guest-mechanics-kvm");
     const runtime = workflow.jobs["vm-runtime-acceptance"];
@@ -104,11 +106,31 @@ describe("candidate source workflows", () => {
       });
       const install = job.steps.findIndex((step) => step.run === "pnpm install --frozen-lockfile");
       const build = job.steps.findIndex((step) => step.run === "just build-packages");
-      const gate = job.steps.findIndex((step) => step.run?.startsWith("just verify "));
+      const gate = job.steps.findIndex((step) => step.run?.startsWith("just verify ") || step.run === "bash scripts/checks/examples-vm-smoke.bash");
       expect(install).toBeGreaterThan(-1);
       expect(build).toBeGreaterThan(install);
       expect(gate).toBeGreaterThan(build);
     }
+  });
+
+  it("dispatches practical manually under a distinct non-required name with mandatory canonical exact-tree evidence", async () => {
+    const { source, workflow } = await readWorkflow("integration"), job = workflow.jobs["practical-runtime-manual"];
+    assert(job !== undefined);
+    expect(workflow.on?.workflow_dispatch?.inputs?.lane?.options).toEqual(["ordinary", "qemu-kvm", "vm-runtime", "practical"]);
+    expect(job.if).toBe("${{ github.event_name == 'workflow_dispatch' && inputs.lane == 'practical' }}");
+    expect(job.name ?? "practical-runtime-manual").toBe("practical-runtime-manual");
+    expect(workflow.jobs["examples-vm"]).toBeUndefined();
+    expect(job["runs-on"]).toBe("dim-native-qemu"); expectExactCheckout(job, "${{ github.sha }}");
+    expect(workflow.on?.push).toEqual({ branches: ["main"], tags: ["v*"] });
+    expect(workflow.on?.merge_group?.branches).toEqual(["main"]); expect(workflow.on?.pull_request).toBeUndefined();
+    expect(workflow.jobs["vm-runtime-acceptance"]?.if).toBe("${{ github.event_name == 'merge_group' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.lane == 'vm-runtime') }}");
+    const runtime = job.steps.findIndex((step) => step.run === "bash scripts/checks/examples-vm-smoke.bash");
+    const receipt = job.steps.findIndex((step) => step.run === 'node tests/scenarios/selected-host/ci/verifyEvidence.ts "$DIM_EXAMPLES_VM_LOG_ROOT" "$GITHUB_SHA" "$(git rev-parse \'HEAD^{tree}\')"');
+    expect(runtime).toBeGreaterThan(-1); expect(receipt).toBeGreaterThan(runtime);
+    for (const step of [job.steps[runtime], job.steps[receipt]]) { expect(step?.if).toBeUndefined(); expect(step?.env).toEqual({ DIM_EXAMPLES_VM_LOG_ROOT: "${{ runner.temp }}/dim-practical-runtime-logs" }); }
+    expect(source).not.toMatch(/continue-on-error|\|\| true/);
+    expect(job.steps.filter((step) => step.uses?.startsWith("actions/upload-artifact@")).length).toBe(2);
+    for (const step of job.steps.filter((step) => step.uses?.startsWith("actions/upload-artifact@"))) { expect(step.if).toBe("always()"); expect(step.with?.["if-no-files-found"]).toBe("error"); }
   });
 
   it("uses only reviewed existing action commits with supported Node runtimes", async () => {

@@ -47,7 +47,11 @@ historical specification is not evidence that the current architecture passed.
 
 Required main/premerge/release runtime coverage is declared in
 `.github/required-runtime-checks.json` and executed by the existing trusted
-`examples-vm` and `vm-runtime-acceptance` jobs. A required CI pass means both ran
+`examples-vm` and `vm-runtime-acceptance` jobs. The registered Native integration
+workflow also exposes manual `lane=practical` under the distinct non-required
+`practical-runtime-manual` name. That lane qualifies only its exact-source
+canonical practical receipt and does not replace either required check context.
+A required CI pass means both required jobs ran
 for the exact source and exported validated completion receipts; an absent runner
 is pending, and missing capabilities, bindings, coverage or cleanup fail rather
 than becoming successful skips. Heavy jobs do not run on development pushes.
