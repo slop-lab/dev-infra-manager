@@ -121,6 +121,25 @@ const response = await fetch(`${process.argv[3]}/v1/jobs`, {
 });
 assert.equal(response.status, 200); assert.deepEqual(await response.json(), []);
 JS
+# Readiness and activation do not exercise the Native Git business plugin graph.
+# Connect through the ordinary operator path before accepting these exact images.
+native_port="$(docker port "$native_container" 8080/tcp)"
+node --input-type=module - "$work_dir" "http://$native_port" "http://$execution_port" <<'JS'
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { connectControlPlane } from './packages/control-plane/admin/dist/controlPlaneSetup.js';
+import { createCiQueryClient } from './packages/service-clients/execution/dist/index.js';
+const root = process.argv[2], output = join(root, 'connections');
+const connected = await connectControlPlane(join(root, 'prepared'), {
+  endpoint: process.argv[3], executionEndpoint: process.argv[4], outputDirectory: output
+});
+assert.equal(connected.generationId, await readFile(join(root, 'generation'), 'utf8'),
+  'all live role identities must bind the activated generation');
+const query = await createCiQueryClient(join(output, 'ci-query.json'));
+assert.deepEqual(await query.jobs(), [], 'the exported private query connection must reach the activated scheduler');
+console.log('Native Git live role identities and exported private CI query connection passed.');
+JS
 for container in "$native_container" "$execution_container"; do docker stop --time 15 "$container" >/dev/null; done
 for kind in native execution; do
   if [[ "$kind" == native ]]; then image="$native_image"; state="$native_state"; target=/var/lib/dim-native-git; format=12;
@@ -136,4 +155,4 @@ assert.deepEqual(JSON.parse(process.argv[2]), { schemaVersion: 1, writeFormat: e
 assert.deepEqual(JSON.parse(process.argv[3]), { schemaVersion: 1, stateFormat: expected });
 JS
 done
-printf '%s\n' 'NativeGit + shared execution images: readiness, activation, query and read-only state inspection passed.'
+printf '%s\n' 'NativeGit + shared execution images: readiness, activation, live role identities, private query and read-only state inspection passed.'
