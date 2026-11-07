@@ -48,6 +48,18 @@ bootstrap_examples_stop_all() {
   done
   return "$failed"
 }
+# This fixture stores operator configuration and Native repository state beneath
+# the source root. Own that private ancestor before the generic public import.
+examples_prepare_private_guest_root() {
+  timeout 30s "${BOOTSTRAP_SSH[@]}" bash -s -- <<'REMOTE'
+set -euo pipefail
+[[ ! -e /home/dim/dim && ! -L /home/dim/dim ]] || {
+  printf '%s\n' 'examples guest staging root must be fresh' >&2; exit 2;
+}
+mkdir -m 0700 /home/dim/dim
+REMOTE
+}
+
 bootstrap_examples_run() {
   local cp_machine host_machine cp_key_type cp_key cp_instance host_instance cp_fingerprint host_fingerprint
   source "$script_dir/lib/check-output.bash"
@@ -58,6 +70,7 @@ bootstrap_examples_run() {
   examples_artifacts_prepare
   printf '[examples] phase=boot-control-plane log=%s/examples-control-plane-console.log\n' "$BOOTSTRAP_EVIDENCE_ROOT"
   bootstrap_guest_start examples-control-plane 3072; examples_vm_save control-plane
+  examples_prepare_private_guest_root
   bootstrap_guest_copy_source; bootstrap_guest_prepare_source
   examples_artifacts_seed_guest
   printf '[examples] phase=control-plane-tools log=%s/01-control-plane-tools.log\n' "$CHECK_OUTPUT_ROOT"
@@ -83,6 +96,7 @@ REMOTE
   cp_fingerprint="$("${BOOTSTRAP_SSH[@]}" 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256' | awk '{print $2}')"
   printf '[examples] phase=boot-workspace-host log=%s/examples-workspace-host-console.log\n' "$BOOTSTRAP_EVIDENCE_ROOT"
   bootstrap_guest_start examples-workspace-host 8192; examples_vm_save host
+  examples_prepare_private_guest_root
   bootstrap_guest_copy_source; bootstrap_guest_prepare_source
   examples_artifacts_seed_guest
   timeout 300s "${BOOTSTRAP_SCP[@]}" "$BOOTSTRAP_BASE_IMAGE" dim@127.0.0.1:/home/dim/dim/bootstrap-base.qcow2
