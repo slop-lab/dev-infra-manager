@@ -1,3 +1,4 @@
+import { acquisitionOperation } from "./acquisitionDiagnostics.js";
 import { captureExecutionArtifacts, uploadExecutionArtifacts } from "./artifacts.js";
 import { ExecutionLeaseLostError } from "./client.js";
 import { verifyAndMaterializeCandidate } from "./candidate.js";
@@ -73,13 +74,14 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
     journal.root = root.identity; await writeJournal(journalPath, journal);
     const result = await withLease(assignment, async (signal) => {
       const credentialProvider = executionCandidateCredential((signal) => options.client.candidate(assignment, signal));
-      const credential = await credentialProvider(signal);
       const result = await backend.run({ grant, root: root.path, runner, signal,
-        acquireCandidate: async (paths) => withNativeGitExecutionReadAuthority({ gitExecutable: options.gitExecutable!,
+        acquireCandidate: async (paths) => {
+          const credential = await acquisitionOperation("credential-acquisition", () => credentialProvider(paths.signal));
+          return withNativeGitExecutionReadAuthority({ gitExecutable: options.gitExecutable!,
           serviceEndpoint: options.gitEndpoint!, temporaryRoot: root.path,
           credential: { username: credential.username, password: credential.password }, credentialProvider, descriptor: grant.descriptor },
         paths.signal, (authority) => verifyAndMaterializeCandidate({ ...paths, authority,
-          descriptor: grant.descriptor, descriptorDigest: grant.descriptorDigest })) });
+          descriptor: grant.descriptor, descriptorDigest: grant.descriptorDigest })); } });
       const pending = join(options.directory,"artifacts-"+assignment.id);
       journal.artifactUploadDeadlineAt = Date.now() + uploadBudget;
       try {

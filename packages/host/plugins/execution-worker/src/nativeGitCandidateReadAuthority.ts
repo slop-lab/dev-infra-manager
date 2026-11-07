@@ -1,10 +1,11 @@
+import { acquisitionOperation } from "./acquisitionDiagnostics.js";
 import type { ExecutionDescriptor } from "@slop-lab/dim-contracts-ci/execution";
 import type { NativeCandidateReadAuthority } from "./candidate.js";
 import { mkdir, chmod, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { publishPublicJobFiles } from "./publicJobFiles.js";
 import {
-  materializeVerifiedTree,
+  materializeVerifiedTree as materializeVerifiedTreeInternal,
   readVerifiedBlob,
   readVerifiedCommit,
   readVerifiedCommitObject,
@@ -16,6 +17,9 @@ import {
   type DisposableGit,
   type GitObjectFormat
 } from "./nativeGitCandidateProcess.js";
+
+const materializeVerifiedTree = (input: Parameters<typeof materializeVerifiedTreeInternal>[0]) =>
+  acquisitionOperation("materialize", () => materializeVerifiedTreeInternal(input));
 
 export type NativeGitCandidateClaim = {
   readonly projectId: string;
@@ -80,8 +84,10 @@ export function openNativeGitCandidateReadAuthority(
   }
   async function current(signal: AbortSignal) {
     if (parsed.claim.protectedRef === undefined) return;
-    const head = await resolveProtectedHead(await git(signal), parsed, signal);
-    if (head !== parsed.claim.expectedProtectedHead) throw new NativeGitCandidateReadError("protected head changed from the claim");
+    await acquisitionOperation("protected-head", async () => {
+      const head = await resolveProtectedHead(await git(signal), parsed, signal);
+      if (head !== parsed.claim.expectedProtectedHead) throw new NativeGitCandidateReadError("protected head changed from the claim");
+    });
   }
   return {
     async exportSourceContext(input) {
@@ -311,9 +317,11 @@ export async function withNativeGitExecutionReadAuthority<T>(options: Omit<Nativ
     const result = await action(authority);
     // The remote probe authenticates the live execution lease again, including
     // dependency heads and current-attempt authority, even when objects are cached.
-    const head = await authority.resolveProtectedHead({ projectId: descriptor.projectId, repositoryId: descriptor.repositoryId,
-      protectedRef: descriptor.protectedRef, signal });
-    if (head !== descriptor.expectedProtectedHead) throw new NativeGitCandidateReadError("protected head changed before candidate handoff");
+    await acquisitionOperation("protected-head", async () => {
+      const head = await authority.resolveProtectedHead({ projectId: descriptor.projectId, repositoryId: descriptor.repositoryId,
+        protectedRef: descriptor.protectedRef, signal });
+      if (head !== descriptor.expectedProtectedHead) throw new NativeGitCandidateReadError("protected head changed before candidate handoff");
+    });
     return result;
   } finally {
     const cleanup = await Promise.allSettled([...readers.values()].map((reader) => reader.close()));

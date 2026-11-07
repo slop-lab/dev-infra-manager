@@ -106,3 +106,21 @@ it("fences resources with foreign labels instead of deleting or reporting cleanu
   await expect(sysboxBackend.run(options)).rejects.toThrow("cleanup is uncertain");
   expect(options.runner.calls.some(({ args }) => args[0] === "container" && args[1] === "rm")).toBe(false);
 });
+
+it("retains safe acquisition phase and code before exact cleanup without leaking raw failures", async () => {
+  const { acquisitionOperation } = await import("../../../../packages/host/plugins/execution-worker/src/acquisitionDiagnostics.js");
+  const options = await input();
+  const secret = "https://reader:secret@private.invalid/path?token=private";
+  options.acquireCandidate = () => acquisitionOperation("credential-acquisition", async () => {
+    throw new ExecutionServiceUnavailableError(secret, "timeout", { cause: new Error(secret) });
+  });
+  const completed = await sysboxBackend.run(options);
+  expect(completed.completion).toEqual({ kind: "executor-failure", code: "candidate-read-timeout" });
+  expect(completed.cleanupComplete).toBe(true);
+  const stderr = await readFile(join(options.root, "output", "stderr"), "utf8");
+  expect(JSON.parse(stderr)).toEqual({ component: "candidate-acquisition", phase: "credential-acquisition", code: "candidate-read-timeout" });
+  expect(completed.stderr.bytes).toBe(String(Buffer.byteLength(stderr)));
+  expect(Buffer.from(completed.logs!.stderr.base64, "base64").toString()).toBe(stderr);
+  expect(JSON.stringify(completed)).not.toContain(secret);
+  expect(options.runner.calls.some(({ args }) => args[0] === "run" || args[0] === "wait")).toBe(false);
+});

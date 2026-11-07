@@ -1,3 +1,4 @@
+import { acquisitionOperation, writeAcquisitionDiagnostic } from "../acquisitionDiagnostics.js";
 import type { HostExecutionRouting } from "@slop-lab/dim-host-core/plugin-api";
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
@@ -24,7 +25,7 @@ export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBa
     let completion: ExecutionResult["completion"] = { kind: "executor-failure", code: "execution-failed" };
     let failureCode = "candidate-acquisition-failed";
     try {
-      await input.acquireCandidate({ workspace, scriptFile: script, signal });
+      await acquisitionOperation("candidate-acquisition", () => input.acquireCandidate({ workspace, scriptFile: script, signal }));
       failureCode = "job-configuration-failed";
       const files = routing?.jobFiles ?? [];
       if (files.length > 16 || new Set(files.map(({ target }) => target)).size !== files.length) throw new Error("invalid host job configuration files");
@@ -55,6 +56,7 @@ export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBa
       completion = waited.exitCode === 0 && logs === 0 && exitCode >= 0 && exitCode <= 255
         ? { kind: "exited", exitCode } : { kind: "executor-failure", code: "container-observer-failed" };
     } catch (error) {
+      writeAcquisitionDiagnostic(output.stderr, error, candidateFailureCode(error));
       completion = { kind: "executor-failure", code: failureCode === "candidate-acquisition-failed"
         ? candidateFailureCode(error) ?? failureCode : failureCode };
     } finally {

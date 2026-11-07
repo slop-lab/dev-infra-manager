@@ -282,3 +282,32 @@ it("does not renew an interrupted artifact upload's deadline or reexecute its ca
   expect(receipt.deadlineAt).toBe(before.artifactUploadDeadlineAt);
   expect(receipt.commandResult).toEqual(before.pendingResult);
 });
+
+it("publishes initial credential failure diagnostics through the real backend and artifact cleanup path", async () => {
+  const { sysboxBackend } = await import("../../../packages/host/plugins/execution-worker/src/backends/sysbox.js");
+  const { ExecutorRunner } = await import("../../host/plugins/execution-worker/sysboxFixture.js");
+  const { readdir } = await import("node:fs/promises");
+  const directory = await root(), stop = new AbortController(), selected = assignment();
+  const authorized = { ...selected, grant: grant(selected) }, runner = new ExecutorRunner();
+  const chunks: string[] = []; let reports = 0, leaseRequests = 0;
+  const client: ExecutionWorkerClient = {
+    async claim(requestId) { return { ...authorized, requestId }; }, async renew() { return 60_000; },
+    async candidate() { leaseRequests++; throw new ExecutionServiceUnavailableError("secret://credential@service/private", "timeout"); },
+    async exchange() { throw new Error("not a generic task"); }, async recover() { throw new Error("failed evidence must be reported"); },
+    async artifactChunk(_assignment, value) {
+      if (value !== null && typeof value === "object" && "base64" in value && typeof value.base64 === "string") chunks.push(Buffer.from(value.base64, "base64").toString());
+    },
+    async finalizeArtifacts() {},
+    async report(_assignment, completed) {
+      reports++;
+      expect(completed).toMatchObject({ completion: { kind: "executor-failure", code: "candidate-read-timeout" }, cleanupComplete: true, result: "failure" });
+      stop.abort();
+    }
+  };
+  await runExecutionWorker({ directory, client, backend: sysboxBackend, runner, gitEndpoint: "http://127.0.0.1:1234", gitExecutable: "/usr/bin/git", signal: stop.signal });
+  expect(leaseRequests).toBe(1); expect(reports).toBe(1);
+  expect(chunks.join("")).toContain('{"component":"candidate-acquisition","phase":"credential-acquisition","code":"candidate-read-timeout"}');
+  expect(chunks.join("")).not.toContain("secret://");
+  expect(runner.calls.some(({ args }) => args[0] === "run" || args[0] === "wait")).toBe(false);
+  expect((await readdir(directory)).some(name => name.startsWith("work-") || name.startsWith("artifacts-") || name === "execution.json")).toBe(false);
+});

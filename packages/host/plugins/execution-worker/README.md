@@ -78,3 +78,9 @@ retains its immutable bytes, manifest and token-free `upload-timeout.json` with
 the original command result for operator recovery; it is not silently deleted or
 reexecuted. `dim-ci logs` clearly labels diagnostic-prefix fallback and the failure
 reason when retained remote logs are unavailable.
+
+Trusted acquisition failures retain a bounded JSON stderr diagnostic with an enumerated
+phase and failure code (credentials, protected-head checks, fetch, object verification
+or materialization). Initial credential failure follows the same failed-result and
+artifact cleanup path. Raw error messages, URLs, arguments and credentials are never
+written by this diagnostic; ordinary guest output retains its existing bounds.

@@ -1,3 +1,4 @@
+import { CandidateAcquisitionError } from "./acquisitionDiagnostics.js";
 import { ExecutionLeaseLostError, ExecutionServiceUnavailableError } from "./client.js";
 import { NativeHostVerificationError } from "./candidate.js";
 import { NativeGitCandidateReadError } from "./nativeGitCandidateReadAuthority.js";
@@ -5,6 +6,7 @@ import { NativeGitProcessError } from "./nativeGitCandidateProcess.js";
 import { CandidateObjectError } from "./nativeGitCandidateObjects.js";
 
 export function candidateFailureCode(error: unknown): string | undefined {
+  if (error instanceof CandidateAcquisitionError) return candidateFailureCode(error.cause);
   if (error instanceof NativeGitProcessError) {
     switch (error.code) {
       case "auth-denied": return "candidate-read-auth-denied";

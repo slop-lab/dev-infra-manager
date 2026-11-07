@@ -1,3 +1,4 @@
+import { acquisitionOperation, writeAcquisitionDiagnostic } from "../acquisitionDiagnostics.js";
 import type { HostExecutionRouting } from "@slop-lab/dim-host-core/plugin-api";
 import { chmod, mkdir, stat, statfs, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -31,7 +32,7 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
       }
       const job = join(input.root, "job"), workspace = join(input.root, "workspace"), script = join(job, "script");
       await mkdir(job, { mode: 0o700 });
-      await input.acquireCandidate({ workspace, scriptFile: script, signal, ...(hardware ? { sourceContextDirectory: join(job, "source-context") } : {}) });
+      await acquisitionOperation("candidate-acquisition", () => input.acquireCandidate({ workspace, scriptFile: script, signal, ...(hardware ? { sourceContextDirectory: join(job, "source-context") } : {}) }));
       await writeFile(join(job, "working-directory"), `/workspace/${descriptor.repositoryId}`, { mode: 0o444, flag: "wx" });
       await writeFile(join(job, "descriptor.json"), JSON.stringify(descriptor), { mode: 0o444, flag: "wx" });
       const files = routing?.jobFiles ?? [];
@@ -72,7 +73,7 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
       const exitCode = /^(?:0|[1-9][0-9]{0,2})\n?$/.test(waited.stdout) ? Number(waited.stdout.trim()) : -1;
       completion = waited.exitCode === 0 && logs === 0 && exitCode >= 0 && exitCode <= 255
         ? { kind: "exited", exitCode } : { kind: "executor-failure", code: "supervisor-observer-failed" };
-    } catch (error) { completion = { kind: "executor-failure", code: candidateFailureCode(error) ?? "qemu-execution-failed" }; }
+    } catch (error) { writeAcquisitionDiagnostic(output.stderr, error, candidateFailureCode(error)); completion = { kind: "executor-failure", code: candidateFailureCode(error) ?? "qemu-execution-failed" }; }
     finally { if (!await cleanupQemu(input.runner, input.grant)) throw new Error("owned QEMU cleanup is uncertain"); }
     if (input.signal.aborted) completion = { kind: "cancelled" };
     else if (output.exceeded) completion = { kind: "output-limit-exceeded" };

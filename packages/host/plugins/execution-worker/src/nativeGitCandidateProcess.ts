@@ -1,3 +1,4 @@
+import { acquisitionOperation } from "./acquisitionDiagnostics.js";
 import { spawn } from "node:child_process";
 import { lstat, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -55,16 +56,16 @@ export async function openDisposableGit(options: GitProcessOptions, signal: Abor
     repository,
     objectFormat: options.objectFormat,
     run: (args: readonly string[], maximumOutputBytes: number, operationSignal: AbortSignal) =>
-      runGit({
+      acquisitionOperation("object-verification", () => runGit({
         executable: options.executable, args, environment, maximumOutputBytes,
         timeoutMilliseconds: options.timeoutMilliseconds, signal: operationSignal
-      }),
+      })),
     runAuthenticated: async (args: readonly string[], maximumOutputBytes: number, operationSignal: AbortSignal) => {
-      const credential = await options.credentialProvider?.(operationSignal) ?? options;
-      return runGit({ executable: options.executable, args,
+      const credential = await acquisitionOperation("credential-acquisition", async () => await options.credentialProvider?.(operationSignal) ?? options);
+      return acquisitionOperation(args.includes("ls-remote") ? "protected-head" : args.includes("--depth=2") ? "source-context-fetch" : "candidate-fetch", () => runGit({ executable: options.executable, args,
         environment: { ...environment, GIT_ASKPASS: askpass, DIM_NATIVE_GIT_READER_USERNAME: credential.username,
           DIM_NATIVE_GIT_READER_PASSWORD: credential.password }, maximumOutputBytes,
-        timeoutMilliseconds: options.timeoutMilliseconds, signal: operationSignal, authenticated: true });
+        timeoutMilliseconds: options.timeoutMilliseconds, signal: operationSignal, authenticated: true }));
     },
     close: () => rm(root, { recursive: true, force: true })
   } satisfies DisposableGit;
