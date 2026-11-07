@@ -146,6 +146,7 @@ it("replays a durable result after restart without launching candidate code twic
   const authorized = { ...selected, grant: grant(selected) }; let launches = 0, reports = 0;
   const backend: ExecutionBackend = { kind: "ordinary-sysbox", async run() { launches++; return result(authorized.grant); }, async cleanup() { return true; } };
   const client: ExecutionWorkerClient = {
+    async artifactChunk() {}, async finalizeArtifacts() {},
     async claim(requestId) { return { ...authorized, requestId }; }, async renew() { return 60_000; },
     async candidate() { return { username: "candidate", password: "a".repeat(43), expiresAt: Date.now() + executionCandidateLeaseLifetimeMilliseconds }; },
     async exchange() { throw new Error("CI execution does not exchange task messages"); },
@@ -182,4 +183,27 @@ it("rejects malformed aggregate state and mismatched indexed ownership instead o
     store.database.prepare("UPDATE executions SET body=?,phase='finished' WHERE id=?").run(JSON.stringify(selected), selected.id);
     expect(() => store.list()).toThrow("indexes disagree");
   } finally { store.close(); }
+});
+
+it("retries durable artifact uploads after worker restart without reexecuting candidate code", async () => {
+  const directory = await root(), stop = new AbortController(), selected = assignment();
+  const authorized = { ...selected, grant: grant(selected) }; let launches = 0, finalizations = 0, reports = 0;
+  const backend: ExecutionBackend = { kind: "ordinary-sysbox", async run() { launches++; return result(authorized.grant); }, async cleanup() { return true; } };
+  const client: ExecutionWorkerClient = {
+    async claim(requestId) { return { ...authorized, requestId }; }, async renew() { return 60_000; },
+    async candidate() { return { username: "candidate", password: "a".repeat(43), expiresAt: Date.now()+executionCandidateLeaseLifetimeMilliseconds }; },
+    async exchange() { throw new Error("unused"); }, async recover() { throw new Error("must report completed execution"); },
+    async artifactChunk() {},
+    async finalizeArtifacts() { if (++finalizations === 1) throw new Error("worker interrupted after artifact transmission"); },
+    async report() { reports++; stop.abort(); }
+  };
+  const options = { directory, client, backend, runner: new ProcessRunner(), gitEndpoint: "http://127.0.0.1:1234", gitExecutable: "/usr/bin/git", signal: stop.signal };
+  await expect(runExecutionWorker(options)).rejects.toThrow("worker interrupted after artifact transmission");
+  const journal = JSON.parse(await readFile(join(directory,"execution.json"),"utf8"));
+  expect(journal.pendingResult.result).toBe("success"); expect(journal.result).toBeUndefined();
+  expect(JSON.parse(await readFile(join(directory,"artifacts-"+authorized.id,"manifest.json"),"utf8")).availability).toBe("complete");
+  await runExecutionWorker(options);
+  expect(launches).toBe(1); expect(finalizations).toBe(2); expect(reports).toBe(1);
+  await expect(readFile(join(directory,"execution.json"))).rejects.toMatchObject({code:"ENOENT"});
+  await expect(readFile(join(directory,"artifacts-"+authorized.id,"manifest.json"))).rejects.toMatchObject({code:"ENOENT"});
 });

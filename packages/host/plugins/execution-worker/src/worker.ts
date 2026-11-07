@@ -1,3 +1,5 @@
+import { captureExecutionArtifacts, uploadExecutionArtifacts } from "./artifacts.js";
+import { ExecutionLeaseLostError } from "./client.js";
 import { verifyAndMaterializeCandidate } from "./candidate.js";
 import { executionCandidateCredential } from "./candidateLease.js";
 import { randomUUID } from "node:crypto";
@@ -16,7 +18,7 @@ import { ExecutionServiceUnavailableError, isTaskAssignment, parseAssignment, ty
 import type { ExecutionBackend } from "./backend.js";
 
 type Journal = { requestId: string; assignment?: WorkerAssignment;
-  root?: NativeHostPrivateRootIdentity; result?: WorkerResult };
+  root?: NativeHostPrivateRootIdentity; pendingResult?: import("@slop-lab/dim-contracts-ci/aggregate").ExecutionResult; result?: WorkerResult };
 export type ExecutionWorkerOptions = { readonly directory: string; readonly client: ExecutionWorkerClient;
   readonly backend?: ExecutionBackend; readonly runner?: StreamingCommandRunner;
   readonly taskHandlers?: readonly ExecutionTaskHandler[];
@@ -67,17 +69,26 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
     const result = await withLease(assignment, async (signal) => {
       const credentialProvider = executionCandidateCredential((signal) => options.client.candidate(assignment, signal));
       const credential = await credentialProvider(signal);
-      return backend.run({ grant, root: root.path, runner, signal,
+      const result = await backend.run({ grant, root: root.path, runner, signal,
         acquireCandidate: async (paths) => withNativeGitExecutionReadAuthority({ gitExecutable: options.gitExecutable!,
           serviceEndpoint: options.gitEndpoint!, temporaryRoot: root.path,
           credential: { username: credential.username, password: credential.password }, credentialProvider, descriptor: grant.descriptor },
         paths.signal, (authority) => verifyAndMaterializeCandidate({ ...paths, authority,
           descriptor: grant.descriptor, descriptorDigest: grant.descriptorDigest })) });
+      const pending = join(options.directory,"artifacts-"+assignment.id);
+      try {
+        await captureExecutionArtifacts({root:root.path,pending,result});
+        journal.pendingResult=result; await writeJournal(journalPath,journal);
+        await retry(()=>uploadExecutionArtifacts(options.client,assignment,pending,signal));
+      } finally {
+        if (!await root.cleanup(assignment.id,{runner,grant})) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
+      }
+      return result;
     });
-    if (!await root.cleanup(assignment.id, { runner, grant })) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
     journal.result = result;
     await writeJournal(journalPath, journal);
     await retry(() => options.client.report(assignment, result, options.signal));
+    await rm(join(options.directory,"artifacts-"+assignment.id),{recursive:true,force:true});
     await clear();
   }
   async function executeTask(journal: Journal, assignment: TaskAssignment): Promise<void> {
@@ -120,6 +131,14 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
   async function recover(journal: Journal): Promise<void> {
     const assignment = journal.assignment!;
     assertBackend(assignment);
+    if (journal.pendingResult !== undefined && journal.result === undefined && !isTaskAssignment(assignment)) {
+      const pending=join(options.directory,"artifacts-"+assignment.id);
+      try {
+        await withLease(assignment,signal=>retry(()=>uploadExecutionArtifacts(options.client,assignment,pending,signal)));
+        if (journal.root !== undefined && !await new NativeHostPrivateRoot(options.directory,journal.root).cleanup(assignment.id,{runner:options.runner!,grant:assignment.grant!})) throw new Error("CI private root cleanup is uncertain; slot remains fenced");
+        journal.result=journal.pendingResult;await writeJournal(journalPath,journal);
+      } catch(error) { if (!(error instanceof ExecutionLeaseLostError)) throw error; }
+    }
     if (journal.result !== undefined) {
       await retry(() => options.client.report(assignment, journal.result!, options.signal));
     } else {
@@ -136,6 +155,7 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
       }
       await retry(() => options.client.recover(assignment, options.signal));
     }
+    if (!isTaskAssignment(assignment)) await rm(join(options.directory,"artifacts-"+assignment.id),{recursive:true,force:true});
     await clear();
   }
   function taskHandler(assignment: TaskAssignment): ExecutionTaskHandler {
@@ -188,9 +208,10 @@ async function readJournal(path: string): Promise<Journal | undefined> {
     }
     const raw: unknown = JSON.parse(await handle.readFile("utf8"));
     const row = z.object({ requestId: z.string().uuid(), assignment: z.unknown().optional(),
-      root: z.unknown().optional(), result: z.union([executionResultSchema, taskResultSchema]).optional() }).strict().parse(raw);
+      root: z.unknown().optional(), pendingResult: executionResultSchema.optional(), result: z.union([executionResultSchema, taskResultSchema]).optional() }).strict().parse(raw);
     return { requestId: row.requestId, ...(row.assignment === undefined ? {} : { assignment: parseAssignment(row.assignment) }),
       ...(row.root === undefined ? {} : { root: row.root as NativeHostPrivateRootIdentity }),
+      ...(row.pendingResult === undefined ? {} : { pendingResult: row.pendingResult }),
       ...(row.result === undefined ? {} : { result: row.result }) };
   } finally { await handle.close(); }
 }

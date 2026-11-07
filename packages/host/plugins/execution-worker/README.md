@@ -62,3 +62,8 @@ mount is read-only; evidence is written through the dedicated
 are outside that share. A private virtio exit channel preserves the actual job
 exit status and must agree with the VM termination signal. Building/enrolling
 this profile does not itself qualify any source commit or run a hardware gate.
+## Durable execution artifacts
+
+CI backends spool the complete accepted stdout/stderr within the reviewed output bound, alongside existing64KiB diagnostics. Jobs opt into file capture by writing regular files below the fixed `DIM_ARTIFACTS_DIR=/workspace/.dim-ci-artifacts`; they appear as `files/<relative-path>`, with reserved `logs/stdout.log` and `logs/stderr.log`. Symlinks, special files, changed files, traversal and oversized collections are rejected. Limits are128files,128MiB/file and256MiB/job.
+
+After backend cleanup stops untrusted writers, capture copies bytes into a private pending directory outside the runtime root. The durable worker journal records the completed command before lease-bound chunk upload; uncertain upload restarts reuse those bytes without executing candidate code again. The private runtime root is cleaned even when upload is interrupted. Artifact availability is independent of command success: capture errors are explicit and already captured valid diagnostics remain downloadable. No host keys, user homes or arbitrary configured paths are swept into artifacts.

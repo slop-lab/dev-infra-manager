@@ -20,7 +20,7 @@ export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBa
     const stop = new AbortController();
     const timeout = AbortSignal.timeout(bound(descriptor.bounds.wallClockSeconds) * 1_000);
     const signal = AbortSignal.any([input.signal, stop.signal, timeout]);
-    const output = new NativeOutputCollector(bound(descriptor.bounds.outputBytes), () => stop.abort());
+    const output = new NativeOutputCollector(bound(descriptor.bounds.outputBytes), () => stop.abort(), join(input.root, "output"));
     let completion: ExecutionResult["completion"] = { kind: "executor-failure", code: "execution-failed" };
     let failureCode = "candidate-acquisition-failed";
     try {

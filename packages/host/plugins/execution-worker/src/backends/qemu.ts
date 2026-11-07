@@ -15,7 +15,7 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
     const descriptor = input.grant.descriptor, startedAt = new Date().toISOString();
     const timeout = AbortSignal.timeout(Number(descriptor.bounds.wallClockSeconds) * 1_000), stop = new AbortController();
     const signal = AbortSignal.any([input.signal, timeout, stop.signal]);
-    const output = new NativeOutputCollector(Number(descriptor.bounds.outputBytes), () => stop.abort());
+    const output = new NativeOutputCollector(Number(descriptor.bounds.outputBytes), () => stop.abort(), join(input.root, "output"));
     let completion: ExecutionResult["completion"] = { kind: "executor-failure", code: "execution-failed" };
     try {
       const job = join(input.root, "job"), workspace = join(input.root, "workspace"), script = join(job, "script");
@@ -50,7 +50,7 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
       if (imageEnvironment !== null && (!Array.isArray(imageEnvironment) || !imageEnvironment.every((entry) => typeof entry === "string"))) {
         throw new Error("invalid QEMU job image environment");
       }
-      await writeFile(join(job, "job-environment"), jobEnvironmentScript(routing?.jobEnvironmentDefaults, imageEnvironment ?? []), { mode: 0o444, flag: "wx" });
+      await writeFile(join(job, "job-environment"), jobEnvironmentScript(routing?.jobEnvironmentDefaults, imageEnvironment ?? []) + "export DIM_ARTIFACTS_DIR=/workspace/.dim-ci-artifacts\n", { mode: 0o444, flag: "wx" });
       if (!hardware) {
       const archive = await input.runner.run("docker", ["create", "--name", rootfsContainerName(input.grant), "--network", "none", "--read-only", "--entrypoint", "/bin/bash",
         ...ownershipLabels(input.grant, "qemu-rootfs").flatMap((label) => ["--label", label]), descriptor.jobImage], { signal });

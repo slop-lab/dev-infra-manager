@@ -72,6 +72,12 @@ export function executionWorkerClient(config: { readonly endpoint: string; reado
       const result = z.object({ value: z.unknown() }).strict().parse(await request(path(assignment, "exchange"), { ...ownership(assignment), operation, input }, signal));
       return result.value;
     },
+    async artifactChunk(assignment: WorkerAssignment, artifact: unknown, signal?: AbortSignal): Promise<void> {
+      await request(path(assignment,"artifacts"),{...ownership(assignment),artifact},signal);
+    },
+    async finalizeArtifacts(assignment: WorkerAssignment, artifact: unknown, signal?: AbortSignal): Promise<void> {
+      await request(path(assignment,"artifacts-finalize"),{...ownership(assignment),artifact},signal);
+    },
     async report(assignment: WorkerAssignment, result: WorkerResult, signal?: AbortSignal): Promise<void> {
       await request(path(assignment, "result"), { ...ownership(assignment), result }, signal);
     },

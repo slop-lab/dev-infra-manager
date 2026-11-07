@@ -81,7 +81,7 @@ docker run --rm --oom-score-adj 500 --network bridge --cpus "$DIM_JOB_CPUS" --me
   --workdir /workspace/${repositoryId} --mount type=bind,source=/workspace,target=/workspace \
   --mount type=bind,source=/run/dim/job/script,target=/run/dim/job/script,readonly \
   ${mounts} \
-  --entrypoint /bin/bash "$DIM_JOB_IMAGE" --noprofile --norc -c ${shellQuote(jobEnvironmentScript(defaults) + 'exec /bin/bash --noprofile --norc /run/dim/job/script\n')}
+  --entrypoint /bin/bash "$DIM_JOB_IMAGE" --noprofile --norc -c ${shellQuote(jobEnvironmentScript(defaults) + 'export DIM_ARTIFACTS_DIR=/workspace/.dim-ci-artifacts\nexec /bin/bash --noprofile --norc /run/dim/job/script\n')}
 `;
 }
 

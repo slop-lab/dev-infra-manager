@@ -1,5 +1,7 @@
 import { createHash, type Hash } from "node:crypto";
 import { Writable } from "node:stream";
+import { mkdirSync, openSync, writeSync, fsyncSync, closeSync, constants } from "node:fs";
+import { join } from "node:path";
 
 export type NativeBoundedOutput = {
   readonly stdout: Buffer;
@@ -32,10 +34,15 @@ export class NativeOutputCollector {
   readonly #stdout = channel();
   readonly #stderr = channel();
   #total = 0;
+  readonly #spools = new Map<Channel, number>();
 
-  constructor(limit: number, abort: () => void) {
+  constructor(limit: number, abort: () => void, directory?: string) {
     this.#limit = limit;
     this.#abort = abort;
+    if (directory !== undefined) {
+      mkdirSync(directory, { mode: 0o700 });
+      for (const [name,target] of [["stdout",this.#stdout],["stderr",this.#stderr]] as const) this.#spools.set(target,openSync(join(directory,name),constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600));
+    }
     this.stdout = this.#writer(this.#stdout);
     this.stderr = this.#writer(this.#stderr);
   }
@@ -45,6 +52,8 @@ export class NativeOutputCollector {
   }
 
   result(): NativeBoundedOutput {
+    for (const fd of this.#spools.values()) { fsyncSync(fd); closeSync(fd); }
+    this.#spools.clear();
     return {
       stdout: Buffer.concat(this.#stdout.chunks), stderr: Buffer.concat(this.#stderr.chunks),
       stdoutEvidence: evidence(this.#stdout), stderrEvidence: evidence(this.#stderr)
@@ -58,6 +67,8 @@ export class NativeOutputCollector {
         const remaining = Math.max(0, this.#limit - this.#total);
         const accepted = bytes.subarray(0, remaining);
         if (accepted.length > 0) {
+          const fd=this.#spools.get(target);
+          if (fd!==undefined) { let written=0; while(written<accepted.length) written+=writeSync(fd,accepted,written,accepted.length-written); }
           target.chunks.push(accepted);
           target.hash.update(accepted);
           target.bytes += accepted.length;
