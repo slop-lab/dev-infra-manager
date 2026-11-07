@@ -31,7 +31,9 @@ is implied by these source changes.
   the default DIM workflow remains source-only. External provider qualification
   remains separate. Fresh local installation validates paired CI credentials through
   the matching installed admin package without requiring dependencies in the
-  original source checkout.
+  original source checkout. Compose separate example control planes by exact
+  package identity, keeping feature credentials with their owners and starting
+  providers before repository listeners.
 
 - Make Git services independently composable through DIM-independent
   `@slop-lab/gs-*` packages. Support standalone durable repository policy and
