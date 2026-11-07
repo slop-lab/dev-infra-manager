@@ -39,7 +39,7 @@ export async function exportPracticalArtifacts(root: string, output: string, exi
     const stages = join(root, "stages"), stageInfo = await lstat(stages); assert(stageInfo.isDirectory() && !stageInfo.isSymbolicLink());
     for (const run of await readdir(stages, { withFileTypes: true })) {
       if (!run.isDirectory() || !/^run\.[A-Za-z0-9]+$/.test(run.name)) continue;
-      for (const file of ["stages.jsonl", "01-control-plane-tools.log", "02-host-build-images-artifacts.log", "03-host-installed-recipes.log", "02-host-baseline-fresh-install.log", "03-host-build-images-artifacts.log", "04-host-installed-recipes.log"])
+      for (const file of ["stages.jsonl", "01-control-plane-tools.log", "02-host-build-images-artifacts.log", "02-host-baseline-fresh-install.log", "03-host-build-images-artifacts.log", "04-host-installed-recipes.log", "03-control-plane-install.log", "04-control-plane-install.log", "05-host-installed-recipes.log"])
         await copy(`stages/${run.name}/${file}`, false);
     }
   } catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }

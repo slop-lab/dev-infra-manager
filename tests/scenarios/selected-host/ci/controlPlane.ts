@@ -5,16 +5,10 @@ import { createRequire } from "node:module";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { readExampleArtifacts } from "../../../../scripts/examples/bundle.ts";
-import { runCommand } from "../../web-lifecycle/process.ts";
 import { deterministicProvider, fixtureModel } from "./provider.ts";
 
-const setup = process.argv[2], data = process.env.DIM_DATA_HOME, facade = process.env.DIM_EXAMPLE_DIM_BIN, bundle = process.env.DIM_EXAMPLE_PACKAGE_BUNDLE;
-if (!setup?.startsWith("/") || !data || !facade || !bundle) throw new Error("separate CP fixture requires its private installation and reviewed artifact bundle");
-const artifacts = await readExampleArtifacts(bundle), version = artifacts.find(({ name }) => name === "@slop-lab/dim-cli")?.version;
-if (!version) throw new Error("fixture bundle has no CLI version");
-await runCommand(facade, ["installer", "install", "control-plane", "plugin", "--local-packages", bundle,
-  `@slop-lab/dim-control-plane-plugin-llm-router@${version}`, `@slop-lab/dim-control-plane-plugin-external-urls@${version}`]);
+const setup = process.argv[2], data = process.env.DIM_DATA_HOME;
+if (!setup?.startsWith("/") || !data) throw new Error("separate CP fixture requires its prepared private installation");
 const resolver = createRequire(join(data, "control-plane/runtime/current/package.json"));
 const llm: typeof import("../../../../packages/control-plane/plugins/llm-router/src/index.js") = await import(pathToFileURL(resolver.resolve("@slop-lab/dim-control-plane-plugin-llm-router")).href);
 const urls: typeof import("../../../../packages/control-plane/plugins/external-urls/src/index.js") = await import(pathToFileURL(resolver.resolve("@slop-lab/dim-control-plane-plugin-external-urls")).href);

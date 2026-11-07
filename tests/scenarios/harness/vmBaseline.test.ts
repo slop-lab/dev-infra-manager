@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterEach, expect, it } from "vitest";
+import { parse } from "yaml";
 import { baselineImageDockerfile, baselineRecipeDigest, baselineRecipeFiles, baselineUbuntuSha256, consumeVmBaselines, hashBaselineFile, parseBaselineManifest, requireStandaloneQcow, type VmBaselineManifest } from "../../../scripts/checks/vm-baseline.ts";
 
 const repository = resolve(import.meta.dirname, "../../.."), roots: string[] = [];
@@ -21,6 +22,17 @@ async function fixture() {
   return { root, manifest, file, destination: join(root, "private") };
 }
 const standalone = { format: "qcow2", "virtual-size": 32 * 1024 ** 3 };
+it("omits the package list in actual generated cached cloud-init instead of emitting a schema-invalid empty list", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-baseline-cloud-init-")); roots.push(root);
+  await writeFile(join(root, "login-key.pub"), "ssh-ed25519 TEST-LOGIN");
+  await writeFile(join(root, "host-key.pub"), "ssh-ed25519 TEST-HOST");
+  await writeFile(join(root, "host-key"), "TEST-ONLY-HOST-KEY\n");
+  const result = spawnSync("bash", ["-euc", 'source "$1"; BOOTSTRAP_WORK_ROOT="$2"; BOOTSTRAP_BASELINE_DIRECTORY="$2"; BOOTSTRAP_CLOUD_PACKAGE_UPDATE=false; BOOTSTRAP_CLOUD_PACKAGES="[]"; bootstrap_guest_write_cloud_init "$2" examples-workspace-host', "cloud-init-fixture", join(repository, "scripts/checks/lib/bootstrap-ubuntu-vm-guest.bash"), root], { encoding: "utf8", timeout: 10_000 });
+  expect(result.status, result.stderr).toBe(0);
+  const cloud = parse(await readFile(join(root, "user-data"), "utf8")) as Record<string, unknown>;
+  expect(cloud["package_update"]).toBe(false);
+  expect(Object.hasOwn(cloud, "packages")).toBe(false);
+});
 it("exports the actual builder recipe through a spawned CLI without invoking another operation", () => {
   const result = spawnSync(process.execPath, [join(repository, "scripts/checks/vm-baseline.ts"), "recipe-files"], { encoding: "utf8", timeout: 10_000 });
   expect(result.status, result.stderr).toBe(0);

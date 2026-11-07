@@ -109,6 +109,12 @@ on disposable loopback ports before the heavy VM gate. The fixture prepares
 operator roles only for its declared services; optional Git Sync roles remain
 unconfigured when the recipes do not select Git Sync. Normal managed preparation
 keeps its full preset.
+The installed VM fixture separates foreground package preparation from service
+startup: `prepare-installed-control-plane.bash` prepares a caller-owned private
+runtime, and `serve-installed-control-plane.bash` only starts that prepared runtime.
+The small `examples-control-plane.bash` coordinator finishes and logs preparation
+before the unchanged bounded activation wait can begin. The practical router and
+ingress fixture also installs its packages during preparation, never while serving.
 Run `just verify examples-vm-preflight` to discover readiness and workspace
 setup instructions, then `just verify examples-vm` for the fresh Ubuntu/KVM
 gate. The wrapper boots a standalone control-plane VM and an independent host

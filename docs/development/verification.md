@@ -64,6 +64,15 @@ on each VM's loopback interface. It is not an in-process
 or same-VM substitute. The separate bootstrap profile still tests the
 `ordinary` and `control-qemu` installation roles independently.
 
+Control-plane package preparation is a separate foreground `control-plane-install`
+stage, with its own bounded command, exit result and exported stage log. It installs
+the selected recipe plugins and the practical fixture's router/ingress plugins
+before starting any service readiness wait. The caller owns the private guest
+runtime directory; the serving entrypoint requires its completed preparation
+receipt and performs no package installation. Service activation keeps its
+180-second deadline. A package-install failure therefore reports that phase
+directly rather than appearing as an unavailable service.
+
 Cache routing is recorded in `cache-routing.json`. The gate discovers this
 workspace's selected mirror URLs, or accepts `DIM_EXAMPLES_CACHE_CATALOG` with
 the existing URL-only catalog schema. Missing selection is reported as `direct`;

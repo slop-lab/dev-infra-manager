@@ -55,7 +55,11 @@ EOF
   if [[ -n "${BOOTSTRAP_EXAMPLES_CACHE_CLOUD_INIT:-}" ]]; then cat -- "$BOOTSTRAP_EXAMPLES_CACHE_CLOUD_INIT" >>"$root/user-data"; fi
   cat >>"$root/user-data" <<EOF
 package_update: ${BOOTSTRAP_CLOUD_PACKAGE_UPDATE:-true}
-packages: ${BOOTSTRAP_CLOUD_PACKAGES:-[git]}
+EOF
+  # cloud-init requires a nonempty package list. Cached dependencies need no
+  # package declaration; accepting degraded cloud-init would hide real errors.
+  if [[ "${BOOTSTRAP_CLOUD_PACKAGES:-[git]}" != '[]' ]]; then printf 'packages: %s\n' "${BOOTSTRAP_CLOUD_PACKAGES:-[git]}" >>"$root/user-data"; fi
+  cat >>"$root/user-data" <<EOF
 runcmd:
   - [systemctl, restart, ssh]
 EOF

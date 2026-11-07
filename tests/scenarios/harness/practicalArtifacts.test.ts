@@ -38,7 +38,9 @@ it("retains explicit baseline mode, observed clone identities and stage timings 
     const files = { "input.txt": "installation-mode=dependency-baseline\n", "dependency-baseline.json": '{"recipeSha256":"reviewed"}',
       "clone-identities.json": '{"controlPlane":{"machine":"cp"},"host":{"machine":"host"}}', "qualification.json": '{"installationMode":"dependency-baseline"}',
       "stages/run.cached/stages.jsonl": '{"stage":"host-baseline-fresh-install","event":"finish","exitCode":0}\n',
-      "stages/run.cached/02-host-baseline-fresh-install.log": "fresh source installation passed\n" };
+      "stages/run.cached/02-host-baseline-fresh-install.log": "fresh source installation passed\n",
+      "stages/run.cached/04-control-plane-install.log": "explicit foreground CP installation failed with its own exit\n",
+      "stages/run.cached/05-host-installed-recipes.log": "installed recipe diagnostics\n" };
     for (const [name, content] of Object.entries(files)) await writeFile(join(evidence, name), content);
     await writeFile(join(evidence, "host.qcow2"), "NEVER-EXPORT-GUEST-DISK");
     await exportPracticalArtifacts(evidence, output, 0);

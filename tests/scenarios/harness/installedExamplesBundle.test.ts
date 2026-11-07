@@ -13,8 +13,9 @@ afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { rec
 
 async function fixture(version: string, archiveVersion = version) {
   const root = await mkdtemp(join(tmpdir(), "dim-installed-example-bundle-")); roots.push(root);
-  const bundle = join(root, "bundle"), bin = join(root, "bin"), stage = join(root, "stage"), marker = join(root, "npm-args");
+  const bundle = join(root, "bundle"), bin = join(root, "bin"), stage = join(root, "stage"), marker = join(root, "npm-args"), runtime = join(root, "runtime");
   await mkdir(bundle); await mkdir(bin); await mkdir(join(stage, "package"), { recursive: true });
+  await mkdir(runtime, { mode: 0o700 });
   const manifest: Manifest = { schemaVersion: 1, packages: ["dim-cli", "dim-installer", "dim-host-core"].map((name) => ({
     name: `@slop-lab/${name}`, version, file: `${name}.tgz`, requires: {}
   })) };
@@ -26,25 +27,33 @@ async function fixture(version: string, archiveVersion = version) {
   await writeFile(join(bin, "npm"), '#!/bin/sh\nprintf "%s\\n" "$@" > "$DIM_TEST_NPM_ARGS"\nexit 73\n', { mode: 0o700 });
   const execute = async (script: string, input = manifest) => {
     await writeFile(join(bundle, "packages.json"), JSON.stringify(input));
-    return run("bash", [join(scripts, script)], { env: { ...process.env, GIT_MASTER: "1", PATH: `${bin}:${process.env.PATH ?? ""}`,
+    return run("bash", [join(scripts, script), ...(script.includes("control-plane") ? [runtime] : [])], { env: { ...process.env, GIT_MASTER: "1", PATH: `${bin}:${process.env.PATH ?? ""}`,
       DIM_EXAMPLE_PACKAGE_BUNDLE: bundle, DIM_EXAMPLE_REMOTE_SETUP: root, DIM_EXAMPLE_DIM_BIN: "", DIM_TEST_NPM_ARGS: marker }, timeout: 10_000 })
       .then((result) => ({ code: 0, ...result }), (error: unknown) => {
         if (!(error instanceof Error) || !("code" in error) || !("stderr" in error)) throw error;
         return { code: error.code, stderr: String(error.stderr), stdout: "" };
       });
   };
-  return { bundle, marker, manifest, execute };
+  return { bundle, marker, manifest, execute, runtime };
 }
 
 it.each([
   { script: "verify-installed.bash", version: "0.10.0" },
   { script: "verify-installed.bash", version: `0.10.0-local-${"a".repeat(64)}` },
-  { script: "serve-installed-control-plane.bash", version: "0.10.0" },
-  { script: "serve-installed-control-plane.bash", version: `0.10.0-local-${"a".repeat(64)}` }
+  { script: "prepare-installed-control-plane.bash", version: "0.10.0" },
+  { script: "prepare-installed-control-plane.bash", version: `0.10.0-local-${"a".repeat(64)}` }
 ])("hands the selected exact installer to npm ($script/$version)", async ({ script, version }) => {
   const f = await fixture(version), result = await f.execute(script);
   expect(result.code).toBe(73);
   expect((await readFile(f.marker, "utf8")).trim().split("\n").at(-1)).toBe(join(f.bundle, "dim-installer.tgz"));
+  await expect(access(join(f.runtime, "prepared"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("refuses service startup from an unprepared runtime without running an installer", async () => {
+  const f = await fixture("0.10.0"), result = await f.execute("serve-installed-control-plane.bash");
+  expect(result.code).toBe(2);
+  expect(result.stderr).toContain("no matching completed preparation");
+  await expect(access(f.marker)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 const invalid: readonly { readonly label: string; readonly change: (manifest: Manifest) => Manifest }[] = [

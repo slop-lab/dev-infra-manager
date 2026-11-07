@@ -157,14 +157,10 @@ REMOTE
   timeout 60s "${BOOTSTRAP_SCP[@]}" "$BOOTSTRAP_WORK_ROOT/transfer/cp-known-hosts" dim@127.0.0.1:/home/dim/examples-cp-known-hosts
   examples_vm_select control-plane
   timeout 300s "${BOOTSTRAP_SCP[@]}" -r "$BOOTSTRAP_WORK_ROOT/transfer/example-packages" "$BOOTSTRAP_WORK_ROOT/transfer/example-operator" dim@127.0.0.1:/home/dim/dim/
-  printf '[examples] phase=control-plane-install-start log=%s/separate-control-plane.log\n' "$BOOTSTRAP_EVIDENCE_ROOT"
-  timeout --signal=TERM --kill-after=30s 7200s "${BOOTSTRAP_SSH[@]}" \
-    'export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin; cd /home/dim/dim/workbench; export DIM_PRACTICAL_CI_REQUIRED=1 DIM_EXAMPLE_PACKAGE_BUNDLE=/home/dim/dim/example-packages DIM_EXAMPLE_REMOTE_SETUP=/home/dim/dim/example-operator; bash scripts/examples/serve-installed-control-plane.bash' \
-    >"$BOOTSTRAP_EVIDENCE_ROOT/separate-control-plane.log" 2>&1 &
-  EXAMPLES_CP_SSH_PID=$!
-  EXAMPLES_CP_SSH_START="$(cut -d' ' -f22 "/proc/$EXAMPLES_CP_SSH_PID/stat")"
+  source "$script_dir/lib/examples-control-plane.bash"
+  examples_prepare_and_start_control_plane
   examples_vm_select host
-  printf '[examples] phase=host-installed-recipes log=%s/03-host-installed-recipes.log\n' "$CHECK_OUTPUT_ROOT"
+  printf '[examples] phase=host-installed-recipes log-root=%s\n' "$CHECK_OUTPUT_ROOT"
   local recipe_status=0
   check_output_run host-installed-recipes timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "${EXAMPLES_VM_PORT[control-plane]}" <<'REMOTE' || recipe_status=$?
 set -euo pipefail
