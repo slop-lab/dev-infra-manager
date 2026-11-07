@@ -52,6 +52,7 @@ export async function nativeBundleReviewFixture(
   candidateLeaseClock?: () => number,
   repositoryId = "root",
   workflowCompiler: import("@slop-lab/gs-ci-contracts").WorkflowCompiler = dimWorkflowCompiler,
+  workspaceWriteLeaseClock?: () => number,
 ): Promise<NativeBundleReviewFixture> {
   const root = await createFinalizeRoot(label);
   const bundle = await createRootBundle({
@@ -61,7 +62,7 @@ export async function nativeBundleReviewFixture(
     ".dim/ci/jobs/integration.bash": "set -euo pipefail\nprintf 'integration\\n'\n"
   });
   const service = await startFinalizeService(
-    root, candidateLeaseClock, undefined, undefined, undefined, undefined, reviewHooks, reviewerHooks,
+    root, candidateLeaseClock, undefined, workspaceWriteLeaseClock, undefined, undefined, reviewHooks, reviewerHooks,
     ordinaryIdentityHttpClient, deliveryFaults, nativeOrdinaryAttemptHooks, configOverrides, workflowCompiler,
   );
   await activateFinalizeService(service.origin);

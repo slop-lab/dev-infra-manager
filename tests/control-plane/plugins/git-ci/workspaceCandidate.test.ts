@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import * as workspaceStatus from "../../../../packages/control-plane/plugins/git-ci/src/workspace-status.js";
 import { encodeDimReviewJobAvailableEvent, executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
 import { activateFinalizeServiceForGeneration, activationTokenB, cleanupFinalizeFixtures, closeFinalizeService,
   generationB, generationId, runGit, startFinalizeServiceForGeneration, workspaceWriteIssuerAuthorization } from "../git-repositories/nativeRootImportFinalizeFixture.js";
@@ -14,9 +15,11 @@ import { parseRepositoryPolicy } from "@slop-lab/gs-repository-contracts";
 import { authorization as importerAuthorization } from "../git-repositories/nativeRootImportFinalizeFixture.js";
 import { z } from "zod";
 
-afterEach(cleanupFinalizeFixtures);
+afterEach(async () => { vi.restoreAllMocks(); await cleanupFinalizeFixtures(); });
 
 it("reads failed candidate jobs, logs and artifacts only through the owning workspace request", async () => {
+  let clock = Date.now(), virtualLeaseClock = false;
+  const leaseClock = () => virtualLeaseClock ? clock : Date.now();
   const details: Map<string, object> = new Map();
   const payload = Buffer.from('{"failure":"expected test failure"}\n'), artifactId = createHash("sha256").update("failure.json").digest("hex");
   const queryCredential = { username: "workspace-evidence-query", password: Buffer.alloc(32, 99).toString("base64url") };
@@ -44,7 +47,8 @@ it("reads failed candidate jobs, logs and artifacts only through the owning work
     const address = scheduler.address(); if (!address || typeof address === "string") throw new Error("scheduler fixture is unavailable");
     const native = idleNativeConfig();
     const fixture = await nativeBundleReviewFixture("workspace-evidence", undefined, undefined, undefined, undefined, undefined, undefined,
-      { ci: { ...native.ci, query: queryCredential, webhook: { ...native.ci.webhook, endpoint: `http://localhost:${address.port}/v1/jobs` } } });
+      { ci: { ...native.ci, query: queryCredential, webhook: { ...native.ci.webhook, endpoint: `http://localhost:${address.port}/v1/jobs` } } },
+      undefined, undefined, undefined, undefined, undefined, leaseClock);
     const identity = await fetch(`${fixture.service.origin}/v1/operator-root-importer-identity`, {
       headers: { authorization: importerAuthorization, "x-dim-generation-id": generationId }
     });
@@ -54,7 +58,7 @@ it("reads failed candidate jobs, logs and artifacts only through the owning work
     const candidateCommit = (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD"])).stdout.trim();
     const candidateTree = (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD^{tree}"])).stdout.trim();
     const lease = await issueWorkspaceLease(fixture.service.origin, fixture.repositoryId);
-    const authorization = `Basic ${Buffer.from(`${lease.username}:${lease.password}`).toString("base64")}`;
+    let authorization = `Basic ${Buffer.from(`${lease.username}:${lease.password}`).toString("base64")}`;
     const requestId = randomUUID(), base = `${fixture.service.origin}/v1/projects/project-a/repositories/root/workspace-ci/requests`;
     const response = await fetch(base, { method: "POST", headers: { authorization, "content-type": "application/json" },
       body: JSON.stringify({ schemaVersion: 1, requestId, candidateRef, candidateCommit, candidateTree }) });
@@ -77,12 +81,30 @@ it("reads failed candidate jobs, logs and artifacts only through the owning work
     details.set(event.eventId, { job, result: completed, descriptorDigest: grant.descriptorDigest });
     manifest = { executionId, descriptorDigest: grant.descriptorDigest, availability: "complete", artifacts: [{ id: artifactId, name: "failure.json",
       bytes: payload.length, sha256: `sha256:${createHash("sha256").update(payload).digest("hex")}`, mediaType: "application/json" }] };
+    clock = Date.now(); virtualLeaseClock = true;
+    const readLease = await issueWorkspaceLease(fixture.service.origin, fixture.repositoryId);
+    authorization = `Basic ${Buffer.from(`${readLease.username}:${readLease.password}`).toString("base64")}`;
     const own = `${base}/${requestId}`, headers = { authorization };
+    const evaluateStatus = workspaceStatus.readWorkspaceCiStatus;
+    const promotionRead = vi.spyOn(workspaceStatus, "readWorkspaceCiStatus").mockImplementation(async (...args) => {
+      // Reproduces a full eligibility read consuming the existing lease budget without sleeping.
+      clock += 30_001;
+      return evaluateStatus(...args);
+    });
     const jobs = await fetch(`${own}/jobs`, { headers }); expect(jobs.status, await jobs.clone().text()).toBe(200);
     const shown = await jobs.text(); expect(shown).toContain(executionId); expect(shown).not.toContain(queryCredential.password);
     expect(await (await fetch(`${own}/jobs/${executionId}/logs`, { headers })).json()).toMatchObject({ result: { result: "failure", completion: { exitCode: 1 }, logs: { stdout: { base64: payload.toString("base64") } } } });
     expect(await (await fetch(`${own}/jobs/${executionId}/artifacts`, { headers })).json()).toMatchObject({ artifacts: [{ id: artifactId }] });
     expect(Buffer.from(await (await fetch(`${own}/jobs/${executionId}/artifacts/${artifactId}`, { headers })).arrayBuffer())).toEqual(payload);
+    expect(promotionRead).not.toHaveBeenCalled(); promotionRead.mockRestore();
+    // Keep post-read lease expiry enforcement: a scheduler read that actually exceeds the lease is denied.
+    onQuery = async () => { clock += 30_001; };
+    const expiredDuring = await fetch(`${own}/jobs/${executionId}/artifacts/${artifactId}`, { headers });
+    expect(expiredDuring.status).toBe(401); expect(await expiredDuring.text()).not.toContain("expected test failure");
+    virtualLeaseClock = false;
+    const renewed = await issueWorkspaceLease(fixture.service.origin, fixture.repositoryId);
+    authorization = `Basic ${Buffer.from(`${renewed.username}:${renewed.password}`).toString("base64")}`;
+    headers.authorization = authorization;
     const policyEndpoint = `${fixture.service.origin}/v1/projects/project-a/repositories/root/policy`;
     const policyHeaders = { authorization: importerAuthorization, "x-dim-generation-id": generationId, "content-type": "application/json" };
     const policyState = async () => {
@@ -122,7 +144,7 @@ it("reads failed candidate jobs, logs and artifacts only through the owning work
     expect(reads.every((path) => path.startsWith("/v1/jobs/by-event/") || path.includes(`/v1/jobs/${executionId}/artifacts`))).toBe(true);
     await addCandidateCommit(fixture.clone, "fixed.txt", Buffer.from("fixed\n"));
     await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${candidateRef}`]);
-    expect((await fetch(`${own}/jobs`, { headers })).status).toBe(404);
+    expect((await fetch(`${own}/jobs`, { headers })).status).toBe(409);
     const fixed = await fetch(base, { method: "POST", headers: { authorization, "content-type": "application/json" }, body: JSON.stringify({
       schemaVersion: 1, requestId: randomUUID(), candidateRef,
       candidateCommit: (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD"])).stdout.trim(),

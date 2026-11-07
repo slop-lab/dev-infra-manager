@@ -1,3 +1,6 @@
+import { resolveAuthoritativeNativeRepositoryTarget } from "@slop-lab/dim-control-plane-plugin-git-repositories/plugin-api";
+import * as evidenceReader from "../../../../packages/control-plane/plugins/git-ci/src/execution-evidence.js";
+import { readWorkspaceCiStatus } from "../../../../packages/control-plane/plugins/git-ci/src/workspace-status.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { encodeDimReviewJobAvailableEvent, executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
@@ -29,6 +32,11 @@ it("reuses immutable proof across required CI jobs while checking live storage o
     expect(response.status, await response.clone().text()).toBe(201);
     const grant = executionGrantSchema.parse(await response.json());
     firstGrant ??= grant;
+    // Pending attempts do not establish a gate and must not reload promotion inputs.
+    const compiler = { ...dimWorkflowCompiler, compile: vi.fn(() => { throw new Error("pending attempt reloaded workflow"); }) };
+    await expect(currentExecutionEvidence({ ...f.service.context.runtime, expectedGenerationId: generationId,
+      workflowCompiler: compiler }, rootRepository(f.root), event)).rejects.toMatchObject({ code: "evidence-missing" });
+    expect(compiler.compile).not.toHaveBeenCalled();
     const { logs: _logs, ...output } = result(grant);
     const evidence = await post(`/v1/executions/project-a/root/${grant.executionId}/evidence`, config.ci.resultReporter, output);
     expect(evidence.status, await evidence.clone().text()).toBe(201);
@@ -55,6 +63,14 @@ it("reuses immutable proof across required CI jobs while checking live storage o
   await expect(currentExecutionEvidence({ ...f.service.context.runtime,
     expectedGenerationId: "b".repeat(64), workflowCompiler: dimWorkflowCompiler }, rootRepository(f.root), envelope.events[0]!))
     .rejects.toMatchObject({ code: "evidence-missing" });
+  // Required gates and the displayed job list share validation only within one status request.
+  const runtime = { ...f.service.context.runtime, expectedGenerationId: generationId, workflowCompiler: dimWorkflowCompiler };
+  const target = await resolveAuthoritativeNativeRepositoryTarget(runtime, { projectId: "project-a", repositoryId: "root" });
+  const evidenceReads = vi.spyOn(evidenceReader, "currentExecutionEvidence");
+  expect(await readWorkspaceCiStatus(runtime, target, envelope.review.reviewId)).toMatchObject({ state: "succeeded", jobs: [{ status: "succeeded" }, { status: "succeeded" }] });
+  expect(evidenceReads).toHaveBeenCalledTimes(2);
+  expect(await readWorkspaceCiStatus(runtime, target, envelope.review.reviewId)).toMatchObject({ state: "succeeded" });
+  expect(evidenceReads).toHaveBeenCalledTimes(4);
   if (!firstGrant) throw new Error("execution grant is missing");
   await expect(assertCurrentExecution({ ...f.service.context.runtime,
     expectedGenerationId: "b".repeat(64), workflowCompiler: dimWorkflowCompiler }, firstGrant)).rejects.toThrow(/generation is stale/);

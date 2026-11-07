@@ -124,9 +124,9 @@ export async function currentExecutionEvidence(runtime: GitCiRuntime,
   const grant = (await grants(repository)).filter((candidate) => candidate.generationId === runtime.expectedGenerationId && sameJob(candidate, event))
     .sort((a, b) => b.attempt - a.attempt)[0];
   if (grant === undefined) throw new ExecutionConflictError("execution evidence is missing", "evidence-missing");
-  await assertCurrentExecution(runtime, grant);
   const resultValue = await readOptional(join(repository, "dim-execution-evidence", `${grant.executionId}.json`));
   if (resultValue === undefined) throw new ExecutionConflictError("execution evidence is missing", "evidence-missing");
+  await assertCurrentExecution(runtime, grant);
   const result = executionResultSchema.parse(resultValue);
   return { grant, result, digest: createHash("sha256").update(JSON.stringify({ grant, result })).digest("hex") };
 }

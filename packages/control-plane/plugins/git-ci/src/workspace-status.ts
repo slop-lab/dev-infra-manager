@@ -9,7 +9,15 @@ import type { GitCiRuntime } from "./runtime.js";
 export async function readWorkspaceCiStatus(runtime: GitCiRuntime, target: AuthoritativeNativeRepositoryTarget, reviewId: string): Promise<{
   readonly state: DimReviewCiStatus["state"]; readonly review: DimReviewCiStatus; readonly jobs: readonly DimReviewCiJob[];
 } | undefined> {
-  const review = await readReviewCiStatus(runtime, target, reviewId);
+  // Required gates and the complete job list share one verified snapshot per event for this read only.
+  const pending = new Map<string, ReturnType<typeof currentExecutionEvidence>>();
+  const evidence: typeof currentExecutionEvidence = (requestRuntime, repository, event) => {
+    const key = JSON.stringify([repository, event]);
+    let read = pending.get(key);
+    if (!read) { read = currentExecutionEvidence(requestRuntime, repository, event); pending.set(key, read); }
+    return read;
+  };
+  const review = await readReviewCiStatus(runtime, target, reviewId, evidence);
   if (!review) return;
   const plan = await readAuthoritativeNativeReviewEnvelope(target.repository, reviewId);
   if (review.policy !== "enabled" || !plan || plan.planning.status !== "valid") return { state: "unavailable", review, jobs: [] };
@@ -17,7 +25,7 @@ export async function readWorkspaceCiStatus(runtime: GitCiRuntime, target: Autho
   for (const event of plan.events) {
     const identity = { name: event.checkName, kind: z.enum(["ordinary-sysbox", "qemu"]).parse(event.provider) };
     try {
-      const { grant, result } = await currentExecutionEvidence(runtime, target.repository, event);
+      const { grant, result } = await evidence(runtime, target.repository, event);
       jobs.push({ ...identity, executionId: grant.executionId, status: result.result === "success" && result.completion.kind === "exited" && "exitCode" in result.completion && result.completion.exitCode === 0 ? "succeeded" : "failed" });
     } catch (error) {
       if (error instanceof ExecutionConflictError) jobs.push({ ...identity, status: error.code === "evidence-missing" ? "pending" : "stale" });

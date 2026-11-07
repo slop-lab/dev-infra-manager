@@ -36,7 +36,7 @@ export async function handleReviewCiStatus(context: RepositoryExtensionContext, 
 }
 
 export async function readReviewCiStatus(runtime: GitCiRuntime, target: AuthoritativeNativeRepositoryTarget,
-  reviewId: string): Promise<DimReviewCiStatus | undefined> {
+  reviewId: string, evidence: typeof currentExecutionEvidence = currentExecutionEvidence): Promise<DimReviewCiStatus | undefined> {
   const envelope = await readAuthoritativeNativeReviewEnvelope(target.repository, reviewId);
   if (!envelope || envelope.review.projectId !== target.imported.projectId || envelope.review.repositoryId !== target.imported.repositoryId) return;
   const review = envelope.review;
@@ -73,7 +73,7 @@ export async function readReviewCiStatus(runtime: GitCiRuntime, target: Authorit
     const event = plan.events.find((entry) => entry.checkName === required.name && entry.provider === required.provider);
     if (!event) { jobs.push({ name: required.name, kind, status: "failed" }); continue; }
     try {
-      const { grant, result } = await currentExecutionEvidence(runtime, target.repository, event);
+      const { grant, result } = await evidence(runtime, target.repository, event);
       const succeeded = result.result === "success" && result.completion.kind === "exited" && "exitCode" in result.completion && result.completion.exitCode === 0;
       jobs.push({ name: required.name, kind, executionId: grant.executionId, status: succeeded ? "succeeded" : "failed" });
     } catch (error) {

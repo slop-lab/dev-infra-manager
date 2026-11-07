@@ -67,9 +67,9 @@ export async function handleWorkspaceCandidateCi(context: RepositoryExtensionCon
         const completed = await optionalResult(join(root, `${routeRequestId}.result.json`));
         if (!stored || !completed || stored.projectId !== projectId || stored.repositoryId !== repositoryId || stored.workspaceId !== lease.workspaceId) return;
         const currentRuntime = { ...runtime, authoritativeTargetProofs: new Map() };
-        const status = await publishedStatus({ runtime: currentRuntime, request: stored, reviewId: completed.reviewId });
-        if (evidenceSuffix === undefined) return { status };
-        if (!evidenceClient || stored.generationId !== runtime.expectedGenerationId || status.status.state === "stale") return;
+        if (evidenceSuffix === undefined) return { status: await publishedStatus({ runtime: currentRuntime, request: stored, reviewId: completed.reviewId }) };
+        // Evidence reads prove current read scope; promotion eligibility is a separate operation.
+        if (!evidenceClient || stored.generationId !== runtime.expectedGenerationId) return;
         const target = await currentEvidenceTarget(currentRuntime, stored);
         if (target === undefined) return;
         const evidence = await workspaceCiEvidence({ client: evidenceClient, target, request: stored, reviewId: completed.reviewId, suffix: evidenceSuffix });
