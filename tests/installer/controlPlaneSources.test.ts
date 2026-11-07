@@ -30,7 +30,7 @@ async function fixture() {
 }
 
 describe("control-plane private source staging", () => {
-  it.each(["grantIssuer", "candidateReader", "resultReporter", "webhook"])(
+  it.each(["grantIssuer", "candidateReader", "resultReporter", "webhook", "query"])(
     "requires matching %s credentials across the service boundary", async (role) => {
       const input = await fixture();
       const native = nativeServiceConfig();
@@ -41,6 +41,43 @@ describe("control-plane private source staging", () => {
       } })}\n`);
       await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/paired/);
     });
+
+  it("requires the native query role and preserves operator input when it is missing", async () => {
+    const input = await fixture(), native = nativeServiceConfig();
+    const ci = { ...native.ci as Record<string, unknown> }; delete ci.query;
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...native, ci })}\n`);
+    const before = await readFile(input.paths.nativeConfig);
+    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/fields/);
+    expect(await readFile(input.paths.nativeConfig)).toEqual(before);
+  });
+
+  it("counts the paired query role once in redaction and activation fences", async () => {
+    const input = await fixture(), sources = await readControlPlaneSources(input.parsed);
+    expect(sources.credentialValues.filter(value => value === controlPlaneSecrets.query)).toHaveLength(1);
+    expect(sources.roleValues.filter(value => value === "native-query")).toHaveLength(1);
+    expect(() => completeControlPlaneSourcePreflight(sources, {
+      nativeGit: Buffer.from(`${controlPlaneSecrets.query}\n`),
+      execution: Buffer.from(`${controlPlaneSecrets.executionActivation}\n`)
+    })).toThrow(/distinct/);
+  });
+
+  it("rejects mismatched native query usernames even when their passwords match", async () => {
+    const input = await fixture(), native = nativeServiceConfig();
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...native, ci: {
+      ...native.ci as Record<string, unknown>, query: { username: "wrong-query", password: controlPlaneSecrets.query }
+    } })}\n`);
+    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/paired/);
+  });
+
+  it.each(["username", "password"] as const)("rejects a paired query %s reused by the execution operator", async field => {
+    const input = await fixture(), native = nativeServiceConfig(), execution = executionServiceConfig();
+    const credentials = execution.credentials as Record<string, unknown>;
+    const query = { username: "native-query", password: controlPlaneSecrets.query,
+      [field]: field === "username" ? "ci-operator" : controlPlaneSecrets.operator };
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({ ...native, ci: { ...native.ci as Record<string, unknown>, query } })}\n`);
+    await writePrivate(input.paths.executionConfig, `${JSON.stringify({ ...execution, credentials: { ...credentials, query } })}\n`);
+    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/distinct/);
+  });
 
   it("tracks private synchronization operator and Git provider secrets in deployment redaction and activation fences", async () => {
     const input = await fixture();

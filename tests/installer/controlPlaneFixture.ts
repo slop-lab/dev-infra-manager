@@ -40,6 +40,7 @@ export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
     humanReviewers: [],
     hostPromoters: [],
     ci: {
+      query: { username: "native-query", password: controlPlaneSecrets.query },
       grantIssuer: { username: "ci-grants", password: controlPlaneSecrets.grantIssuer },
       candidateReader: { username: "execution-candidate-reader", password: controlPlaneSecrets.candidateReader },
       resultReporter: { username: "execution-results", password: controlPlaneSecrets.resultReporter },

@@ -40,7 +40,7 @@ export function serviceCredentialValues(
   assertDistinct(hostPromoters.map((entry) => entry.hostId));
 
   const sourceRoles = ["grantIssuer", "candidateReader", "resultReporter"] as const;
-  const nativeCi = exactRecord(native.ci, [...sourceRoles, "webhook"], "native Git CI config");
+  const nativeCi = exactRecord(native.ci, [...sourceRoles, "webhook", "query"], "native Git CI config");
   const webhook = exactRecord(nativeCi.webhook, ["endpoint", "username", "password"], "native Git CI webhook");
   if (webhook.endpoint !== "http://execution:8080/v1/jobs") {
     throw new ControlPlaneSourceError("native Git CI webhook endpoint must be http://execution:8080/v1/jobs");
@@ -63,7 +63,9 @@ export function serviceCredentialValues(
   });
   const nativeWebhook = credential({ username: webhook.username, password: webhook.password }, "native Git CI webhook");
   assertPaired(nativeWebhook, credential(roles.webhook, "CI webhook"));
-  const serviceCredentials = [...nativeCredentials, nativeWebhook, credential(roles.query, "CI query"), credential(roles.operator, "Execution operator")];
+  const nativeQuery = credential(nativeCi.query, "native Git CI query");
+  assertPaired(nativeQuery, credential(roles.query, "CI query"));
+  const serviceCredentials = [...nativeCredentials, nativeWebhook, nativeQuery, credential(roles.operator, "Execution operator")];
   if (!Array.isArray(execution.workers)) {
     throw new ControlPlaneSourceError("Execution service worker credentials must be an array");
   }
