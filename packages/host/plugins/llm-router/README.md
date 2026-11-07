@@ -131,6 +131,17 @@ The launch hook registers the explicit ES-module URL while retaining existing
 plugin/model configuration. Pinned OpenCode must not reinterpret this adapter as
 a CommonJS export. Catalogue readiness alone does not prove routed inference.
 
+Helper publication and launch retire the obsolete `dim-llm-router.js` only when
+its exact reviewed prior artifact SHA-256 matches and it remains a private 0600,
+single-link, user-owned regular file in the anchored active configuration tree.
+No legacy adapter ownership manifest existed. Filename or credential similarity
+is not ownership evidence. The modern module must already be present; changed
+bytes/inodes, symlinks, hardlinks and unsafe paths fail without deleting the old
+file. Inspect the reported conflict and move any user-owned plugin out of
+OpenCode discovery before retrying explicit tool preparation. Unrelated plugin,
+model/profile, authentication and session files are not retired. Custom absolute
+`XDG_CONFIG_HOME` is supported only inside workspace HOME.
+
 `DIM_LLM_ROUTER_REQUEST_NONCE` optionally supplies a 32-character lowercase hex
 correlation value for one client run. The adapter sends it only to its gateway;
 the gateway and router validate it and record an admission-linked audit event.

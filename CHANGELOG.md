@@ -22,7 +22,9 @@ is implied by these source changes.
   Preserve the internal host protocol through normal public-CLI SSH bootstrap,
   consume owned approved production URL envelopes, and bind OpenCode monitoring
   and routed request accounting to the run's fresh session and correlation nonce.
-  Load the adapter as an explicit ES module. Require practical deterministic
+  Load the adapter as an explicit ES module and retire only exact reviewed,
+  privately owned obsolete adapter bytes; preserve edited or unsafe files with
+  actionable preparation failure. Require practical deterministic
   runtime coverage in the existing trusted CI gates without development-push
   hardware runs; external provider qualification remains separate.
 
