@@ -61,8 +61,11 @@ bootstrap_examples_run() {
   bootstrap_guest_copy_source; bootstrap_guest_prepare_source
   examples_artifacts_seed_guest
   printf '[examples] phase=control-plane-tools log=%s/01-control-plane-tools.log\n' "$CHECK_OUTPUT_ROOT"
+  # OpenSSH joins remote arguments into a command string, dropping empty ones.
+  local cp_tools_mode=cold
+  if [[ -n "${BOOTSTRAP_BASELINE_DIRECTORY:-}" ]]; then cp_tools_mode=cached; fi
   check_output_run control-plane-tools timeout --signal=TERM --kill-after=30s 1800s "${BOOTSTRAP_SSH[@]}" \
-    bash -s -- "${BOOTSTRAP_BASELINE_DIRECTORY:+cached}" <<'REMOTE'
+    bash -s -- "$cp_tools_mode" <<'REMOTE'
 set -euo pipefail
 cd /home/dim/dim/workbench
 if [[ "$1" == cached ]]; then
