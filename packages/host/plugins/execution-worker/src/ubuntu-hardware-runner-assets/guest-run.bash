@@ -5,6 +5,7 @@ stty -F /dev/ttyS0 -onlcr
 finish() { status=$?; trap - EXIT; printf '%s\n' "$status" >/dev/virtio-ports/dim.result || true; sync; /mnt/dim-tools/guest-exit "$status" || true; poweroff -f; }
 trap finish EXIT
 mkdir -p /run/dim/job /mnt/dim-tools /mnt/dim-source /workspace /scratch
+chmod 0755 /run/dim
 mount -t 9p -o trans=virtio,ro job /run/dim/job
 mount -t 9p -o trans=virtio,ro tools /mnt/dim-tools
 mount -t 9p -o trans=virtio workspace /mnt/dim-source
@@ -15,9 +16,6 @@ chown -R dim:dim /workspace
 # Evidence is written through this share while running, including failure paths.
 mount --bind /mnt/dim-source/.dim-ci-artifacts /workspace/.dim-ci-artifacts
 exec > >(tee /mnt/dim-source/.dim-ci-artifacts/bootstrap.log) 2>&1
-for sources in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
-  [[ ! -f "$sources" ]] || sed -i -E 's|http://((archive|security)\.ubuntu\.com)|https://\1|g' "$sources"
-done
 while read -r source target; do
   [[ -n "$source" ]] || continue
   mkdir -p "${target%/*}"; touch "$target"
@@ -27,7 +25,8 @@ done </run/dim/job/config-targets
 source /run/dim/job/job-environment
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Mirror routing, when selected by the operator, is bound before the first APT
-# request. Public indexes retain signature/hash checks and use immutable By-Hash.
+# request. Signed indexes and immutable By-Hash retain integrity on the normal
+# HTTP APT relay path; do not silently bypass the selected relay with HTTPS.
 apt_status=100
 for attempt in 1 2 3; do
   if timeout --signal=TERM --kill-after=10s 180s apt-get -o Acquire::Retries=2 -o Acquire::By-Hash=force -o APT::Update::Error-Mode=any update; then
@@ -73,4 +72,7 @@ cd -- "$(cat /run/dim/job/working-directory)"
 exec /bin/bash --noprofile --norc /run/dim/job/script
 JOB
 chmod 0555 /run/dim/run-job
+runuser -u dim -- test -x /run/dim/run-job || { echo "hardware job path is not traversable by dim" >&2; exit 2; }
+runuser -u dim -- test -r /run/dim/job/script || { echo "hardware job script is not readable by dim" >&2; exit 2; }
+runuser -u dim -- test -w /workspace/.dim-ci-artifacts || { echo "hardware artifacts are not writable by dim" >&2; exit 2; }
 systemd-run --unit=dim-hardware-candidate --wait --pipe --uid=dim --property=TasksMax=@DIM_PIDS@ /run/dim/run-job

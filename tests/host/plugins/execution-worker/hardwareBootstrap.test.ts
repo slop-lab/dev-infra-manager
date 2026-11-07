@@ -6,6 +6,9 @@ import { tmpdir } from "node:os";
 it.each([100, 23])("keeps package setup under the exit trap and returns bootstrap failure %s", async failure => {
   const source = await readFile(new URL("../../../../packages/host/plugins/execution-worker/src/ubuntu-hardware-runner-assets/guest-run.bash", import.meta.url), "utf8");
   const supervisor = await readFile(new URL("../../../../packages/host/plugins/execution-worker/src/ubuntu-hardware-runner-assets/supervisor.ts", import.meta.url), "utf8");
+  expect(source).toContain("chmod 0755 /run/dim");
+  expect(source).toContain("runuser -u dim -- test -x /run/dim/run-job");
+  expect(source).not.toContain("https://");
   expect(supervisor).toContain("package_update: false"); expect(supervisor).not.toContain("packages:");
   expect(source.indexOf("trap finish EXIT")).toBeLessThan(source.indexOf("apt_status=100"));
   expect(source.indexOf("done </run/dim/job/config-targets")).toBeLessThan(source.indexOf("apt_status=100"));
