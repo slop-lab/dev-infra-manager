@@ -9,8 +9,9 @@ import { createSysboxBackend } from "./backends/sysbox.js";
 import type { HostExecutionRouting } from "@slop-lab/dim-host-core/plugin-api";
 import { createQemuBackend } from "./backends/qemu.js";
 import type { ExecutionTaskHandler } from "@slop-lab/dim-contracts-execution/plugin-api";
-export async function runHostExecutionWorker(path: string, signal: AbortSignal, options: { runner?: StreamingCommandRunner; routingProvider?: () => Promise<HostExecutionRouting | undefined>; taskHandlers?: readonly ExecutionTaskHandler[] } = {}): Promise<void> {
-  const runner = options.runner ?? new ProcessRunner();
+export type HostExecutionWorkerOptions = { runner?: StreamingCommandRunner; routingProvider?: () => Promise<HostExecutionRouting | undefined>; taskHandlers?: readonly ExecutionTaskHandler[] };
+export type HostExecutionWorkerConfig = ReturnType<typeof executionWorkerConfigSchema.parse>;
+export async function runHostExecutionWorker(path: string, signal: AbortSignal, options: HostExecutionWorkerOptions = {}): Promise<void> {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   let config;
   try {
@@ -19,6 +20,11 @@ export async function runHostExecutionWorker(path: string, signal: AbortSignal, 
       || (metadata.mode & 0o777) !== 0o600 || metadata.size > 64 * 1024) throw new UserError("execution worker config must be an owned mode-0600 file");
     config = executionWorkerConfigSchema.parse(JSON.parse(await file.readFile("utf8")));
   } finally { await file.close(); }
+  await runConfiguredHostExecutionWorker(config, signal, options);
+}
+/** Internal embedding uses the exact already-validated config; no mutable path is reread. */
+export async function runConfiguredHostExecutionWorker(config: HostExecutionWorkerConfig, signal: AbortSignal, options: HostExecutionWorkerOptions = {}): Promise<void> {
+  const runner = options.runner ?? new ProcessRunner();
   // Refuse unusable capacity before it can reserve a candidate execution.
   if (config.slots.some((slot) => "runtime" in slot)) {
     const docker = await runner.run("docker", ["info", "--format", "{{json .Runtimes}}"], { signal });

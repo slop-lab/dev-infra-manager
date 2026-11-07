@@ -88,12 +88,13 @@ export class TaskStore<E extends SchedulingEvent, P extends object, G extends Sc
       return execution;
     });
   }
-  reserve(workerId: string, slot: ScheduledSlot<P>, requestId: string): (J & AssignmentOwnership<P>) | undefined {
+  reserve(workerId: string, slot: ScheduledSlot<P>, requestId: string, allowsNew?: () => boolean): (J & AssignmentOwnership<P>) | undefined {
     this.expire();
     return this.transaction(() => {
       const replay = this.database.prepare("SELECT * FROM executions WHERE worker_id=? AND slot_id=? AND request_id=?")
         .get(workerId, slot.id, requestId);
       if (replay !== undefined) return this.decode(replay) as (J & AssignmentOwnership<P>);
+      if (allowsNew?.() === false) return undefined;
       const occupied = this.database.prepare("SELECT 1 FROM executions WHERE worker_id=? AND slot_id=? AND phase<>'finished'")
         .get(workerId, slot.id);
       if (occupied !== undefined) throw new ExecutionConflictError("slot needs completion or owned cleanup");

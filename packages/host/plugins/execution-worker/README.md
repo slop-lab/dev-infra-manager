@@ -84,3 +84,12 @@ phase and failure code (credentials, protected-head checks, fetch, object verifi
 or materialization). Initial credential failure follows the same failed-result and
 artifact cleanup path. Raw error messages, URLs, arguments and credentials are never
 written by this diagnostic; ordinary guest output retains its existing bounds.
+
+`dim execution capacity /absolute/private/provider.json` optionally starts
+pre-enrolled worker loops on demand using a dedicated scoped capacity connection.
+It preserves the normal backends, host cache routing and installed task handlers;
+provider code contains no scheduler-specific VM implementation. Idle reclaim
+requires scheduler drain/revision authority, the same actual owned loop instance,
+and clean local journals. SIGTERM drains instead of aborting occupied work.
+The provider host does not need an operator credential. Nothing is started by
+installation alone. See the [fixed-pool setup and budgets](../../../../docs/guides/ci-runners.md#demand-managed-worker-pools).

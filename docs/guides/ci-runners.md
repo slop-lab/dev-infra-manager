@@ -344,3 +344,114 @@ per output stream. Text logs preserve stdout/stderr bytes and report retained
 prefix lengths when truncated; JSON carries base64 diagnostics and result
 metadata. Result acceptance, Git publication and human approval are distinct
 states: a successful execution can still await publication and review.
+
+## Demand-managed worker pools
+
+The scheduler can keep a fixed, operator-reviewed pool inactive until work is
+queued. This is optional. A pool starts existing host worker loops on demand;
+it does not let candidate workflows select machines, images, credentials or
+resource ceilings. Container/VM provisioning remains in the existing worker
+backends. Queued jobs do not require a connected slot, so a pool can start from
+zero active workers.
+
+Pre-enroll/export each pool member through `dim execution worker enroll|export`
+with the exact existing slot spec. Keep its worker config private on its host;
+do not run that member through a second static worker unit. In the execution
+service's reviewed operator configuration, add an optional `capacityProviders`
+array. For example, one pre-enrolled worker with two CPU1/memory2GiB/pids512
+slots can use this maximum reservation (including supervisor headroom):
+
+```json
+{
+  "id": "build-pool",
+  "token": "OPERATOR_GENERATED_DISTINCT_BASE64URL_SECRET",
+  "budget": { "cpu": 3, "memoryBytes": 5368709120, "pids": 1280 },
+  "members": [
+    { "workerId": "build-pool-1", "cost": { "cpu": 3, "memoryBytes": 5368709120, "pids": 1280 } }
+  ],
+  "maximumStarting": 1,
+  "idleMilliseconds": 60000,
+  "startMilliseconds": 120000,
+  "failureBackoffMilliseconds": 10000
+}
+```
+
+The token placeholder must be replaced with a fresh private canonical base64url
+secret of at least 32 bytes. All provider, service and worker identities/secrets
+must be distinct. A member belongs to one provider only. The sum of **all**
+member costs must fit the fixed pool budget, even while members are stopped.
+Each CI member cost must cover the sum of its slot CPU/memory/pids limits. Task
+members use explicit operator costs because trusted task handlers do not have a
+CI resource profile. Those costs are reservation accounting, not a new runtime
+sandbox for trusted task handlers.
+
+Choose budgets after reserving memory and process capacity for persistent
+workspaces, services and supervisor overhead across all providers on a host.
+Do not infer an available reservation from low current RSS or `MemAvailable`.
+CPU oversubscription must be an explicit operator choice; memory reservation
+must fit the host's fixed remaining budget. No pool derives or raises these
+limits automatically. Deploy config changes through the normal reviewed
+control-plane lifecycle; do not edit an active generated service config.
+
+Create a separate mode-0600 capacity connection on the provider host:
+
+```json
+{
+  "schemaVersion": 1,
+  "role": "capacity-provider",
+  "providerId": "build-pool",
+  "endpoint": "https://execution.example",
+  "generationId": "EXACT_ACTIVE_GENERATION_64_HEX",
+  "credential": { "username": "build-pool", "password": "SAME_PRIVATE_PROVIDER_SECRET" }
+}
+```
+
+This credential can reconcile only its configured pool and authorize its idle
+stops. It cannot enroll/export workers, query jobs/artifacts, cancel jobs or
+operate another pool. The provider host needs no execution operator role.
+Keep each provider identity on one host with one canonical state root.
+
+The host's separate mode-0600 provider config names the private connection and
+pre-exported worker files:
+
+```json
+{
+  "schemaVersion": 1,
+  "connectionFile": "/home/operator/.config/dim/capacity/connection.json",
+  "stateDirectory": "/home/operator/.local/state/dim/capacity/build-pool",
+  "pollMilliseconds": 5000,
+  "members": [
+    { "workerId": "build-pool-1", "configFile": "/home/operator/.config/dim/capacity/worker-1.json" }
+  ]
+}
+```
+
+Run `dim execution capacity /absolute/private/provider.json` through the
+operator's normal service supervisor. It takes an exclusive host guard and
+uses the normal worker backends, cache routing and exact installed task
+handlers. Configs are parsed once; later path edits cannot change a running
+provider's pinned worker identity. Stop/drain before changing them.
+
+Generation-bound SQLite metadata preserves reservations and revisions over
+scheduler restart. Compatible demand subtracts already planned/available
+capacity, including exact task-handler revisions. Starts are bounded by the
+pool and `maximumStarting`; failed/expired starts back off. A pending boot is
+not repeatedly cancelled just because its process has not appeared yet.
+Idle hysteresis avoids stopping and restarting on every queue fluctuation.
+
+Reclamation first disables new claims atomically at the scheduler. Existing
+lease renewal, result publication and exact journal recovery remain valid;
+busy/recovering workers are never stopped. The host then obtains current stop
+revision authorization and checks its actual loop instance and private slot
+journals again. Active/temporary journals, staging roots, pending uploads,
+unknown files and symlinks fence stopping. Validated historical terminal
+artifact receipts remain untouched and do not count as an active upload.
+A stale provider heartbeat blocks new claims without killing occupied work.
+Removing a provider does not turn its previously owned members into static
+claimable capacity in the same generation.
+
+SIGTERM drains the provider through these same checks. If authority or cleanup
+is unavailable it waits and reports that condition; it does not kill busy
+workers to meet a shutdown deadline. A service supervisor's forced termination
+still relies on the existing durable worker recovery rules. No provider is
+started, enrolled or deployed merely by installing the packages.

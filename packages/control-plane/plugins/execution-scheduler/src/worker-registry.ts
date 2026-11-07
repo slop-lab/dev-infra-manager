@@ -26,7 +26,8 @@ export class WorkerRegistry {
     const registration = executionWorkerEnrollmentSchema.parse(input);
     const nativeCredentials = this.config.nativeGit === undefined ? [] : [this.config.nativeGit.grantIssuer,
       this.config.nativeGit.candidateReader, this.config.nativeGit.resultReporter];
-    const serviceCredentials = [...Object.values(this.config.credentials).filter((value) => value !== undefined), ...nativeCredentials];
+    const serviceCredentials = [...Object.values(this.config.credentials).filter((value) => value !== undefined), ...nativeCredentials,
+      ...(this.config.capacityProviders ?? []).map(provider => ({ username: provider.id, password: provider.token }))];
     if (serviceCredentials.some((credential) => credential.username === registration.workerId)) {
       throw new ExecutionConflictError("worker identity conflicts with a service role");
     }
@@ -76,7 +77,8 @@ export class WorkerRegistry {
   private assertAuthority(): void {
     const nativeCredentials = this.config.nativeGit === undefined ? [] : [this.config.nativeGit.grantIssuer,
       this.config.nativeGit.candidateReader, this.config.nativeGit.resultReporter];
-    const roles = [...Object.values(this.config.credentials).filter((value) => value !== undefined), ...nativeCredentials];
+    const roles = [...Object.values(this.config.credentials).filter((value) => value !== undefined), ...nativeCredentials,
+      ...(this.config.capacityProviders ?? []).map(provider => ({ username: provider.id, password: provider.token }))];
     const values = [...roles.flatMap((credential) => [credential.username, credential.password]),
       ...this.workers().flatMap((worker) => [worker.workerId, worker.token])];
     if (new Set(values).size !== values.length) throw new Error("enrolled worker authority conflicts with a service role or worker identity");

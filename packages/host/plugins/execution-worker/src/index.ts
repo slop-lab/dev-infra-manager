@@ -1,3 +1,4 @@
+import { runHostExecutionCapacity } from "./capacity.js";
 import { UserError } from "@slop-lab/dim-host-core/workspace";
 import type { WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { runHostExecutionWorker } from "./host.js";
@@ -11,6 +12,9 @@ export const hostPlugin: WorkspaceHostPlugin = {
   commands: [{ name: "execution", description: "Inspect execution services, run task/CI slots or build their VM supervisor image" }],
   async run(args, context) {
     const [command, action, value, ...extra] = args;
+    if (command === "execution" && action === "capacity" && value && extra.length === 0) {
+      await runHostExecutionCapacity(value, context.signal, workerOptions(context)); return;
+    }
     if (command === "execution" && action === "console") {
       const { runExecutionConsole } = await import("./console.js");
       await runExecutionConsole(args.slice(2)); return;
@@ -54,7 +58,7 @@ function option(args: readonly string[], name: string): string | undefined {
   const index = args.indexOf(name); return index < 0 ? undefined : args[index + 1];
 }
 function usage(): UserError {
-  return new UserError("usage: dim execution worker enroll --connection ABS --spec ABS --output ABS | dim execution worker export --connection ABS --spec ABS --output ABS | dim execution worker discover --connection ABS --json | dim execution worker CONFIG | dim execution qemu-image IMAGE [--profile ubuntu-hardware] [--ubuntu-image ABS]");
+  return new UserError("usage: dim execution capacity ABS_CONFIG | dim execution worker enroll --connection ABS --spec ABS --output ABS | dim execution worker export --connection ABS --spec ABS --output ABS | dim execution worker discover --connection ABS --json | dim execution worker CONFIG | dim execution qemu-image IMAGE [--profile ubuntu-hardware] [--ubuntu-image ABS]");
 }
 function workerOptions(context: Parameters<NonNullable<WorkspaceHostPlugin["run"]>>[1]) {
   return { runner: context.runner, taskHandlers: executionTaskHandlers(context.extensions ?? []),

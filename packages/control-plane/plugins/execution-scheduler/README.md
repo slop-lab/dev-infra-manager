@@ -48,3 +48,14 @@ complete non-CI use case, required host/control-plane plugins and setup.
 Execution owns bounded artifact bytes under the private `artifacts/` child of its existing state directory (and therefore its operator-selected state volume). Each execution has an immutable digest-verified manifest and files. Metadata publication uses synced private temporary files and exclusive links; data chunks can be retried or resumed. Storage survives service restart without putting blob bytes in SQLite or Native Git results.
 
 Workers upload through the current worker/slot/lease/generation/descriptor authority. Query credentials can list a job manifest and download its opaque artifact IDs, or look up up to32newest executions for an exact event. Workspace-facing CI adapters must apply their project/repository/review grant scope before using this private query API; service-wide query credentials never enter a workspace. Captured collection availability and job completion are separate. Listed files retain verified availability even if another requested file could not be captured.
+
+Optional `service.capacityProviders` configures demand-managed, fixed pre-enrolled
+worker pools. The scheduler owns generation-bound start reservations, idle
+hysteresis and atomic claim/drain exclusion; it never starts host processes.
+Dedicated provider credentials can use only `POST /v1/capacity/reconcile` and
+`POST /v1/capacity/stop`, scoped to their exact pool. They are distinct from
+operator, query, task, CI and worker credentials. Pool costs reserve its entire
+maximum CPU/memory/pids envelope, including trusted task slots. There is no
+capacity-provider enrollment/token rotation or candidate-controlled scaling
+policy. See [runner setup](../../../../docs/guides/ci-runners.md#demand-managed-worker-pools)
+for complete operator and host configuration and preservation boundaries.

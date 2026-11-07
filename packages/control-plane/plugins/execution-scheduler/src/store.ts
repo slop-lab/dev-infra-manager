@@ -34,10 +34,10 @@ export class ExecutionStore extends TaskStore<ExecutionEvent | TaskEvent, Execut
   override enqueue(input: TaskEvent): TaskExecution;
   override enqueue(input: ExecutionEvent | TaskEvent): ScheduledExecution;
   override enqueue(input: ExecutionEvent | TaskEvent): ScheduledExecution { return super.enqueue(input); }
-  override reserve(workerId: string, slot: WorkerSlot, requestId: string): ExecutionAssignment | undefined;
-  override reserve(workerId: string, slot: ScheduledSlot<TaskProfile>, requestId: string): TaskAssignment | undefined;
-  override reserve(workerId: string, slot: ScheduledSlot<ExecutionProfile | TaskProfile>, requestId: string): ScheduledExecutionAssignment | undefined;
-  override reserve(workerId: string, slot: ScheduledSlot<ExecutionProfile | TaskProfile>, requestId: string): ScheduledExecutionAssignment | undefined { return super.reserve(workerId, slot, requestId); }
+  override reserve(workerId: string, slot: WorkerSlot, requestId: string, allowsNew?: () => boolean): ExecutionAssignment | undefined;
+  override reserve(workerId: string, slot: ScheduledSlot<TaskProfile>, requestId: string, allowsNew?: () => boolean): TaskAssignment | undefined;
+  override reserve(workerId: string, slot: ScheduledSlot<ExecutionProfile | TaskProfile>, requestId: string, allowsNew?: () => boolean): ScheduledExecutionAssignment | undefined;
+  override reserve(workerId: string, slot: ScheduledSlot<ExecutionProfile | TaskProfile>, requestId: string, allowsNew?: () => boolean): ScheduledExecutionAssignment | undefined { return super.reserve(workerId, slot, requestId, allowsNew); }
   override attachGrant(id: string, grant: ExecutionGrant): ExecutionAssignment;
   override attachGrant(id: string, grant: TaskGrant): TaskAssignment;
   override attachGrant(id: string, grant: ExecutionGrant | TaskGrant): ScheduledExecutionAssignment;

@@ -1,3 +1,4 @@
+import { ExecutionCapacity } from "./capacity.js";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
@@ -31,6 +32,7 @@ export function configuredExecutionServer(input: {
     config.claimLeaseMilliseconds, input.now);
   const artifacts = new ExecutionArtifactStore(join(input.stateDirectory, "artifacts"));
   const registry = new WorkerRegistry(store.database, generation, config, store.now);
+  const capacity = new ExecutionCapacity(store, registry, config, generation);
   const workers = () => registry.workers().map((worker) => ({ id: worker.workerId, token: worker.token,
     slots: worker.slots.map((slot): ScheduledSlot<ExecutionProfile | TaskProfile> => "taskType" in slot
       ? { id: slot.id, kind: `task/${slot.taskType}`, profile: { taskType: slot.taskType, handlerRevision: slot.handlerRevision } }
@@ -73,6 +75,13 @@ export function configuredExecutionServer(input: {
       store.activate(activation); return send(response, 200, { ...body, activated: true });
     }
     if (!store.activated(activation)) return send(response, 503, { error: "Execution requires generation activation" });
+    if (request.method === "POST" && ["/v1/capacity/reconcile", "/v1/capacity/stop"].includes(url.pathname)) {
+      const provider = capacity.provider(request.headers.authorization);
+      if (!provider) return unauthorized(response);
+      if (request.headers["x-dim-generation-id"] !== generation) return send(response, 409, { error: "capacity generation is stale" });
+      const body = await read(request);
+      return send(response, 200, url.pathname.endsWith("/stop") ? capacity.authorizeStop(provider, body) : capacity.reconcile(provider, body));
+    }
     const taskRoute = /^\/v1\/tasks(?:\/([0-9a-f-]{36})\/(exchange|cancel|complete))?$/.exec(url.pathname);
     if (taskRoute !== null) {
       const credential = config.credentials.tasks;
@@ -115,7 +124,7 @@ export function configuredExecutionServer(input: {
           ...(registry.lastSeenAt(worker.id) === undefined ? {} : { lastSeenAt: registry.lastSeenAt(worker.id) }), slots: worker.slots.map((slot) => {
            const job = occupied.find((job) => job.workerId === worker.id && job.slotId === slot.id);
            return { id: slot.id, executionKind: slot.kind, state: job === undefined ? "idle" : job.phase === "recovering" ? "cleanup-required" : "busy",
-             available: registry.observed(worker.id) && job === undefined,
+             available: registry.observed(worker.id) && capacity.available(worker.id) && job === undefined,
              ...(job === undefined ? {} : { job: isTaskExecution(job) ? taskSummary(job) : store.executionSummary(job), leaseExpiresAt: job.leaseExpiresAt }) };
          }) })));
       }
@@ -168,7 +177,7 @@ export function configuredExecutionServer(input: {
       const body = claimRequest.parse(await read(request));
       const slot = worker.slots.find((slot) => slot.id === body.slotId);
       if (slot === undefined) return send(response, 404, {});
-      let assignment = store.reserve(worker.id, slot, body.requestId);
+      let assignment = store.reserve(worker.id, slot, body.requestId, () => capacity.allowsClaim(worker.id, slot.id, body.requestId));
       if (assignment === undefined) return send(response, 204);
       if (assignment.phase !== "assigned" || assignment.grant !== undefined) return send(response, 200, assignment);
       try {
