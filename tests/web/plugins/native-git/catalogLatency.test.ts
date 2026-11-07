@@ -1,5 +1,6 @@
 import { scryptSync } from "node:crypto";
-import { access, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { watch } from "node:fs";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -138,6 +139,17 @@ it("serves a fresh fast-controller catalog over authenticated HTTP while another
     accounts: [{ username: "reader", passwordHash: `scrypt$16384$8$1$${salt.toString("base64")}$${hash.toString("base64")}`, roles: ["read"] }],
     session: { idleSeconds: 900, absoluteSeconds: 3600 } }), { mode: 0o600 });
   const web = await createWebServerFromConfigFile(config); cleanup.push(() => web.close());
+  // HTTP close does not join controller discovery. Own its last filesystem
+  // write before removing the fixture, including when an assertion fails.
+  let completed = () => {};
+  const slowCompleted = new Promise<void>((resolve) => { completed = resolve; });
+  const writes = watch(root, (_event, name) => {
+    if (name?.toString() === "calls.log") void readFile(calls, "utf8").then((text) => {
+      if (text.includes("slow completed\n")) completed();
+    }, () => {});
+  });
+  cleanup.push(async () => { writes.close(); });
+  cleanup.push(async () => { await rm(gate, { force: true }); await slowCompleted; });
   await expect(access(gate)).resolves.toBeUndefined();
   const base = await web.listen(), origin = "http://127.0.0.1:9081";
   const login = await fetch(base + "/v1/session", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ username: "reader", password }) });
@@ -151,7 +163,6 @@ it("serves a fresh fast-controller catalog over authenticated HTTP while another
   ] });
   expect((await readFile(calls, "utf8")).match(/fast started/g)).toHaveLength(1);
   await expect(access(gate)).resolves.toBeUndefined();
-  await unlink(gate);
 });
 
 
