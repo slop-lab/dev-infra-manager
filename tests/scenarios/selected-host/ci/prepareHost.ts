@@ -3,6 +3,7 @@ import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { userInfo } from "node:os";
 import { runCommand } from "../../web-lifecycle/process.ts";
+import { waitForIncusCloudInit } from "./incusReadiness.ts";
 import { cleanupIncusForwarding, incusPackages, prepareIncusForwarding } from "./fixtureNetwork.ts";
 
 const [output, image, imageSha, machine] = process.argv.slice(2), repository = resolve(import.meta.dirname, "../../../..");
@@ -57,7 +58,7 @@ for (;;) {
   if (Date.now() >= deadline) { await incus("console", "practical-ci-image-builder", "--show-log"); throw new Error("pinned CI VM image agent did not become available"); }
   await new Promise((done) => setTimeout(done, 2000));
 }
-await incus("exec", "practical-ci-image-builder", "--", "cloud-init", "status", "--wait");
+await waitForIncusCloudInit(deadline);
 const nodePin = (await run("bash", ["-c", 'source "$1"; dim_bootstrap_artifact node amd64; printf "%s\\n%s\\n" "$dim_artifact_url" "$dim_artifact_sha256"', "ci-node", join(repository, "scripts/lib/bootstrap-ubuntu-pins.bash")])).split("\n");
 const nodeSha = nodePin[1]; if (!nodeSha || !/^[a-f0-9]{64}$/.test(nodeSha)) throw new Error("CI Node pin is invalid");
 const nodeArchive = "/home/dim/dim/bootstrap-artifacts/" + nodeSha;
