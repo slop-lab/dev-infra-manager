@@ -34,13 +34,20 @@ selects its own repository. Never request host or operator credentials to read C
    labelled and cannot be saved as a complete retained log.
    Artifact names are descriptive metadata. They never choose local write paths.
    Downloads require an explicit new file and verify the declared size and SHA-256
-   before publishing any bytes. A manifest marked unavailable means collection was incomplete. Already listed
-   immutable entries remain readable; missing entries are not proof. Collection
-   availability does not change the execution result.
+   before publishing any bytes. A manifest marked unavailable means collection
+   was incomplete. Already listed immutable entries remain readable only while
+   the workspace grant, generation, policy, protected head and candidate still
+   match the request; missing entries are not proof. Collection availability
+   does not change the execution result. Save required logs and artifacts before
+   pushing a changed candidate, promoting the protected ref, or changing policy
+   or service generation. Durable retention does not guarantee later access
+   through a stale workspace request.
 4. Fix the failure, commit and push, then create a **new request UUID** for the new
    commit. Retrying an unchanged request reuses its original candidate. Never
    describe queued work, missing artifacts or stale evidence as passed CI.
 
-If the selected generation or policy is stale, report that state and ask the
-operator to reconnect the workspace. Do not bypass the workspace boundary by
-using host query commands or copying control-plane connection files.
+For a stale workspace connection, report that state and ask the operator to
+reconnect the workspace. A changed candidate, policy, protected head or service
+generation requires a new explicit request UUID; reconnecting does not refresh
+an old immutable request. Do not bypass the workspace boundary by using host
+query commands or copying control-plane connection files.

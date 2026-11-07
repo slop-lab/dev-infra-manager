@@ -211,7 +211,15 @@ the original deployment retain their existing `control-plane connect` path.
    infer enablement from a workflow file or from a previous experiment.
 4. Resolve/prepare a fresh review and inspect its DIM CI state. Follow the
    repository's execution jobs until each required current attempt succeeds and
-   its result is published/accepted by Git authority.
+   its result is published/accepted by Git authority. Save required logs and
+   artifacts with their candidate/tree, execution IDs and verified digests before
+   promotion or any candidate, policy or service-generation change. The workspace
+   `dim-ci` flow is documented in the
+   [Native Git workspace workflow](../../packages/host/plugins/native-git/README.md).
+   Durable storage does not guarantee later access through a stale workspace
+   request: scoped reads still require its current grant, generation, policy,
+   protected head and candidate. Reconnecting fixes a stale connection; it does
+   not replan an old request. Changed bindings require a new explicit request UUID.
 5. Approve when human policy requires it, then merge/promote using the separate
    promoter role. Failed historical jobs remain history, not green evidence.
 
