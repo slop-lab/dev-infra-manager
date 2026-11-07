@@ -18,7 +18,7 @@ const root = join(directory, "root.qcow2"), scratch = join(directory, "scratch.r
 run("qemu-img", ["create", "-f", "qcow2", "-F", "qcow2", "-b", "/opt/dim/ubuntu.qcow2", root, "24G"]);
 run("qemu-img", ["create", "-f", "raw", scratch, "64G"]);
 const bootstrap = readFileSync("/opt/dim/guest-run.bash", "utf8").replaceAll("@DIM_PIDS@", pids);
-const cloud = { users: [{ name: "dim", uid: 1000, groups: ["sudo", "kvm"], sudo: "ALL=(ALL) NOPASSWD:ALL", shell: "/bin/bash", lock_passwd: true }],
+const cloud = { users: [{ name: "dim", uid: 1000, groups: ["sudo"], sudo: "ALL=(ALL) NOPASSWD:ALL", shell: "/bin/bash", lock_passwd: true }],
   ssh_pwauth: false, disable_root: true, package_update: true,
   packages: ["python3", "git", "curl", "ca-certificates", "build-essential", "qemu-system-x86", "qemu-utils", "cloud-image-utils", "openssh-client", "xz-utils", "libatomic1"],
   write_files: [{ path: "/usr/local/sbin/dim-hardware-job", permissions: "0700", encoding: "b64", content: Buffer.from(bootstrap).toString("base64") }],

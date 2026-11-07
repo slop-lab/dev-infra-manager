@@ -31,7 +31,12 @@ export async function buildNativeQemuRunnerImage(
       cwd: root,
       ...(operation.signal === undefined ? {} : { signal: operation.signal })
     });
-    if (result.exitCode !== 0) throw new UserError("native QEMU runner image build failed");
+    if (result.exitCode !== 0) {
+      // This context contains only reviewed bootstrap assets and a public image;
+      // no connection, credential or build-secret input is passed to Docker.
+      const diagnostic = (result.stderr.trim() || result.stdout.trim()).slice(-8192);
+      throw new UserError(`native QEMU runner image build failed (exit ${result.exitCode})${diagnostic ? `\n${diagnostic}` : ""}`);
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }

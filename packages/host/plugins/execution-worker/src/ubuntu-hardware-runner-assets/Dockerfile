@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 COPY guest-exit.c /tmp/guest-exit.c
 RUN cc -static -O2 -Wall -Wextra -Werror /tmp/guest-exit.c -o /tmp/guest-exit
 FROM ubuntu:24.04@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e82f5c538ea
-RUN apt-get update && apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils libstdc++6 libatomic1 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils genisoimage libstdc++6 libatomic1 && rm -rf /var/lib/apt/lists/*
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY ubuntu.qcow2 /opt/dim/ubuntu.qcow2
 COPY --from=build /tmp/guest-exit /opt/dim/tools/guest-exit
