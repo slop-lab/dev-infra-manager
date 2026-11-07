@@ -20,10 +20,19 @@ async function childFixture() {
     setInterval(()=>{},1000);\n`);
   return { pidFile, script };
 }
-async function live(pid: number): Promise<boolean> {
-  try { const stat = await readFile(`/proc/${pid}/stat`, "utf8"); return !["Z", "X"].includes(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0]!); }
-  catch (error) { if (error instanceof Error && "code" in error && error.code === "ENOENT") return false; throw error; }
+async function live(pid: number, readStat: (path: string) => Promise<string> = path => readFile(path, "utf8")): Promise<boolean> {
+  try { const stat = await readStat(`/proc/${pid}/stat`); return !["Z", "X"].includes(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0]!); }
+  catch (error) { if (error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ESRCH")) return false; throw error; }
 }
+it("recognizes a process disappearing during its proc read without hiding other inspection failures", async () => {
+  for (const code of ["ENOENT", "ESRCH"]) {
+    await expect(live(123, async path => {
+      expect(path).toBe("/proc/123/stat"); throw Object.assign(new Error("process disappeared"), { code });
+    })).resolves.toBe(false);
+  }
+  const denied = Object.assign(new Error("permission denied"), { code: "EACCES" });
+  await expect(live(123, async () => { throw denied; })).rejects.toBe(denied);
+});
 async function ready(pidFile: string): Promise<number> {
   for (let attempt = 0; attempt < 300; attempt++) {
     try { return Number(await readFile(pidFile, "utf8")); }
