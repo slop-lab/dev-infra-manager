@@ -100,9 +100,10 @@ it("drains the real capacity command without passing host cancellation into its 
       taskStop.abort(); await within("task cancellation during cleanup", result);
       await within("provider cleanup drain", running);
     } finally {
+      const retainedState = drained ? undefined : diagnostic();
       await service.close();
       if (drained) await rm(root, { recursive: true, force: true });
-      else console.error(`Capacity fixture retained without confirmed drain: ${root}; ${diagnostic()}`);
+      else console.error(`Capacity fixture retained without confirmed drain: ${root}; ${retainedState}`);
     }
   }
 }, 25_000);
