@@ -31,3 +31,34 @@ Implement additional task handlers through
 installed extensions. The wire schemas belong to execution contracts; the
 scheduler implementation is not a handler dependency. The complete worker
 configuration is exported from this package's `/config` entrypoint.
+
+## Explicit Ubuntu hardware runner
+
+`dim execution qemu-image IMAGE --profile ubuntu-hardware [--ubuntu-image ABS]`
+builds a separate trusted Ubuntu 24.04/systemd runner. The Ubuntu cloud image
+must match SHA-256 `6a81c37564db9b1ee84e141922625e1d7c5b389b99bb3c572e0243607d5bb4d2`;
+by default the builder reads the existing DIM artifact cache. An operator may
+provide the same verified bytes from a mirror using `--ubuntu-image`.
+
+Enroll a dedicated `vm` slot explicitly. Its runner and job image must be the
+**same immutable digest**, with at least four CPUs, 20 GiB memory and a 10800-second
+wall budget. The worker state directory needs at least 80 GiB free on a disk
+filesystem. The profile creates a private 24 GiB root overlay and a separate
+64 GiB scratch disk; scratch backs guest `/tmp`, rather than RAM tmpfs. The
+operator image label selects this mode, not a candidate environment variable.
+Ordinary Sysbox and the existing small QEMU runner retain their behavior.
+
+The supervisor stays unprivileged, has only KVM and exact owned job/workspace/
+private disk mounts, and exposes no Docker socket, host credentials or SSH port.
+Inside the full disposable guest, the job has normal sudo so it can provision
+nested disposable machines. A fresh non-root guest process must successfully
+create and close a nested KVM VM before the job starts. CPU/memory and supervisor
+PID limits remain host-enforced; the guest job unit also has `TasksMax`. Guest
+root can manage its own systemd units, but acquires no host authority.
+
+The copied candidate runs from a disk filesystem. Only the job descriptor/config
+mount is read-only; evidence is written through the dedicated
+`/workspace/.dim-ci-artifacts` share, including on failure. The hypervisor disks
+are outside that share. A private virtio exit channel preserves the actual job
+exit status and must agree with the VM termination signal. Building/enrolling
+this profile does not itself qualify any source commit or run a hardware gate.

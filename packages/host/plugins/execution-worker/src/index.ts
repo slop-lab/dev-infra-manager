@@ -32,11 +32,18 @@ export const hostPlugin: WorkspaceHostPlugin = {
       if (connection === undefined || extra.length !== 3 || extra[2] !== "--json") throw usage();
       console.log(JSON.stringify(await (await createExecutionOperatorClient(connection)).workers())); return;
     }
-    if (command !== "execution" || !value || extra.length || !["worker", "qemu-image"].includes(action ?? "")) {
+    if (command !== "execution" || !value || (extra.length && action !== "qemu-image") || !["worker", "qemu-image"].includes(action ?? "")) {
       throw usage();
     }
     if (action === "qemu-image") {
+      let profile: "ubuntu-hardware" | undefined, ubuntuImage: string | undefined;
+      for (let index = 0; index < extra.length; index += 2) {
+        if (extra[index] === "--profile" && extra[index + 1] === "ubuntu-hardware" && profile === undefined) profile = "ubuntu-hardware";
+        else if (extra[index] === "--ubuntu-image" && extra[index + 1]?.startsWith("/") && ubuntuImage === undefined) ubuntuImage = extra[index + 1];
+        else throw usage();
+      }
       await buildNativeQemuRunnerImage(context.runner, value, { signal: context.signal,
+        ...(profile === undefined ? {} : { profile }), ...(ubuntuImage === undefined ? {} : { ubuntuImage }),
         reportProgress: (stage) => process.stderr.write(`${stage}\n`) });
       console.log(value); return;
     }
@@ -47,7 +54,7 @@ function option(args: readonly string[], name: string): string | undefined {
   const index = args.indexOf(name); return index < 0 ? undefined : args[index + 1];
 }
 function usage(): UserError {
-  return new UserError("usage: dim execution worker enroll --connection ABS --spec ABS --output ABS | dim execution worker export --connection ABS --spec ABS --output ABS | dim execution worker discover --connection ABS --json | dim execution worker CONFIG | dim execution qemu-image IMAGE");
+  return new UserError("usage: dim execution worker enroll --connection ABS --spec ABS --output ABS | dim execution worker export --connection ABS --spec ABS --output ABS | dim execution worker discover --connection ABS --json | dim execution worker CONFIG | dim execution qemu-image IMAGE [--profile ubuntu-hardware] [--ubuntu-image ABS]");
 }
 function workerOptions(context: Parameters<NonNullable<WorkspaceHostPlugin["run"]>>[1]) {
   return { runner: context.runner, taskHandlers: executionTaskHandlers(context.extensions ?? []),

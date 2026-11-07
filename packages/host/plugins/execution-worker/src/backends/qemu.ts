@@ -1,11 +1,12 @@
 import type { HostExecutionRouting } from "@slop-lab/dim-host-core/plugin-api";
-import { chmod, mkdir, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, stat, statfs, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NativeOutputCollector, executionDiagnostics } from "../output.js";
 import { cleanupNativeContainer, containerName, ownershipLabels, prepareExecutionImage, jobEnvironmentScript, validateJobConfigTargets } from "./containers.js";
 import type { BackendInput, ExecutionBackend } from "../backend.js";
 import type { ExecutionResult } from "@slop-lab/dim-contracts-ci/aggregate";
 import { candidateFailureCode } from "../candidate-failure.js";
+import { hardwareRunnerLabel, requireHardwareProfile } from "../hardwareProfile.js";
 
 export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBackend { return {
   kind: "qemu",
@@ -35,6 +36,14 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
       if (!kvm.isCharacterDevice() || uid === undefined || gid === undefined) throw new Error("KVM is required");
       await prepareExecutionImage(input.runner, descriptor.runnerBaseImage, signal);
       await prepareExecutionImage(input.runner, descriptor.jobImage, signal);
+      const profileInfo = await input.runner.run("docker", ["image", "inspect", descriptor.runnerBaseImage, "--format", `{{json (index .Config.Labels "${hardwareRunnerLabel}")}}`], { signal });
+      if (profileInfo.exitCode !== 0) throw new Error("trusted QEMU profile inspection failed");
+      const hardware = requireHardwareProfile(JSON.parse(profileInfo.stdout), descriptor);
+      if (hardware) {
+        const disk = await statfs(input.root, { bigint: true });
+        if (disk.type === 0x01021994n || disk.bavail * disk.bsize < 80n * 1024n ** 3n) throw new Error("hardware worker state requires 80 GiB free on disk, not tmpfs");
+        await mkdir(join(input.root, "hardware"), { mode: 0o700 });
+      }
       const imageInfo = await input.runner.run("docker", ["image", "inspect", descriptor.jobImage, "--format", "{{json .Config.Env}}"], { signal });
       if (imageInfo.exitCode !== 0) throw new Error("QEMU job image environment inspection failed");
       const imageEnvironment: unknown = JSON.parse(imageInfo.stdout);
@@ -42,6 +51,7 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
         throw new Error("invalid QEMU job image environment");
       }
       await writeFile(join(job, "job-environment"), jobEnvironmentScript(routing?.jobEnvironmentDefaults, imageEnvironment ?? []), { mode: 0o444, flag: "wx" });
+      if (!hardware) {
       const archive = await input.runner.run("docker", ["create", "--name", rootfsContainerName(input.grant), "--network", "none", "--read-only", "--entrypoint", "/bin/bash",
         ...ownershipLabels(input.grant, "qemu-rootfs").flatMap((label) => ["--label", label]), descriptor.jobImage], { signal });
       if (archive.exitCode !== 0 || !/^[0-9a-f]{64}$/.test(archive.stdout.trim())) throw new Error("QEMU root filesystem preparation failed");
@@ -49,7 +59,8 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
       if (exported.exitCode !== 0) throw new Error("QEMU root filesystem export failed");
       await chmod(join(job, "rootfs.tar"), 0o444);
       if (!await cleanupNativeContainer(input.runner, input.grant, "qemu-rootfs", rootfsContainerName(input.grant))) throw new Error("QEMU image preparation cleanup is uncertain");
-      const launched = await input.runner.run("docker", qemuContainerArguments(input, { uid, gid, kvmGroup: kvm.gid }, routing), { signal });
+      }
+      const launched = await input.runner.run("docker", qemuContainerArguments(input, { uid, gid, kvmGroup: kvm.gid }, routing, hardware), { signal });
       if (launched.exitCode !== 0 || !/^[0-9a-f]{64}$/.test(launched.stdout.trim())) throw new Error("QEMU supervisor launch failed");
       const id = launched.stdout.trim();
       const [waited, logs] = await Promise.all([
@@ -80,7 +91,7 @@ async function cleanupQemu(runner: BackendInput["runner"], grant: BackendInput["
   return image && machine;
 }
 export function qemuContainerArguments(input: Pick<BackendInput, "grant" | "root">,
-  identity: { uid: number; gid: number; kvmGroup: number }, routing?: HostExecutionRouting): string[] {
+  identity: { uid: number; gid: number; kvmGroup: number }, routing?: HostExecutionRouting, hardware = false): string[] {
   const descriptor = input.grant.descriptor;
   const supervisorMemory = BigInt(descriptor.bounds.memoryBytes) + 256n * 1024n * 1024n;
   return ["run", "--detach", "--init", "--name", containerName(input.grant), "--read-only", "--network", routing?.network ?? "bridge",
@@ -90,6 +101,7 @@ export function qemuContainerArguments(input: Pick<BackendInput, "grant" | "root
     ...ownershipLabels(input.grant, "qemu").flatMap((label) => ["--label", label]),
     "--mount", `type=bind,src=${join(input.root, "job")},dst=/run/dim/job,readonly`,
     "--mount", `type=bind,src=${join(input.root, "workspace")},dst=/run/dim/workspace`,
+    ...(hardware ? ["--mount", `type=bind,src=${join(input.root, "hardware")},dst=/run/dim/hardware`] : []),
     "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=16m", descriptor.runnerBaseImage,
     "/usr/local/bin/dim-native-qemu-run", "/run/dim/job/descriptor.json", "/run/dim/job/script", "/run/dim/workspace",
     descriptor.jobImage, descriptor.bounds.cpu, descriptor.bounds.memoryBytes, descriptor.bounds.pids];
