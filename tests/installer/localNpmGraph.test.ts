@@ -4,11 +4,12 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { prepareLocalNpmGraph, removeLocalNpmOverrides } from "../../packages/installer/src/localNpmGraph.js";
+import { installPlugins } from "../../packages/installer/src/pluginInstall.js";
 
 const exec = promisify(execFile), roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "dim-local-npm-")); roots.push(root);
   const requests: string[] = [];
@@ -23,16 +24,16 @@ async function fixture() {
     npm_config_update_notifier: "false" };
   const run = async (directory: string, args: string[]) => exec("npm", args, { cwd: directory,
     env: { ...env, npm_config_cache: join(directory, "npm-cache") }, timeout: 15_000, maxBuffer: 1024 * 1024 });
-  const pack = async (name: string, version: string, dependencies: Record<string, string> = {}) => {
+  const pack = async (name: string, version: string, dependencies: Record<string, string> = {}, extra: Record<string, unknown> = {}, source = 'module.exports = "local-only";') => {
     const directory = join(root, `${name.replaceAll("/", "-")}-${version}`); await mkdir(directory);
-    await writeFile(join(directory, "package.json"), JSON.stringify({ name, version, dependencies }));
-    await writeFile(join(directory, "index.js"), '// @ts-check\nmodule.exports = "local-only";\n');
+    await writeFile(join(directory, "package.json"), JSON.stringify({ name, version, dependencies, ...extra }));
+    await writeFile(join(directory, "index.js"), `#!/usr/bin/env node\n// @ts-check\n${source}\n`);
     const packed: unknown = JSON.parse((await run(directory, ["pack", "--json", "--ignore-scripts", "--pack-destination", root])).stdout);
     const entry: unknown = Array.isArray(packed) ? packed[0] : undefined;
     if (!entry || typeof entry !== "object" || !("filename" in entry) || typeof entry.filename !== "string") throw new Error("missing packed fixture");
     return join(root, entry.filename);
   };
-  return { root, requests, run, pack, close: () => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())) };
+  return { root, requests, run, pack, env, close: () => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())) };
 }
 const library = "@slop-lab/gs-local-npm-fixture", plugin = "@slop-lab/dim-local-npm-fixture";
 const install = ["install", "--save-exact", "--no-audit", "--no-fund"];
@@ -46,7 +47,7 @@ it("prevents actual npm metadata lookups for unpublished transitive local packag
     f.requests.length = 0;
     const fixed = join(f.root, "fixed"); await mkdir(fixed);
     await prepareLocalNpmGraph(fixed, [library, plugin], [lib, app]);
-    await f.run(fixed, [...install, lib, app]);
+    await f.run(fixed, install);
     expect(f.requests).toEqual([]);
     expect(JSON.parse(await readFile(join(fixed, "node_modules", library, "package.json"), "utf8")).version).toBe(version);
     expect(JSON.parse(await readFile(join(fixed, "package.json"), "utf8")).overrides[library]).toBe(`$${library}`);
@@ -59,7 +60,7 @@ it("keeps local upgrades and plugin removal independent of registry metadata", a
     for (const version of ["0.10.0-local-first", "0.10.0-local-second"]) {
       const lib = await f.pack(library, version), app = await f.pack(plugin, version, { [library]: version });
       await prepareLocalNpmGraph(runtime, [library, plugin], [lib, app]);
-      await f.run(runtime, [...install, lib, app]);
+      await f.run(runtime, install);
       expect(JSON.parse(await readFile(join(runtime, "node_modules", library, "package.json"), "utf8")).version).toBe(version);
     }
     await f.run(runtime, ["uninstall", "--no-audit", "--no-fund", plugin]);
@@ -68,6 +69,31 @@ it("keeps local upgrades and plugin removal independent of registry metadata", a
     const manifest = JSON.parse(await readFile(join(runtime, "package.json"), "utf8"));
     expect(manifest.dependencies[plugin]).toBeUndefined(); expect(manifest.overrides[plugin]).toBeUndefined();
     expect(manifest.overrides[library]).toBe(`$${library}`); expect(f.requests).toEqual([]);
+  } finally { await f.close(); }
+});
+it("installs the actual peer-connected plugin closure without re-adding archive arguments", async () => {
+  const f = await fixture();
+  try {
+    const version = "0.10.0-local-peers", core = "@slop-lab/dim-control-plane-core", repository = "@slop-lab/dim-local-repository";
+    const lib = await f.pack(library, version);
+    const runtime = await f.pack(core, version, {}, { bin: { "dim-control-plane": "index.js" } });
+    const peer = await f.pack(repository, version, { [library]: version }, { peerDependencies: { [core]: version } });
+    const app = await f.pack(plugin, version, { [library]: version }, { peerDependencies: { [core]: version, [repository]: version } },
+      "exports.controlPlanePlugin = {apiVersion:1,name:'npm-peer-fixture',configure(){}};");
+    const names = [library, core, repository, plugin], archives = [lib, runtime, peer, app];
+    const old = join(f.root, "peer-argv"); await mkdir(old);
+    await prepareLocalNpmGraph(old, names, archives);
+    await f.run(old, [...install, ...archives]);
+    expect(f.requests).toContain("/@slop-lab%2fgs-local-npm-fixture");
+    f.requests.length = 0;
+    for (const name of ["npm_config_registry", "npm_config_userconfig", "npm_config_ignore_scripts", "npm_config_fetch_retries", "npm_config_update_notifier"] as const) vi.stubEnv(name, f.env[name]);
+    vi.stubEnv("npm_config_cache", join(f.root, "plugin-npm-cache"));
+    const home = join(f.root, "plugins", "current");
+    await expect(installPlugins([`${plugin}@${version}`], { pluginHome: home, target: "control-plane",
+      runtimeSpecifier: `${core}@${version}`, packageNames: names, packageSpecifiers: archives, pluginNames: [plugin] })).resolves.toEqual([plugin]);
+    expect(f.requests).toEqual([]);
+    expect(JSON.parse(await readFile(join(home, "node_modules", repository, "package.json"), "utf8")).peerDependencies[core]).toBe(version);
+    expect(JSON.parse(await readFile(join(home, "plugins.json"), "utf8")).plugins).toEqual([plugin]);
   } finally { await f.close(); }
 });
 it("rejects partial local mappings before changing a runtime manifest", async () => {

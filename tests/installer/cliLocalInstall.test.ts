@@ -6,6 +6,10 @@ import { baseEnv, cleanupCliTempDirs, npmArguments, runCli, tempDir, tsxPath } f
 
 afterEach(cleanupCliTempDirs);
 
+async function installedLocalDependencies(dataHome: string): Promise<Record<string, string>> {
+  return JSON.parse(await readFile(join(dataHome, "runtime/current/package.json"), "utf8")).dependencies;
+}
+
 async function localBundleFixture() {
   const root = await tempDir("dim-cli-local-bundle-");
   const { env, configPath, dataHome } = await baseEnv(root);
@@ -39,17 +43,23 @@ describe("cli.ts dispatch (integration, via tsx subprocess)", () => {
     expect(config.cli).toMatchObject({ mode: "proxied", version: "0.9.0" });
     expect(config.cli.executable).toBe(join(dataHome, "cli/runtime/current/dim"));
     const args = await npmArguments(npmArgs);
-    expect(args).toEqual(expect.arrayContaining([join(bundle, "core.tgz")]));
-    for (const file of ["admin.tgz", "native-git.tgz", "contract.tgz", "mirrors.tgz", "installer.tgz"]) expect(args).not.toContain(join(bundle, file));
+    expect(args.some(argument => argument.endsWith(".tgz"))).toBe(false);
+    expect(await installedLocalDependencies(dataHome)).toEqual({ "@slop-lab/dim-host-core": `file:${join(bundle, "core.tgz")}` });
   });
 
   it("selects the administration profile and both matched local host plugins", async () => {
     const { root, env, bundle, npmArgs, dataHome } = await localBundleFixture();
     const result = await runCli(["installer", "install", "core", "--local-packages", bundle, "--no-local-bin", "--with-managed"], tsxPath, env, root);
     expect(result.code, result.stderr).toBe(0);
-    const args = await npmArguments(npmArgs);
-    for (const file of ["core.tgz", "admin.tgz", "native-git.tgz", "contract.tgz", "native-host.tgz", "worker.tgz"]) expect(args).toContain(join(bundle, file));
-    expect(args).not.toContain(join(bundle, "mirrors.tgz"));
+    expect((await npmArguments(npmArgs)).some(argument => argument.endsWith(".tgz"))).toBe(false);
+    expect(await installedLocalDependencies(dataHome)).toEqual({
+      "@slop-lab/dim-host-core": `file:${join(bundle, "core.tgz")}`,
+      "@slop-lab/dim-control-plane-admin": `file:${join(bundle, "admin.tgz")}`,
+      "@slop-lab/dim-control-plane-plugin-git-repositories": `file:${join(bundle, "native-git.tgz")}`,
+      "@slop-lab/dim-contracts-external-url": `file:${join(bundle, "contract.tgz")}`,
+      "@slop-lab/dim-host-plugin-native-git": `file:${join(bundle, "native-host.tgz")}`,
+      "@slop-lab/dim-host-plugin-execution-worker": `file:${join(bundle, "worker.tgz")}`
+    });
     expect(JSON.parse(await readFile(join(dataHome, "runtime/current/plugins.json"), "utf8"))).toEqual({ schemaVersion: 1, plugins: ["@slop-lab/dim-host-plugin-execution-worker", "@slop-lab/dim-host-plugin-native-git"] });
   });
 
@@ -61,15 +71,16 @@ describe("cli.ts dispatch (integration, via tsx subprocess)", () => {
     await writeFile(join(current, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: ["@slop-lab/dim-host-plugin-mirrors"] }));
     const result = await runCli(["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"], tsxPath, env, root);
     expect(result.code, result.stderr).toBe(0);
-    const args = await npmArguments(npmArgs);
-    expect(args).toContain(join(bundle, "mirrors.tgz"));
-    expect(args).not.toContain(join(bundle, "admin.tgz"));
-    expect(args).not.toContain("@slop-lab/dim-host-plugin-mirrors@0.8.0");
+    expect((await npmArguments(npmArgs)).some(argument => argument.endsWith(".tgz"))).toBe(false);
+    expect(await installedLocalDependencies(dataHome)).toEqual({
+      "@slop-lab/dim-host-core": `file:${join(bundle, "core.tgz")}`,
+      "@slop-lab/dim-host-plugin-mirrors": `file:${join(bundle, "mirrors.tgz")}`
+    });
     expect(JSON.parse(await readFile(join(current, "plugins.json"), "utf8"))).toEqual({ schemaVersion: 1, plugins: ["@slop-lab/dim-host-plugin-mirrors"] });
   });
 
   it("updates core while retaining an independently installed compatible CLI release", async () => {
-    const { root, env, configPath, dataHome, bundle, npmArgs } = await localBundleFixture();
+    const { root, env, configPath, dataHome, bundle } = await localBundleFixture();
     const executable = join(root, "independent-cli");
     await writeStubCli(executable, { versionOutput: "9.0.0" });
     await mkdir(dirname(configPath), { recursive: true });
@@ -80,7 +91,7 @@ describe("cli.ts dispatch (integration, via tsx subprocess)", () => {
     const config = JSON.parse(await readFile(configPath, "utf8"));
     expect(config.cli).toEqual(cli);
     expect(config.host).toEqual({ version: "0.9.0", executable: join(dataHome, "runtime/current/node_modules/.bin/dim-host") });
-    expect(await npmArguments(npmArgs)).not.toContain(join(bundle, "cli.tgz"));
+    expect(await installedLocalDependencies(dataHome)).toEqual({ "@slop-lab/dim-host-core": `file:${join(bundle, "core.tgz")}` });
   });
 
   it("install cli updates only presentation behind an existing host", async () => {

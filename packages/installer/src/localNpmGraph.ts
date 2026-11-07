@@ -1,10 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-/** Pin transitive resolution as well as direct install arguments to the reviewed artifacts. */
+/** Pin the reviewed local graph; true means npm must install this manifest without archive arguments. */
 export async function prepareLocalNpmGraph(directory: string, names: readonly string[] | undefined,
-  specifiers: readonly string[]): Promise<void> {
-  if (names === undefined || !specifiers.some(specifier => specifier.endsWith(".tgz"))) return;
+  specifiers: readonly string[]): Promise<boolean> {
+  if (names === undefined || !specifiers.some(specifier => specifier.endsWith(".tgz"))) return false;
   if (names.length !== specifiers.length || new Set(names).size !== names.length
     || names.some(name => !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(name))
     || specifiers.some(specifier => !specifier.endsWith(".tgz"))) throw new Error("local package names must match the complete artifact closure");
@@ -19,6 +19,7 @@ export async function prepareLocalNpmGraph(directory: string, names: readonly st
     overrides[name] = `$${name}`;
   }
   await writeFile(file, JSON.stringify({ ...value, private: true, dependencies, overrides }, null, 2) + "\n", { mode: 0o600 });
+  return true;
 }
 
 export async function removeLocalNpmOverrides(directory: string, names: readonly string[]): Promise<void> {

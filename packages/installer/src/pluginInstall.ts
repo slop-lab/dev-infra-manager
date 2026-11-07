@@ -118,10 +118,10 @@ async function installPluginsInStage(
   if (runtime !== undefined) assertExactPluginSpecifier(runtime);
   const durableSpecifiers = await Promise.all([...(options.packageSpecifiers ?? [...specifiers, ...(runtime === undefined ? [] : [runtime])])]
     .map((specifier) => persistLocalSpecifier(specifier, stagingDirectory)));
-  await prepareLocalNpmGraph(stagingDirectory, options.packageNames, durableSpecifiers);
+  const localGraph = await prepareLocalNpmGraph(stagingDirectory, options.packageNames, durableSpecifiers);
   await run(
     options.npmCommand ?? "npm",
-    ["install", "--save-exact", "--no-fund", "--no-audit", ...durableSpecifiers],
+    ["install", "--save-exact", "--no-fund", "--no-audit", ...(localGraph ? [] : durableSpecifiers)],
     stagingDirectory,
     options.operation
   );

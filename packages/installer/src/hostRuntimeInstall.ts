@@ -62,10 +62,10 @@ export async function installHostRuntime(options: HostRuntimeInstallOptions): Pr
   let controllerRestartAttempted = false;
   let targetControllerReady = false;
   try {
-    await prepareLocalNpmGraph(stagingDirectory, options.packageNames, requestedPackages);
+    const localGraph = await prepareLocalNpmGraph(stagingDirectory, options.packageNames, requestedPackages);
     await run(options.npmCommand ?? "npm", [
       "install", "--prefix", stagingDirectory, "--save-exact", "--no-fund", "--no-audit",
-      ...packageSpecifiers
+      ...(localGraph ? pluginGraph.specifiers.filter(specifier => !requestedPackages.includes(specifier)) : packageSpecifiers)
     ], stagingDirectory, options.operation);
     options.operation?.reportProgress("version verification");
     const stagingExecutable = path.join(stagingDirectory, "node_modules", ".bin", "dim-host");

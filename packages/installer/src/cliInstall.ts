@@ -55,9 +55,9 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
   let symlinkSnapshot: ManagedSymlinkSnapshot | undefined;
   try {
     options.operation?.reportProgress("package installation");
-    await prepareLocalNpmGraph(stage, options.packageNames, specifiers);
+    const localGraph = await prepareLocalNpmGraph(stage, options.packageNames, specifiers);
     await run(options.npmCommand ?? "npm", [
-      "install", "--prefix", stage, "--save-exact", "--no-fund", "--no-audit", ...specifiers
+      "install", "--prefix", stage, "--save-exact", "--no-fund", "--no-audit", ...(localGraph ? [] : specifiers)
     ], stage, options.operation);
     options.operation?.reportProgress("version verification");
     const staged = path.join(stage, "node_modules", ".bin", "dim");
