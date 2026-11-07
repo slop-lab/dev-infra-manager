@@ -9,7 +9,9 @@ if (process.argv.length !== 9 || descriptor !== "/run/dim/job/descriptor.json" |
   || !cpu || !memory || !pids || ![cpu, memory, pids].every(value => /^[1-9][0-9]*$/.test(value))) throw new Error("invalid Ubuntu hardware invocation");
 const spec: unknown = JSON.parse(readFileSync(descriptor, "utf8"));
 if (!spec || typeof spec !== "object" || !("runnerBaseImage" in spec) || !("jobImage" in spec)
-  || spec.runnerBaseImage !== image || spec.jobImage !== image || Number(cpu) < 4 || BigInt(memory) < 20n * 1024n ** 3n) throw new Error("hardware image/resource binding mismatch");
+  || spec.runnerBaseImage !== image || spec.jobImage !== image || !("bounds" in spec) || !spec.bounds || typeof spec.bounds !== "object"
+  || !("cpu" in spec.bounds) || spec.bounds.cpu !== cpu || !("memoryBytes" in spec.bounds) || spec.bounds.memoryBytes !== memory
+  || !("pids" in spec.bounds) || spec.bounds.pids !== pids || Number(cpu) < 4 || BigInt(memory) < 20n * 1024n ** 3n) throw new Error("hardware image/resource binding mismatch");
 const directory = "/run/dim/hardware", metadata = lstatSync(directory), disk = statfsSync(directory, { bigint: true });
 if (!metadata.isDirectory() || metadata.isSymbolicLink() || metadata.uid !== process.getuid?.() || (metadata.mode & 0o077)
   || disk.type === 0x01021994n || disk.bavail * disk.bsize < 80n * 1024n ** 3n) throw new Error("hardware scratch must be private and disk-backed with 80 GiB free");
@@ -19,8 +21,7 @@ run("qemu-img", ["create", "-f", "qcow2", "-F", "qcow2", "-b", "/opt/dim/ubuntu.
 run("qemu-img", ["create", "-f", "raw", scratch, "64G"]);
 const bootstrap = readFileSync("/opt/dim/guest-run.bash", "utf8").replaceAll("@DIM_PIDS@", pids);
 const cloud = { users: [{ name: "dim", uid: 1000, groups: ["sudo"], sudo: "ALL=(ALL) NOPASSWD:ALL", shell: "/bin/bash", lock_passwd: true }],
-  ssh_pwauth: false, disable_root: true, package_update: true,
-  packages: ["python3", "git", "curl", "ca-certificates", "build-essential", "qemu-system-x86", "qemu-utils", "cloud-image-utils", "openssh-client", "xz-utils", "libatomic1"],
+  ssh_pwauth: false, disable_root: true, package_update: false, package_upgrade: false,
   write_files: [{ path: "/usr/local/sbin/dim-hardware-job", permissions: "0700", encoding: "b64", content: Buffer.from(bootstrap).toString("base64") }],
   runcmd: [["/bin/bash", "/usr/local/sbin/dim-hardware-job"]] };
 writeFileSync(join(directory, "user-data"), "#cloud-config\n" + JSON.stringify(cloud), { flag: "wx", mode: 0o600 });

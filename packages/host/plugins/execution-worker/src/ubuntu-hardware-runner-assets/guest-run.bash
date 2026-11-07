@@ -8,6 +8,35 @@ mkdir -p /run/dim/job /mnt/dim-tools /mnt/dim-source /workspace /scratch
 mount -t 9p -o trans=virtio,ro job /run/dim/job
 mount -t 9p -o trans=virtio,ro tools /mnt/dim-tools
 mount -t 9p -o trans=virtio workspace /mnt/dim-source
+cp -a /mnt/dim-source/. /workspace/
+mkdir -p /mnt/dim-source/.dim-ci-artifacts /workspace/.dim-ci-artifacts
+chown dim:dim /mnt/dim-source/.dim-ci-artifacts
+chown -R dim:dim /workspace
+# Evidence is written through this share while running, including failure paths.
+mount --bind /mnt/dim-source/.dim-ci-artifacts /workspace/.dim-ci-artifacts
+exec > >(tee /mnt/dim-source/.dim-ci-artifacts/bootstrap.log) 2>&1
+for sources in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+  [[ ! -f "$sources" ]] || sed -i -E 's|http://((archive|security)\.ubuntu\.com)|https://\1|g' "$sources"
+done
+while read -r source target; do
+  [[ -n "$source" ]] || continue
+  mkdir -p "${target%/*}"; touch "$target"
+  mount --bind "/run/dim/job/$source" "$target"
+  mount -o remount,bind,ro "$target"
+done </run/dim/job/config-targets
+source /run/dim/job/job-environment
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Mirror routing, when selected by the operator, is bound before the first APT
+# request. Public indexes retain signature/hash checks and use immutable By-Hash.
+apt_status=100
+for attempt in 1 2 3; do
+  if timeout --signal=TERM --kill-after=10s 180s apt-get -o Acquire::Retries=2 -o Acquire::By-Hash=force -o APT::Update::Error-Mode=any update; then
+    apt_status=0; break
+  else apt_status=$?; fi
+  [[ "$attempt" == 3 ]] || sleep 3
+done
+[[ "$apt_status" == 0 ]] || exit "$apt_status"
+timeout --signal=TERM --kill-after=10s 600s env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=2 -o Acquire::By-Hash=force install -y --no-install-recommends python3 git curl ca-certificates build-essential qemu-system-x86 qemu-utils cloud-image-utils genisoimage openssh-client xz-utils libatomic1
 # A separate fixed-size disk carries temporary VM overlays; never RAM tmpfs.
 mkfs.ext4 -q -F /dev/vdb
 mount -o nosuid,nodev /dev/vdb /scratch
@@ -33,19 +62,6 @@ try:
  print('hardware guest KVM API12/create-close PASS')
 finally:os.close(fd)
 KVM
-cp -a /mnt/dim-source/. /workspace/
-mkdir -p /mnt/dim-source/.dim-ci-artifacts /workspace/.dim-ci-artifacts
-chown dim:dim /mnt/dim-source/.dim-ci-artifacts
-chown -R dim:dim /workspace /scratch/tmp
-chmod 1777 /scratch/tmp
-# Evidence is written through this share while running, including failure paths.
-mount --bind /mnt/dim-source/.dim-ci-artifacts /workspace/.dim-ci-artifacts
-while read -r source target; do
-  [[ -n "$source" ]] || continue
-  mkdir -p "${target%/*}"; touch "$target"
-  mount --bind "/run/dim/job/$source" "$target"
-  mount -o remount,bind,ro "$target"
-done </run/dim/job/config-targets
 cat >/run/dim/run-job <<'JOB'
 #!/bin/bash
 set -euo pipefail

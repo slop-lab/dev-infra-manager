@@ -20,11 +20,7 @@ export async function buildNativeQemuRunnerImage(
     if (operation.profile === "ubuntu-hardware") {
       const sha = "6a81c37564db9b1ee84e141922625e1d7c5b389b99bb3c572e0243607d5bb4d2";
       const image = operation.ubuntuImage ?? join(homedir(), ".cache/dim/artifacts", sha);
-      const info = await lstat(image);
-      if (!info.isFile() || info.isSymbolicLink()) throw new UserError("hardware Ubuntu image must be a regular pinned image file");
-      const hash = createHash("sha256"); for await (const chunk of createReadStream(image)) hash.update(chunk);
-      if (hash.digest("hex") !== sha) throw new UserError("hardware Ubuntu cloud image checksum mismatch");
-      await cp(image, join(root, "ubuntu.qcow2"));
+      await copyPinnedUbuntuImage(image, join(root, "ubuntu.qcow2"), sha);
     } else if (operation.ubuntuImage !== undefined) throw new UserError("Ubuntu image input requires ubuntu-hardware profile");
     operation.reportProgress?.("Docker image build");
     const result = await runner.run("docker", ["build", "--tag", image, "."], {
@@ -40,4 +36,13 @@ export async function buildNativeQemuRunnerImage(
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+}
+
+/** Hash the private copy consumed by Docker, never reopen the mutable cache. */
+export async function copyPinnedUbuntuImage(source: string, destination: string, sha256: string): Promise<void> {
+  await cp(source, destination, { dereference: false, force: false, errorOnExist: true });
+  const info = await lstat(destination);
+  if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) throw new UserError("hardware Ubuntu image must be a regular pinned image file");
+  const hash = createHash("sha256"); for await (const chunk of createReadStream(destination)) hash.update(chunk);
+  if (hash.digest("hex") !== sha256) throw new UserError("hardware Ubuntu cloud image checksum mismatch");
 }
