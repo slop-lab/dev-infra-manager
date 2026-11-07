@@ -17,7 +17,7 @@ for role in control-plane host; do
   started=$SECONDS
   boot_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   name=examples-control-plane; [[ "$role" != host ]] || name=examples-workspace-host
-  # Identity/empty-state qualification needs one 3-GiB guest at a time; the full
+  # Identity/empty-state/Incus qualification needs one 3-GiB guest at a time; the full
   # cached acceptance separately runs the simultaneous CP/host workload.
   bootstrap_guest_start "$name" 3072
   machine="$("${BOOTSTRAP_SSH[@]}" cat /etc/machine-id)"
@@ -30,6 +30,14 @@ for path in "$HOME/.config/dim" "$HOME/.local/state/dim" "$HOME/.local/state/dim
 done
 if [[ "$1" == host ]]; then
   [[ -z "$(sudo docker ps -aq)" && -z "$(sudo docker image ls -q)" && -z "$(sudo docker volume ls -q)" ]]
+  # Operate only inside this disposable clone, never in the sealed baseline.
+  # Initializing and creating a managed bridge exercises Incus' real dnsmasq
+  # startup, which a package inventory or --version probe cannot establish.
+  sudo incus admin init --minimal
+  sudo incus network create dim-baseline ipv4.address=10.217.46.1/24 ipv4.nat=true ipv6.address=none
+  [[ "$(sudo incus network get dim-baseline ipv4.address)" == 10.217.46.1/24 ]]
+  ip link show dev dim-baseline >/dev/null
+  sudo incus network delete dim-baseline
 else
   ! command -v docker
 fi
@@ -47,7 +55,7 @@ import {readFileSync,writeFileSync} from 'node:fs';
 const [input,output]=process.argv.slice(2),observations=readFileSync(input,'utf8').trim().split('\n').map(JSON.parse);
 if(observations.length!==2||observations[0].role!=='control-plane'||observations[1].role!=='host')throw Error('incomplete cloned pair');
 for(const field of ['machine','instanceId','sshHostKey'])if(observations[0][field]===observations[1][field])throw Error('reused clone identity');
-const receipt={schemaVersion:1,status:'PASS',qualification:'dependency-clone-identities-and-empty-state-only',observations};
+const receipt={schemaVersion:1,status:'PASS',qualification:'dependency-clone-identities-empty-state-and-incus-network',incusManagedNetwork:'PASS',observations};
 writeFileSync(output,JSON.stringify(receipt,null,2)+'\n',{mode:0o600,flag:'wx'});
 console.log(JSON.stringify(receipt));
 VERIFY

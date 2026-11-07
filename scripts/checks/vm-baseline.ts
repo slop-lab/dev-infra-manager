@@ -11,6 +11,7 @@ export const baselineRecipeFiles = [
   "scripts/checks/vm-baseline.ts", "scripts/checks/lib/prepare-vm-baselines.bash", "scripts/checks/lib/verify-vm-baselines.bash",
   "scripts/checks/lib/bootstrap-ubuntu-vm-guest.bash", "scripts/checks/lib/install-source-tools-ubuntu.bash",
   "scripts/checks/lib/install-trusted-qemu-node.bash", "scripts/checks/lib/install-docker-ce-ubuntu.bash",
+  "scripts/checks/lib/install-practical-vm-dependencies-ubuntu.bash",
   "scripts/checks/install-host-ubuntu.bash", "scripts/checks/install-rootlesskit-apparmor-profile-ubuntu.bash",
   "scripts/checks/lib/runtime-backends.bash", "scripts/checks/lib/bootstrap-download.bash",
   "scripts/lib/bootstrap-ubuntu-pins.bash", "scripts/lib/bootstrap-host-preflight.bash"

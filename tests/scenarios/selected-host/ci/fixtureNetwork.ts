@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { CommandResult } from "../../web-lifecycle/process.ts";
 
-export const incusPackages = ["incus", "qemu-system-x86", "qemu-utils", "ovmf", "build-essential", "genisoimage", "iptables", "iproute2"] as const;
 type FixtureIdentity = { readonly sourceSha: string; readonly machine: string };
 type Execute = (file: string, args: readonly string[]) => Promise<CommandResult>;
 const networkSchema = z.object({ name: z.literal("practical-ci"), type: z.literal("bridge"), managed: z.literal(true), status: z.literal("Created"),

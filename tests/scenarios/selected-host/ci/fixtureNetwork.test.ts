@@ -1,6 +1,5 @@
-import { readFile } from "node:fs/promises";
 import { expect, it } from "vitest";
-import { cleanupIncusForwarding, prepareIncusForwarding, incusPackages } from "./fixtureNetwork.ts";
+import { cleanupIncusForwarding, prepareIncusForwarding } from "./fixtureNetwork.ts";
 import type { CommandResult } from "../../web-lifecycle/process.ts";
 
 const identity = { sourceSha: "a".repeat(40), machine: "b".repeat(32) };
@@ -27,11 +26,6 @@ function fixture() {
   return { execute, commands, rules, replaceNetwork: (value: typeof network) => { network = value; }, failReturn: () => { rejectReturn = true; } };
 }
 
-it("installs explicit cloud-init ISO tooling through the normal host package plan", async () => {
-  expect(incusPackages).toContain("genisoimage");
-  const source = await readFile(new URL("./prepareHost.ts", import.meta.url), "utf8");
-  expect(source).toContain('["apt-get", "install", "-y", ...incusPackages]');
-});
 it("permits only the validated newly owned bridge/subnet and cleans up only exact commented rules", async () => {
   const f = fixture(), receipt = await prepareIncusForwarding(identity, f.execute);
   expect(receipt).toMatchObject({ ...identity, bridge: "practical-ci", subnet: "10.211.42.0/24", inserted: ["egress", "return"] });

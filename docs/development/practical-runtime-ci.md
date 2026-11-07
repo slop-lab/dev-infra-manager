@@ -66,7 +66,9 @@ placement does not grant candidate-selected images or infer cache capability.
 Every run creates distinct writable CP and host disks, imports the exact source,
 and installs/builds current DIM afresh. Guest-observed machine IDs, cloud-init
 instance IDs and SSH host fingerprints prove independent identities. The clone
-check proves dependency/empty-state boot only; a successful cached practical job
+check proves dependency/empty-state boot and initializes a managed Incus network
+inside the disposable host clone, including its DNS service. Cold preparation
+and baseline builds use the same explicit Ubuntu dependency installer. A successful cached practical job
 is still required for full runtime qualification. The nested Incus CI image is
 still prepared cold in this first implementation. Cached success never replaces
 the explicit main/release cold-bootstrap proof. Stage logs retain UTC timestamps

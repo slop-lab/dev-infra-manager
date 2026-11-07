@@ -33,8 +33,7 @@ cd /tmp/dim-baseline-inputs
 sudo bash scripts/checks/lib/install-source-tools-ubuntu.bash
 if [[ "$role" == host ]]; then
   DIM_HOST_INSTALL_ASSUME_YES=1 bash scripts/checks/install-host-ubuntu.bash sysbox docker-ce
-  sudo apt-get update
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends incus qemu-system-x86 qemu-utils ovmf build-essential genisoimage iptables iproute2
+  sudo bash scripts/checks/lib/install-practical-vm-dependencies-ubuntu.bash
   sudo usermod -aG incus-admin,kvm,docker dim
 fi
 sudo dpkg-query -W -f='${Package}\t${Version}\n' > /tmp/dim-baseline-packages.txt

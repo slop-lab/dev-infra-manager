@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { userInfo } from "node:os";
 import { runCommand } from "../../web-lifecycle/process.ts";
 import { waitForIncusCloudInit } from "./incusReadiness.ts";
-import { cleanupIncusForwarding, incusPackages, prepareIncusForwarding } from "./fixtureNetwork.ts";
+import { cleanupIncusForwarding, prepareIncusForwarding } from "./fixtureNetwork.ts";
 
 const [output, image, imageSha, machine] = process.argv.slice(2), repository = resolve(import.meta.dirname, "../../../..");
 if (!output?.startsWith("/") || !image?.startsWith("/") || !imageSha || !/^[a-f0-9]{64}$/.test(imageSha)
@@ -15,8 +15,7 @@ const run = async (file: string, args: readonly string[]) => (await runCommand(f
 const incus = (...args: string[]) => run("sudo", ["incus", "--force-local", "--project", "practical-ci", ...args]);
 const sourceSha = await run("git", ["rev-parse", "HEAD"]);
 await run("test", ["-c", "/dev/kvm"]);
-await run("sudo", ["apt-get", "update"]);
-await run("sudo", ["apt-get", "install", "-y", ...incusPackages]);
+await run("sudo", ["bash", join(repository, "scripts/checks/lib/install-practical-vm-dependencies-ubuntu.bash")]);
 await run("genisoimage", ["--version"]);
 await run("test", ["-x", "/usr/bin/mkisofs"]);
 const probe = join(output, "kvm-probe");
