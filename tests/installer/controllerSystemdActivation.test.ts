@@ -36,7 +36,7 @@ async function systemdFixture(kind: "owned" | "lookalike" | "node-options") {
   await mkdir(bin);
   await writeFile(entrypoint, 'console.log("ready"); setInterval(() => {}, 1000);\n');
   await writeFile(lookalike, 'console.log("ready"); setInterval(() => {}, 1000);\n');
-  await writeFile(unit, "[Service]\n");
+  await writeFile(unit, "[Service]\n", { mode: 0o600 });
   const script = kind === "lookalike" ? lookalike : entrypoint;
   const child: ChildProcess = spawn(process.execPath, [script, ...controllerArgs(pidPath)], {
     env: kind === "node-options" ? { ...controllerEnvironment(), NODE_OPTIONS: "--enable-source-maps" } : controllerEnvironment(),
