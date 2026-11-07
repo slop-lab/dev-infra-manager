@@ -28,9 +28,11 @@ is implied by these source changes.
   runtime coverage in the existing trusted CI gates without development-push
   hardware runs. Explicit DIM CI qualification can use an operator-pinned Ubuntu
   hardware VM, exact bounded parent context and redacted retained diagnostics;
-  the default DIM workflow remains source-only. External provider qualification
-  remains separate. Fresh local installation validates paired CI credentials through
-  the matching installed admin package without requiring dependencies in the
+  the default DIM workflow remains source-only. Auxiliary VM start waits for its
+  guest Docker boot service, and prepared example images select a single Incus
+  guest agent instead of competing with the stock LXD agent. External provider
+  qualification remains separate. Fresh local installation validates paired CI
+  credentials through the matching installed admin package without requiring dependencies in the
   original source checkout. Compose separate example control planes by exact
   package identity, keeping feature credentials with their owners and starting
   providers before repository listeners.

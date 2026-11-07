@@ -156,6 +156,7 @@ export class PersistentVmService {
     await this.machines.start(record);
     try {
       await this.machines.waitForAgent(record);
+      await this.machines.waitForDocker(record);
       const ready = await this.machines.exec(record, ["sh", "-eu", "-c",
         'test -d /workspace && test ! -L /workspace && test -w /workspace && test -d /mnt/dim-tmp && test ! -L /mnt/dim-tmp && test -w /mnt/dim-tmp && test "$(stat -c %a /mnt/dim-tmp)" = 700']);
       if (ready !== 0) throw new UserError("auxiliary VM image must provide writable /workspace and private mode-0700 /mnt/dim-tmp for user dim");

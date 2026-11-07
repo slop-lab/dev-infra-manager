@@ -153,8 +153,9 @@ An existing browser, exec or copy stream is closed when its grant or workspace
 becomes invalid. The credential grants discovery, status, console, ordinary
 guest exec and safe home-relative copy. `--lifecycle` additionally grants start
 and stop. Inside the workspace use `dim-vm list|status|exec|push|pull|start|stop`.
-Successful start waits for the guest agent and verifies the supported auxiliary
-image's `/workspace` and private temporary-directory contract before returning.
+Successful start waits for the guest agent and guest Docker boot service, then
+verifies the supported auxiliary image's `/workspace` and private temporary-directory
+contract before returning.
 Copy resolves existing home-relative ancestors through held no-follow directory
 descriptors, so an intermediate symlink cannot redirect read or write authority
 outside `/home/dim`.

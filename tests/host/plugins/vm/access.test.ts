@@ -55,15 +55,39 @@ describe("workspace-scoped auxiliary VM access", () => {
     expect((await allowed.machines.inspect(allowed.vm))?.running).toBe(true);
   });
 
-  it("waits for auxiliary guest readiness before a successful start returns", async () => {
+  it("keeps start pending until Docker is ready before checking guest directories", async () => {
     const f = await fixture(["discover", "status", "exec", "lifecycle"]), identity = request(f);
     await f.access.lifecycle({ ...identity, operation: "stop" });
-    let ready = false;
-    const wait = vi.spyOn(f.machines, "waitForAgent").mockImplementation(async () => { ready = true; });
-    const execute = vi.spyOn(f.machines, "exec").mockImplementation(async () => { expect(ready).toBe(true); return 0; });
-    await f.access.lifecycle({ ...identity, operation: "start" });
-    await expect(f.access.exec({ ...identity, command: ["true"] })).resolves.toBe(0);
-    expect(wait).toHaveBeenCalledWith(expect.objectContaining({ id: f.vm.id, name: f.vm.name })); expect(execute).toHaveBeenCalled();
+    const order: string[] = [];
+    let releaseDocker!: () => void, enteredDocker!: () => void;
+    const dockerReady = new Promise<void>((resolve) => { releaseDocker = resolve; });
+    const dockerEntered = new Promise<void>((resolve) => { enteredDocker = resolve; });
+    vi.spyOn(f.machines, "waitForAgent").mockImplementation(async () => { order.push("agent"); });
+    vi.spyOn(f.machines, "waitForDocker").mockImplementation(async () => {
+      order.push("docker"); enteredDocker(); await dockerReady;
+    });
+    const execute = vi.spyOn(f.machines, "exec").mockImplementation(async () => {
+      order.push("directories"); return 0;
+    });
+    let returned = false;
+    const starting = f.access.lifecycle({ ...identity, operation: "start" }).then(() => { returned = true; });
+    expect(await Promise.race([dockerEntered.then(() => true), starting.then(() => false)])).toBe(true);
+    expect(returned).toBe(false); expect(execute).not.toHaveBeenCalled();
+    expect(order).toEqual(["agent", "docker"]);
+    releaseDocker(); await starting;
+    expect(returned).toBe(true); expect(order).toEqual(["agent", "docker", "directories"]);
+  });
+
+  it("rolls back a new start when Docker fails and preserves an already-running VM", async () => {
+    for (const alreadyRunning of [false, true]) {
+      const f = await fixture(["discover", "status", "lifecycle"]), identity = request(f);
+      if (!alreadyRunning) await f.access.lifecycle({ ...identity, operation: "stop" });
+      vi.spyOn(f.machines, "waitForDocker").mockRejectedValue(new Error("guest Docker unavailable"));
+      const directories = vi.spyOn(f.machines, "exec");
+      await expect(f.access.lifecycle({ ...identity, operation: "start" })).rejects.toThrow("guest Docker unavailable");
+      expect(directories).not.toHaveBeenCalled();
+      expect((await f.machines.inspect(f.vm))?.running).toBe(alreadyRunning);
+    }
   });
 
   it("stops a newly started auxiliary VM when readiness fails", async () => {

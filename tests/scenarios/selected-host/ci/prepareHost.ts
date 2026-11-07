@@ -46,6 +46,8 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
 runcmd:
   - [bash, -ec, 'mkdir -p /run/dim-agent-config; mount -t 9p config /run/dim-agent-config; cd /run/dim-agent-config; ./install.sh']
+  # Preserve the builder's current LXD transport; only Incus may claim vsock after the next boot.
+  - [systemctl, mask, lxd-agent.service]
   - [bash, -ec, 'apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io git sudo util-linux; usermod -aG docker dim; install -d -o dim -g dim -m 0700 /mnt/dim-tmp; install -d -o dim -g dim -m 0755 /workspace; systemctl enable --now docker']
 `;
 await incus("init", "practical-base", "practical-ci-image-builder", "--vm", "--storage", "practical-ci", "--network", "practical-ci", "--no-profiles", "--device", "root,size=16GiB", "--config", "limits.cpu=2", "--config", "limits.memory=2GiB", "--config", `cloud-init.user-data=${cloud}`);
