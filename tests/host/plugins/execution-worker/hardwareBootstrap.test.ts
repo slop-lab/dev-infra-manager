@@ -25,3 +25,20 @@ it.each([100, 23])("keeps package setup under the exit trap and returns bootstra
     expect(trace).toContain("Acquire::By-Hash=force"); expect(trace).toContain("APT::Update::Error-Mode=any");
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+it("flushes the exact logging process before publishing the original failure status", async () => {
+  const source = await readFile(new URL("../../../../packages/host/plugins/execution-worker/src/ubuntu-hardware-runner-assets/guest-run.bash", import.meta.url), "utf8");
+  const finish = source.slice(source.indexOf("finish() {"), source.indexOf("trap finish EXIT"))
+    .replace('>/dev/virtio-ports/dim.result', '>"$RECEIPT"')
+    .replace('/mnt/dim-tools/guest-exit "$status" || true', ':')
+    .replace('poweroff -f', ':');
+  const root = await mkdtemp(join(tmpdir(), "dim-bootstrap-flush-"));
+  try {
+    const result = spawnSync("bash", ["-c", 'set -euo pipefail; exec 3>&1; log_pid=; ' + finish +
+      'trap finish EXIT; exec > >(sleep 0.05; cat >"$LOG") 2>&1; log_pid=$!; printf "final apt failure\\n"; exit 100'],
+      { env: { PATH: process.env.PATH, LOG: join(root, "log"), RECEIPT: join(root, "receipt") }, encoding: "utf8" });
+    expect(result.status).toBe(100);
+    expect(await readFile(join(root, "log"), "utf8")).toBe("final apt failure\n");
+    expect(await readFile(join(root, "receipt"), "utf8")).toBe("100\n");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

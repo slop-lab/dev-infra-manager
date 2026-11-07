@@ -2,7 +2,19 @@
 set -euo pipefail
 exec >/dev/ttyS0 2>&1
 stty -F /dev/ttyS0 -onlcr
-finish() { status=$?; trap - EXIT; printf '%s\n' "$status" >/dev/virtio-ports/dim.result || true; sync; /mnt/dim-tools/guest-exit "$status" || true; poweroff -f; }
+# Keep the serial descriptor separate so EXIT can close the logging pipe and
+# reap its exact tee process before the result receipt/debug-exit ends the VM.
+exec 3>&1
+log_pid=
+finish() {
+  status=$?; trap - EXIT; set +e
+  exec 1>&3 2>&3
+  if [[ -n "$log_pid" ]]; then wait "$log_pid"; fi
+  printf '%s\n' "$status" >/dev/virtio-ports/dim.result || true
+  sync
+  /mnt/dim-tools/guest-exit "$status" || true
+  poweroff -f
+}
 trap finish EXIT
 mkdir -p /run/dim/job /mnt/dim-tools /mnt/dim-source /workspace /scratch
 chmod 0755 /run/dim
@@ -15,7 +27,8 @@ chown dim:dim /mnt/dim-source/.dim-ci-artifacts
 chown -R dim:dim /workspace
 # Evidence is written through this share while running, including failure paths.
 mount --bind /mnt/dim-source/.dim-ci-artifacts /workspace/.dim-ci-artifacts
-exec > >(tee /mnt/dim-source/.dim-ci-artifacts/bootstrap.log) 2>&1
+exec > >(tee /mnt/dim-source/.dim-ci-artifacts/bootstrap.log >&3) 2>&1
+log_pid=$!
 while read -r source target; do
   [[ -n "$source" ]] || continue
   mkdir -p "${target%/*}"; touch "$target"
