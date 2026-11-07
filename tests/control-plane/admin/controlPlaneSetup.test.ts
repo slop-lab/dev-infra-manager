@@ -76,7 +76,7 @@ describe("optional control-plane setup", () => {
     const execution = JSON.parse(await readFile(path.join(directory, "execution.json"), "utf8"));
     if (role === "operator") native.gitSync.operators[0].password = execution.credentials.query.password;
     else native.gitSync.credential = { username: "github-sync", password: execution.credentials.query.password };
-    expect(() => parseControlPlaneServicePair(native, execution)).toThrow(/credentials must be distinct/);
+    expect(() => parseControlPlaneServicePair(native, execution)).toThrow(/credentials.*distinct/);
   });
 
   it("binds generated bootstrap and host connections to a real native service generation", async () => {
