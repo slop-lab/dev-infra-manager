@@ -34,3 +34,12 @@ it("denies traversal/symlink files and validates current ownership at finalizati
  const empty={executionId:id,descriptorDigest:chunk.descriptorDigest,availability:"complete",artifacts:[]};
  await expect(store.finalize(id,empty,()=>{throw Error("lease expired");})).rejects.toThrow("lease expired");expect(await store.manifest(id)).toBeUndefined();
 });
+
+it("recovers publication after an interrupted unpublished JSON write",async()=>{
+ const {root,store,id}=await fixture(),chunk=input(Buffer.from("durable"));await store.chunk(id,chunk);
+ // A process died after temp write but before exclusive publication. The target is absent.
+ await writeFile(join(root,"artifacts",id,".artifact-write-"+randomUUID()),'{"executionId":',{mode:0o600});
+ const restarted=new ExecutionArtifactStore(join(root,"artifacts"));expect(await restarted.manifest(id)).toBeUndefined();
+ const manifest={executionId:id,descriptorDigest:chunk.descriptorDigest,availability:"complete",artifacts:[chunk.artifact]};
+ await restarted.finalize(id,manifest);expect(await restarted.manifest(id)).toEqual(manifest);expect(await restarted.bytes(id,chunk.artifact.id)).toEqual(Buffer.from("durable"));
+});

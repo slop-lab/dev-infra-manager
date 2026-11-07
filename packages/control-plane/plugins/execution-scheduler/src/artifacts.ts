@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
-import { open, mkdir, lstat, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { createHash } from "node:crypto";
+import { open, mkdir, lstat, readFile, writeFile, link, unlink } from "node:fs/promises";
+import { join, dirname } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 import { executionArtifactChunkSchema, executionArtifactManifestSchema, executionArtifactSchema, executionArtifactLimits, type ExecutionArtifactManifest } from "@slop-lab/dim-contracts-execution";
 import { ExecutionConflictError } from "@slop-lab/dim-contracts-execution";
 
@@ -28,8 +28,7 @@ export class ExecutionArtifactStore {
       const already = records.includes(value.artifact.id + ".json");
       if (records.length + (already ? 0 : 1) > executionArtifactLimits.files || total + (already ? 0 : value.artifact.bytes) > executionArtifactLimits.totalBytes) throw new ExecutionConflictError("artifact job bound exceeded");
       authorize();
-      try { await writeFile(meta, record, { flag: "wx", mode: 0o600 }); }
-      catch (error) { if (!exists(error) || await readFile(meta, "utf8") !== record) throw new ExecutionConflictError("artifact metadata conflicts"); }
+      await publishImmutable(meta,record,"artifact metadata conflicts");
       const file = join(directory, value.artifact.id + ".bin");
       try { await writeFile(file, Buffer.alloc(0), { flag: "wx", mode: 0o600 }); } catch (error) { if (!exists(error)) throw error; }
       const handle = await open(file, constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -63,8 +62,7 @@ export class ExecutionArtifactStore {
       }
       authorize();
       const text = JSON.stringify(manifest), file = join(directory, "manifest.json");
-      try { await writeFile(file, text, { flag: "wx", mode: 0o600 }); }
-      catch (error) { if (!exists(error) || await readFile(file, "utf8") !== text) throw new ExecutionConflictError("artifact manifest is immutable"); }
+      await publishImmutable(file,text,"artifact manifest is immutable");
     });
   }
   async manifest(executionId: string): Promise<ExecutionArtifactManifest | undefined> {
@@ -103,3 +101,13 @@ function assertId(id: string): void { if (!/^[0-9a-f-]{36}$/.test(id)) throw new
 function exists(error: unknown): boolean { return error instanceof Error && "code" in error && error.code === "EEXIST"; }
 function missing(error: unknown): boolean { return error instanceof Error && "code" in error && error.code === "ENOENT"; }
 function digest(bytes: Buffer): string { return "sha256:" + createHash("sha256").update(bytes).digest("hex"); }
+
+async function publishImmutable(file: string, text: string, conflict: string): Promise<void> {
+  const temporary=join(dirname(file),".artifact-write-"+randomUUID());
+  const handle=await open(temporary,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
+  try {
+    await handle.writeFile(text);await handle.sync();await handle.close();
+    try {await link(temporary,file);} catch(error) {if(!exists(error)||await readFile(file,"utf8")!==text)throw new ExecutionConflictError(conflict);}
+    const directory=await open(dirname(file),constants.O_RDONLY|constants.O_DIRECTORY);try{await directory.sync();}finally{await directory.close();}
+  } finally {await handle.close().catch(()=>{});await unlink(temporary).catch(error=>{if(!missing(error))throw error;});}
+}

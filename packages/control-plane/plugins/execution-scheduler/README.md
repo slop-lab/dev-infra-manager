@@ -42,3 +42,9 @@ belong to the CI contracts used by both service and operator adapters.
 
 See [scheduled review detectors](../git-review-tracing-scheduled/README.md) for a
 complete non-CI use case, required host/control-plane plugins and setup.
+
+## Artifact storage and query
+
+Execution owns bounded artifact bytes under the private `artifacts/` child of its existing state directory (and therefore its operator-selected state volume). Each execution has an immutable digest-verified manifest and files. Metadata publication uses synced private temporary files and exclusive links; data chunks can be retried or resumed. Storage survives service restart without putting blob bytes in SQLite or Native Git results.
+
+Workers upload through the current worker/slot/lease/generation/descriptor authority. Query credentials can list a job manifest and download its opaque artifact IDs, or look up up to32newest executions for an exact event. Workspace-facing CI adapters must apply their project/repository/review grant scope before using this private query API; service-wide query credentials never enter a workspace. Captured collection availability and job completion are separate. Listed files retain verified availability even if another requested file could not be captured.
