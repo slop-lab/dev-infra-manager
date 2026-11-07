@@ -1,8 +1,33 @@
 # Source-check presentation only; commands keep their own exit and cleanup rules.
-check_output_monotonic_seconds() {
+check_output_read_uptime() {
   local uptime unused
-  read -r uptime unused </proc/uptime
-  printf '%s' "${uptime%%.*}"
+  if { read -r uptime unused </proc/uptime; } 2>/dev/null && [[ "$uptime" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%s' "${uptime%%.*}"
+  else
+    return 1
+  fi
+}
+
+check_output_read_node_clock() {
+  [[ -n "${CHECK_OUTPUT_NODE:-}" ]] || return 1
+  "$CHECK_OUTPUT_NODE" -e 'process.stdout.write((process.hrtime.bigint() / 1000000000n).toString())' 2>/dev/null
+}
+
+check_output_monotonic_seconds() {
+  local value=""
+  case "$CHECK_OUTPUT_CLOCK" in
+    proc) value="$(check_output_read_uptime)" || value="" ;;
+    node) value="$(check_output_read_node_clock)" || value="" ;;
+  esac
+  if [[ "$value" =~ ^[0-9]+$ ]]; then printf '%s' "$value"; else printf 'null'; fi
+}
+
+check_output_elapsed_seconds() {
+  if [[ "$1" =~ ^[0-9]+$ && "$2" =~ ^[0-9]+$ ]] && (( $1 >= $2 )); then
+    printf '%s' "$(( $1 - $2 ))"
+  else
+    printf 'null'
+  fi
 }
 
 check_output_init() {
@@ -10,6 +35,13 @@ check_output_init() {
   CHECK_OUTPUT_ROOT="$(umask 077; mkdir -p -- "$parent"; mktemp -d "$parent/run.XXXXXX")"
   CHECK_OUTPUT_SEQUENCE=0
   CHECK_OUTPUT_HEARTBEAT=""
+  # BOOTTIME and MONOTONIC have different origins after suspend. Select once;
+  # a later read failure loses timing only, never the command or its exit code.
+  CHECK_OUTPUT_CLOCK=none
+  CHECK_OUTPUT_NODE="$(command -v node 2>/dev/null)" || CHECK_OUTPUT_NODE=""
+  if check_output_read_uptime >/dev/null; then CHECK_OUTPUT_CLOCK=proc
+  elif check_output_read_node_clock >/dev/null; then CHECK_OUTPUT_CLOCK=node
+  fi
   (umask 077; : >"$CHECK_OUTPUT_ROOT/stages.jsonl")
   printf '[check] logs: %s\n' "$CHECK_OUTPUT_ROOT"
 }
@@ -41,7 +73,9 @@ check_output_run() {
       timer=$!
       wait "$timer" || exit 0
       timer=""
-      printf '[check] %s running (%ss) utc=%s\n' "$name" "$(( $(check_output_monotonic_seconds) - started ))" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+      elapsed="$(check_output_elapsed_seconds "$(check_output_monotonic_seconds)" "$started")"
+      if [[ "$elapsed" == null ]]; then elapsed='elapsed unavailable'; else elapsed="${elapsed}s"; fi
+      printf '[check] %s running (%s) utc=%s\n' "$name" "$elapsed" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
     done
   ) &
   CHECK_OUTPUT_HEARTBEAT=$!
@@ -52,7 +86,7 @@ check_output_run() {
   check_output_stop
   ended="$(check_output_monotonic_seconds)"
   utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  printf '{"stage":"%s","event":"finish","utc":"%s","monotonicSeconds":%s,"elapsedSeconds":%s,"exitCode":%s}\n' "$name" "$utc" "$ended" "$((ended - started))" "$status" >>"$CHECK_OUTPUT_ROOT/stages.jsonl"
+  printf '{"stage":"%s","event":"finish","utc":"%s","monotonicSeconds":%s,"elapsedSeconds":%s,"exitCode":%s}\n' "$name" "$utc" "$ended" "$(check_output_elapsed_seconds "$ended" "$started")" "$status" >>"$CHECK_OUTPUT_ROOT/stages.jsonl"
   if (( status != 0 )); then
     printf '[check] FAIL %s exit=%s log=%s (last 160 lines)\n' "$name" "$status" "$log" >&2
     tail -n 160 -- "$log" >&2

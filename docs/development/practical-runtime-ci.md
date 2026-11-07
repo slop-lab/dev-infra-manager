@@ -70,7 +70,9 @@ check proves dependency/empty-state boot only; a successful cached practical job
 is still required for full runtime qualification. The nested Incus CI image is
 still prepared cold in this first implementation. Cached success never replaces
 the explicit main/release cold-bootstrap proof. Stage logs retain UTC timestamps
-and kernel-monotonic elapsed seconds in `stages.jsonl`, including quiet success.
+and elapsed seconds from an available monotonic clock in `stages.jsonl`, including
+quiet success. A run selects one clock source; unavailable readings become JSON
+`null` and never replace the command's exit status or discard its private log.
 
 The existing QEMU provisioner owns two separate Ubuntu CP/host VMs and pinned
 inter-VM SSH. It prepares exact source/tree and package manifests, a private
