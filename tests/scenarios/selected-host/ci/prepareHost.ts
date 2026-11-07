@@ -66,9 +66,9 @@ await incus("file", "push", nodeArchive, "practical-ci-image-builder/tmp/dim-nod
 await incus("exec", "practical-ci-image-builder", "--", "bash", "-ec", `printf '%s  %s\\n' '${nodeSha}' /tmp/dim-node.tar.xz | sha256sum -c; mkdir -p /usr/local/lib/dim-ci-node; tar -xJf /tmp/dim-node.tar.xz --strip-components=1 -C /usr/local/lib/dim-ci-node; ln -s /usr/local/lib/dim-ci-node/bin/node /usr/local/bin/node; ln -s /usr/local/lib/dim-ci-node/bin/npm /usr/local/bin/npm; rm /tmp/dim-node.tar.xz; printf '%s\\n' '${sourceSha}' >/etc/dim-ci-image-source; cloud-init clean --logs`);
 await incus("stop", "practical-ci-image-builder", "--timeout", "120");
 await incus("publish", "practical-ci-image-builder", "--alias", "practical-ready");
-const alias: unknown = JSON.parse(await incus("query", "/1.0/images/aliases/practical-ready?project=practical-ci"));
+const alias: unknown = JSON.parse(await run("sudo", ["incus", "--force-local", "query", "/1.0/images/aliases/practical-ready?project=practical-ci"]));
 if (!alias || typeof alias !== "object" || !("target" in alias) || typeof alias.target !== "string" || !/^[a-f0-9]{64}$/.test(alias.target)) throw new Error("prepared image alias has no immutable target");
-const published: unknown = JSON.parse(await incus("query", `/1.0/images/${alias.target}?project=practical-ci`));
+const published: unknown = JSON.parse(await run("sudo", ["incus", "--force-local", "query", `/1.0/images/${alias.target}?project=practical-ci`]));
 if (!published || typeof published !== "object" || !("fingerprint" in published) || typeof published.fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(published.fingerprint)
   || !("type" in published) || published.type !== "virtual-machine") throw new Error("prepared Incus image has no immutable VM fingerprint");
 await incus("delete", "practical-ci-image-builder");
