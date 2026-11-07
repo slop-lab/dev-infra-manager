@@ -9,6 +9,7 @@ import { installerVersion } from "./installerVersion.js";
 import { atomicWrite, readManifest, readPackageJson, run } from "./runtimeFiles.js";
 import type { InstallerOperation } from "./installProgress.js";
 import { managedControllerIsActive } from "./controllerActivation.js";
+import { prepareLocalNpmGraph, removeLocalNpmOverrides } from "./localNpmGraph.js";
 
 export type PluginTarget = "host" | "control-plane";
 const CONTROL_PLANE_RUNTIME = "@slop-lab/dim-control-plane-core";
@@ -20,6 +21,7 @@ export interface InstallOptions {
   readonly runtimeSpecifier?: string;
   /** Complete reviewed artifact closure; only pluginNames are enabled. */
   readonly packageSpecifiers?: readonly string[];
+  readonly packageNames?: readonly string[];
   readonly pluginNames?: readonly string[];
   readonly npmCommand?: string;
   readonly operation?: InstallerOperation;
@@ -116,6 +118,7 @@ async function installPluginsInStage(
   if (runtime !== undefined) assertExactPluginSpecifier(runtime);
   const durableSpecifiers = await Promise.all([...(options.packageSpecifiers ?? [...specifiers, ...(runtime === undefined ? [] : [runtime])])]
     .map((specifier) => persistLocalSpecifier(specifier, stagingDirectory)));
+  await prepareLocalNpmGraph(stagingDirectory, options.packageNames, durableSpecifiers);
   await run(
     options.npmCommand ?? "npm",
     ["install", "--save-exact", "--no-fund", "--no-audit", ...durableSpecifiers],
@@ -189,6 +192,7 @@ export async function removePlugins(names: readonly string[], options: InstallOp
     if (!(name in dependencies)) throw new Error(`plugin '${name}' is not installed`);
   }
   await run(options.npmCommand ?? "npm", ["uninstall", "--no-fund", "--no-audit", ...names], options.pluginHome);
+  await removeLocalNpmOverrides(options.pluginHome, names);
   const manifestPath = path.join(options.pluginHome, "plugins.json");
   const manifest = await readManifest(manifestPath);
   const removed = new Set(names);

@@ -13,6 +13,7 @@ import { run } from "./runtimeFiles.js";
 import { assertHostProtocolCompatible, queryHostProtocol } from "./hostProtocol.js";
 import type { InstallerOperation } from "./installProgress.js";
 import { queryCliVersion, validateConfiguredCli } from "./cliExecutable.js";
+import { prepareLocalNpmGraph } from "./localNpmGraph.js";
 
 export { installManagedSymlink } from "./managedSymlink.js";
 export { readCliPackageBundle, type LocalPackageBundle } from "./localPackageBundle.js";
@@ -54,6 +55,7 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
   let symlinkSnapshot: ManagedSymlinkSnapshot | undefined;
   try {
     options.operation?.reportProgress("package installation");
+    await prepareLocalNpmGraph(stage, options.packageNames, specifiers);
     await run(options.npmCommand ?? "npm", [
       "install", "--prefix", stage, "--save-exact", "--no-fund", "--no-audit", ...specifiers
     ], stage, options.operation);

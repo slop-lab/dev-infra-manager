@@ -15,6 +15,7 @@ import { atomicWrite, run } from "./runtimeFiles.js";
 import { runStagedStatePreflight } from "./statePreflight.js";
 import type { InstallerOperation } from "./installProgress.js";
 import { managedControllerIsActive } from "./controllerActivation.js";
+import { prepareLocalNpmGraph } from "./localNpmGraph.js";
 
 export type { RuntimePluginSelection } from "./runtimePluginGraph.js";
 
@@ -61,6 +62,7 @@ export async function installHostRuntime(options: HostRuntimeInstallOptions): Pr
   let controllerRestartAttempted = false;
   let targetControllerReady = false;
   try {
+    await prepareLocalNpmGraph(stagingDirectory, options.packageNames, requestedPackages);
     await run(options.npmCommand ?? "npm", [
       "install", "--prefix", stagingDirectory, "--save-exact", "--no-fund", "--no-audit",
       ...packageSpecifiers

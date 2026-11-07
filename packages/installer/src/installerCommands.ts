@@ -246,7 +246,7 @@ async function installPluginPackages(specifiers: readonly string[], target: Plug
     const bundle = localDirectory === undefined ? undefined : await readControlPlanePackageBundle(localDirectory, specifiers);
     const selected = specifiers.map(packageNameFromSpecifier).filter((name): name is string => name !== undefined);
     const installed = await withInstallerProgress("plugin", (operation) =>
-      installPlugins(specifiers, { pluginHome: home, target, operation, ...(bundle === undefined ? {} : { packageSpecifiers: bundle.packageSpecifiers, pluginNames: selected }) }));
+      installPlugins(specifiers, { pluginHome: home, target, operation, ...(bundle === undefined ? {} : { packageSpecifiers: bundle.packageSpecifiers, packageNames: bundle.packageNames, pluginNames: selected }) }));
     for (const name of installed) console.log(`Installed and enabled ${name}`);
     console.log(`Control-plane plugin home: ${home}`);
     console.log(`Executable: ${path.join(home, "node_modules", ".bin", "dim-control-plane")}`);
@@ -272,7 +272,7 @@ async function installPluginPackages(specifiers: readonly string[], target: Plug
   const selected = specifiers.map(packageNameFromSpecifier).filter((name): name is string => name !== undefined);
   const installed = await withInstallerProgress("plugin", (operation) =>
     installPlugins(specifiers, { pluginHome: home, operation, expectedHostVersion: installedVersion,
-      ...(bundle === undefined ? {} : { packageSpecifiers: bundle.packageSpecifiers, pluginNames: selected }) }));
+      ...(bundle === undefined ? {} : { packageSpecifiers: bundle.packageSpecifiers, packageNames: bundle.packageNames, pluginNames: selected }) }));
   for (const name of installed) console.log(`Installed and enabled ${name}`);
   console.log(`Plugin home: ${home}`);
 }
