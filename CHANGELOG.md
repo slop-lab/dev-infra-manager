@@ -29,7 +29,9 @@ is implied by these source changes.
   hardware runs. Explicit DIM CI qualification can use an operator-pinned Ubuntu
   hardware VM, exact bounded parent context and redacted retained diagnostics;
   the default DIM workflow remains source-only. External provider qualification
-  remains separate.
+  remains separate. Fresh local installation validates paired CI credentials through
+  the matching installed admin package without requiring dependencies in the
+  original source checkout.
 
 - Make Git services independently composable through DIM-independent
   `@slop-lab/gs-*` packages. Support standalone durable repository policy and

@@ -18,6 +18,7 @@ import { ensureLocalCiQuery } from "./local-control-plane/ci-query.ts";
 export interface LocalControlPlaneOperations {
   current(state: string): Promise<ControlPlaneInstalledState | undefined>;
   prepare(options: PrepareControlPlaneOptions): Promise<unknown>;
+  validateServicePair(native: unknown, execution: unknown): unknown;
   deploy(config: string, state: string, backups: string, existing: boolean): Promise<void>;
   connect(directory: string, output: string): ReturnType<typeof connectControlPlane>;
   select(directory: string): Promise<void>;
@@ -26,6 +27,7 @@ export interface LocalControlPlaneOperations {
 async function defaultOperations(paths: ReturnType<typeof removalPaths>, env: NodeJS.ProcessEnv): Promise<LocalControlPlaneOperations> {
   const require = createRequire(join(paths.hostPlugins, "package.json"));
   const admin = await import(pathToFileURL(require.resolve("@slop-lab/dim-control-plane-admin")).href) as typeof import("../packages/control-plane/admin/src/index.js");
+  const pair = await import(pathToFileURL(require.resolve("@slop-lab/dim-control-plane-admin/service-pair")).href) as typeof import("../packages/control-plane/admin/src/service-pair.js");
   const native = await import(pathToFileURL(require.resolve("@slop-lab/dim-host-plugin-native-git")).href) as typeof import("../packages/host/plugins/native-git/src/index.js");
   if (!env.DIM_LOCAL_INSTALLER) throw new Error("matching local installer facade is required");
   const facade = pathToFileURL(await realpath(env.DIM_LOCAL_INSTALLER));
@@ -37,6 +39,7 @@ async function defaultOperations(paths: ReturnType<typeof removalPaths>, env: No
   return {
     async current(root) { const lock = await locking.acquireControlPlaneStateLock(root); try { return await state.readControlPlaneInstalledState(lock); } finally { await lock.close(); } },
     prepare: admin.prepareControlPlane,
+    validateServicePair: pair.parseControlPlaneServicePair,
     async deploy(configPath, stateRoot, backups, existing) {
       if (!existing) { await installer.installControlPlane({ configPath, stateRoot }); return; }
       const config = await configs.readControlPlaneConfig(configPath);
@@ -113,7 +116,7 @@ export async function installLocalControlPlane(bundle: string, env: NodeJS.Proce
   // An explicitly selected setup must still be the existing local deployment.
   if (prior && source.deploymentId !== prior.record.deploymentId) throw new Error("local setup selects another deployment");
   if (typeof nativeGit.configFile !== "string" || typeof execution.configFile !== "string") throw new Error("local setup service config paths are missing");
-  await ensureLocalCiQuery(nativeGit.configFile, execution.configFile);
+  await ensureLocalCiQuery(nativeGit.configFile, execution.configFile, ops.validateServicePair);
   const candidate = { ...source, nativeGit: { ...nativeGit, image: pinned["native-git"] }, execution: { ...execution, image: pinned.execution } };
   const stage = join(directory, `install-candidate-${randomUUID()}.json`);
   await replaceJson(stage, candidate);

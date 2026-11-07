@@ -1,11 +1,15 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
 import { installLocalControlPlane, type LocalControlPlaneOperations } from "../../../scripts/install-local-control-plane.ts";
 import { installLocalProfile } from "../../../scripts/install-local-profile.ts";
 import type { ControlPlaneInstalledState } from "../../../packages/installer/src/controlPlaneState.js";
 import type { Command } from "../../../scripts/local-uninstall/command.ts";
+import { ensureLocalCiQuery } from "../../../scripts/local-control-plane/ci-query.ts";
+import { parseControlPlaneServicePair } from "../../../packages/control-plane/admin/src/service-pair.js";
 import { idleNativeConfig, idleExecutionConfig } from "../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 
 const roots: string[] = [];
@@ -30,6 +34,7 @@ async function fixture(existing = false) {
       execution: { config: Buffer.from(JSON.stringify(retainedExecution)), readinessToken: Buffer.from("execution-token") } } } as ControlPlaneInstalledState;
   const ops: LocalControlPlaneOperations = {
     current: async () => existing ? prior : undefined,
+    validateServicePair: parseControlPlaneServicePair,
     async registry() { calls.push(["registry"]); return "127.0.0.1:5555"; },
     async prepare(options) {
       calls.push(["prepare"]); await mkdir(options.directory);
@@ -91,4 +96,27 @@ it("updates every bundled host and control-plane plugin through the matching fac
     ["/matching/facade", "installer", "install", "plugin", "--local-packages", f.bundle, "@slop-lab/dim-host-plugin-agent-tools@0.10.0-local-test", "@slop-lab/dim-host-plugin-native-git@0.10.0-local-test"],
     ["/matching/facade", "installer", "install", "control-plane", "plugin", "--local-packages", f.bundle, "@slop-lab/dim-control-plane-plugin-git-repositories@0.10.0-local-test", "@slop-lab/dim-control-plane-plugin-llm-router@0.10.0-local-test"]
   ]);
+});
+
+it("loads the real local control-plane helper from a dependency-free source checkout", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-pristine-local-helper-")); roots.push(root);
+  // Fresh bootstrap prepares packages in a separate source stage. The original
+  // checkout has scripts, but no workspace dependencies or compiled packages.
+  await cp(resolve(import.meta.dirname, "../../../scripts"), join(root, "scripts"), { recursive: true });
+  const module = pathToFileURL(join(root, "scripts/install-local-control-plane.ts")).href;
+  const child = spawnSync(process.execPath, ["--input-type=module", "-e", `const helper = await import(${JSON.stringify(module)}); if (typeof helper.installLocalControlPlane !== "function") process.exit(2);`],
+    { cwd: root, encoding: "utf8", env: { ...process.env, NODE_OPTIONS: "" } });
+  expect({ status: child.status, stderr: child.stderr }).toEqual({ status: 0, stderr: "" });
+});
+
+it("rejects invalid paired query credentials before rewriting the existing service config", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-pair-query-reject-")); roots.push(root);
+  const native = idleNativeConfig(), execution = idleExecutionConfig();
+  execution.credentials.query = { ...native.ci.webhook };
+  const nativeFile = join(root, "native.json"), executionFile = join(root, "execution.json");
+  const before = JSON.stringify(native);
+  await writeFile(nativeFile, before, { mode: 0o600 });
+  await writeFile(executionFile, JSON.stringify(execution), { mode: 0o600 });
+  await expect(ensureLocalCiQuery(nativeFile, executionFile, parseControlPlaneServicePair)).rejects.toThrow();
+  expect(await readFile(nativeFile, "utf8")).toBe(before);
 });
