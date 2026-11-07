@@ -16,12 +16,15 @@ export type CommandOptions = {
 
 export class CommandFailure extends Error {
   readonly name = "CommandFailure";
-  constructor(
-    readonly file: string,
-    readonly arguments_: readonly string[],
-    readonly result: CommandResult
-  ) {
+  readonly file: string;
+  readonly arguments_: readonly string[];
+  readonly result: CommandResult;
+
+  constructor(file: string, arguments_: readonly string[], result: CommandResult) {
     super(`command failed (${result.exitCode})`);
+    this.file = file;
+    this.arguments_ = arguments_;
+    this.result = result;
   }
 }
 
