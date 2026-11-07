@@ -74,14 +74,27 @@ for container in "$native_container" "$execution_container"; do
   docker exec "$container" node --input-type=module -e '
     import assert from "node:assert/strict";
     import { readdirSync } from "node:fs";
-    const expected = ["dim-contracts-ci", "dim-contracts-git", "dim-contracts-execution", "dim-control-plane-plugin-execution-scheduler"];
-    if (process.argv[1] !== "native") expected.push("dim-execution-scheduler");
-    if (process.argv[1] === "native") expected.push(
-      "dim-control-plane-core", "dim-control-plane-admin", "dim-control-plane-plugin-ci-workflows",
+    const expected = process.argv[1] === "native" ? [
+      "dim-contracts-ci", "dim-contracts-git", "dim-contracts-execution",
+      "dim-control-plane-plugin-execution-scheduler", "dim-control-plane-core", "dim-control-plane-admin", "dim-control-plane-plugin-ci-workflows",
       "dim-control-plane-plugin-git-repositories", "dim-control-plane-plugin-git-review",
-      "dim-control-plane-plugin-git-merge-policy", "dim-control-plane-plugin-git-ci", "dim-control-plane-plugin-webhooks");
+      "dim-control-plane-plugin-git-merge-policy", "dim-control-plane-plugin-git-ci", "dim-control-plane-plugin-webhooks",
+      "dim-control-plane-plugin-git-blame", "dim-control-plane-plugin-git-diff", "dim-control-plane-plugin-git-discussions",
+      "dim-control-plane-plugin-git-pull-requests", "dim-control-plane-plugin-git-sync",
+      "gs-blame", "gs-blame-service", "gs-ci", "gs-ci-contracts", "gs-diff", "gs-diff-service",
+      "gs-discussions", "gs-discussions-service", "gs-merge-policy", "gs-pull-request-service", "gs-pull-requests",
+      "gs-repository", "gs-repository-contracts", "gs-repository-service", "gs-review", "gs-review-contracts", "gs-sync"
+    ] : [
+      "dim-contracts-ci", "dim-contracts-git", "dim-contracts-execution",
+      "dim-control-plane-plugin-execution-scheduler", "gs-repository-contracts", "gs-ci-contracts"
+    ];
     assert.deepEqual(readdirSync("/usr/local/lib/dim/node_modules/@slop-lab").sort(), expected.sort(),
       "service image must contain only its reviewed control-plane dependency closure");
+    let privatePackages = [];
+    try { privatePackages = readdirSync("/usr/local/lib/dim/node_modules/@this-project"); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+    assert.deepEqual(privatePackages.sort(), process.argv[1] === "native" ? ["control-plane-deployment"] : [],
+      "service image must contain only its reviewed private deployment package");
   ' "$([[ "$container" == "$native_container" ]] && printf native || printf execution)"
 done
 execution_port="$(docker port "$execution_container" 8080/tcp)"
