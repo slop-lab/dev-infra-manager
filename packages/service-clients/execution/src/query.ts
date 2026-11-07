@@ -23,7 +23,18 @@ export async function createCiQueryClient(file: string) {
 }
 /** Private callers supply a validated connection; credentials never appear in returned data. */
 export function createExecutionQueryClient(raw: CiQueryConnection) {
-  const connection = ciQueryConnectionSchema.parse(raw);
+  return executionQueryTransport(ciQueryConnectionSchema.parse(raw));
+}
+/** Trusted server configuration may address a private service DNS origin over HTTP.
+ * Never use this constructor for operator connection files or candidate input. */
+export function createExecutionServiceQueryClient(raw: CiQueryConnection) {
+  const connection = ciQueryConnectionSchema.extend({ endpoint: z.string().refine(value => {
+    try { const url = new URL(value); return url.origin === value && ["http:", "https:"].includes(url.protocol)
+      && !url.username && !url.password; } catch { return false; }
+  }) }).parse(raw);
+  return executionQueryTransport(connection);
+}
+function executionQueryTransport(connection: CiQueryConnection) {
   async function request(target: string, binary = false): Promise<unknown> {
     const abort = AbortSignal.timeout(30_000);
     const response = await fetch(connection.endpoint + target, { redirect: "error", signal: abort,

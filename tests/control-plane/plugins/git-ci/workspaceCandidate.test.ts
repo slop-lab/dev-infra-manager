@@ -44,7 +44,11 @@ it("reads failed candidate jobs, logs and artifacts only through the owning work
     const address = scheduler.address(); if (!address || typeof address === "string") throw new Error("scheduler fixture is unavailable");
     const native = idleNativeConfig();
     const fixture = await nativeBundleReviewFixture("workspace-evidence", undefined, undefined, undefined, undefined, undefined, undefined,
-      { ci: { ...native.ci, query: queryCredential, webhook: { ...native.ci.webhook, endpoint: `http://127.0.0.1:${address.port}/v1/jobs` } } });
+      { ci: { ...native.ci, query: queryCredential, webhook: { ...native.ci.webhook, endpoint: `http://localhost:${address.port}/v1/jobs` } } });
+    const identity = await fetch(`${fixture.service.origin}/v1/operator-root-importer-identity`, {
+      headers: { authorization: importerAuthorization, "x-dim-generation-id": generationId }
+    });
+    expect(identity.status, await identity.clone().text()).toBe(200);
     const candidateRef = "refs/heads/evidence-candidate";
     await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${candidateRef}`]);
     const candidateCommit = (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD"])).stdout.trim();

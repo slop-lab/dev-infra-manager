@@ -5,8 +5,16 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import { configuredExecutionServer } from "../../../../packages/control-plane/plugins/execution-scheduler/src/service.js";
 import { executionWorkerClient } from "../../../../packages/host/plugins/execution-worker/src/client.js";
-import { createExecutionQueryClient } from "../../../../packages/service-clients/execution/src/query.js";
+import { createExecutionQueryClient, createExecutionServiceQueryClient } from "../../../../packages/service-clients/execution/src/query.js";
 import { event, grant, slot } from "../../../contracts/ci/executionFixture.js";
+it("separates trusted private service origins from operator query connection validation", () => {
+ const connection = {schemaVersion:1 as const,role:"query" as const,endpoint:"http://execution:8080",generationId:"a".repeat(64),credential:{username:"query",password:Buffer.alloc(32,4).toString("base64url")}};
+ expect(() => createExecutionQueryClient(connection)).toThrow();
+ expect(() => createExecutionServiceQueryClient(connection)).not.toThrow();
+ for (const endpoint of ["http://execution:8080/path", "http://execution:8080?token=x", "http://execution:8080#fragment", "http://user:secret@execution:8080", "ftp://execution:8080"]) {
+  expect(() => createExecutionServiceQueryClient({...connection,endpoint})).toThrow();
+ }
+});
 it("fences artifact uploads by worker/slot/lease/generation/digest and downloads exact persisted bytes after restart",async()=>{
  const root=await mkdtemp(join(tmpdir(),"dim-artifact-http-")),generationId="a".repeat(64),activationToken=randomBytes(32).toString("base64url");
  const credential=(username:string,n:number)=>({username,password:Buffer.alloc(32,n).toString("base64url")});

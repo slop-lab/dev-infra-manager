@@ -23,6 +23,14 @@ Every request carries its selected generation and dedicated role credential.
 Responses are bounded, schema-validated and never include worker leases or grants.
 Retries require a caller-generated UUID request identifier for deduplication.
 
+Trusted server plugins may use `createExecutionServiceQueryClient` with their
+validated service configuration to reach an HTTP private-service DNS origin.
+This constructor accepts only HTTP(S) origins without URL credentials, paths,
+queries or fragments. Operator connection files and `createExecutionQueryClient`
+retain their existing endpoint restrictions. Both transports reject redirects
+and bound, validate and authenticate every response; server credentials remain
+inside the trusted service.
+
 Trusted plugin task producers import `runScheduledTask` and `taskClientRevision`
 from `@slop-lab/dim-service-client-execution/tasks`. The entry point submits a pinned
 handler revision, mediates bounded exchanges through the caller's callback,

@@ -22,7 +22,7 @@ import type { GitCiRuntime } from "./runtime.js";
 import { handleReviewCiStatus } from "./review-status-http.js";
 import { handleWorkspaceCandidateCi } from "./workspace-candidate-http.js";
 import { join } from "node:path";
-import { createExecutionQueryClient } from "@slop-lab/dim-service-client-execution";
+import { createExecutionServiceQueryClient } from "@slop-lab/dim-service-client-execution";
 
 export type GitCiOptions = {
   readonly httpClient?: NativeGitAdmissionHttpClient;
@@ -52,6 +52,9 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
       async attach(context) {
         compiler = requireWorkflowCompiler(context.extensions, config.compiler);
         runtime = { ...context.runtime, workflowCompiler: compiler, reviewPreparations: reviewPreparations(context.extensions) };
+        const query = config.query === undefined ? undefined : createExecutionServiceQueryClient({ schemaVersion: 1,
+          role: "query", endpoint: new URL(config.webhook.endpoint).origin,
+          generationId: runtime.expectedGenerationId, credential: config.query });
         for (const registration of readNativeProjectRegistrations(runtime.state)) {
           const repository = join(context.stateDirectory, registration.projectId, `${registration.repositoryId}.git`);
           for (const source of await readVerifiedCiReviewSources(repository)) {
@@ -69,8 +72,7 @@ export function prepareGitCi(config: import("./config.js").GitCiConfig, options:
         const attachedRuntime = runtime;
         return { async handle(request, response, url) {
           if (await handleWorkspaceCandidateCi(context, attachedRuntime, { request, response, url, accepted: dispatcher.wake },
-            config.query === undefined ? undefined : createExecutionQueryClient({ schemaVersion: 1, role: "query", endpoint: new URL(config.webhook.endpoint).origin,
-              generationId: attachedRuntime.expectedGenerationId, credential: config.query }))) return true;
+            query)) return true;
           if (await handleReviewCiStatus(context, attachedRuntime, { request, response, url })) return true;
           return execution.handle(request, response, url);
         }, serveGit: execution.serveGit,
