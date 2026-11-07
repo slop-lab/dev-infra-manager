@@ -90,6 +90,11 @@ pre-enrolled worker loops on demand using a dedicated scoped capacity connection
 It preserves the normal backends, host cache routing and installed task handlers;
 provider code contains no scheduler-specific VM implementation. Idle reclaim
 requires scheduler drain/revision authority, the same actual owned loop instance,
-and clean local journals. SIGTERM drains instead of aborting occupied work.
+and clean local journals. For persistent supervision, invoke the installed
+`dim-host execution capacity /absolute/private/provider.json` directly using
+the operator configuration's `host.executable` path. Its first SIGTERM drains
+instead of aborting occupied work; allow the supervisor to wait for that drain.
+The transport CLI has a separate five-second cancellation bound and must not
+supervise this graceful shutdown.
 The provider host does not need an operator credential. Nothing is started by
 installation alone. See the [fixed-pool setup and budgets](../../../../docs/guides/ci-runners.md#demand-managed-worker-pools).

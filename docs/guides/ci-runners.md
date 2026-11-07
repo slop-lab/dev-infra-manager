@@ -426,8 +426,13 @@ pre-exported worker files:
 }
 ```
 
-Run `dim execution capacity /absolute/private/provider.json` through the
-operator's normal service supervisor. It takes an exclusive host guard and
+For persistent supervision, invoke the installed host executable directly:
+`/absolute/installed/dim-host execution capacity /absolute/private/provider.json`.
+Use the operator configuration's `host.executable` path. The transport CLI
+`dim execution capacity ...` uses bounded cancellation and can forcibly end its
+host child after five seconds; it is unsuitable for supervising busy drain.
+Configure the supervisor to allow graceful drain rather than imposing a forced
+stop deadline. The provider takes an exclusive host guard and
 uses the normal worker backends, cache routing and exact installed task
 handlers. Configs are parsed once; later path edits cannot change a running
 provider's pinned worker identity. Stop/drain before changing them.

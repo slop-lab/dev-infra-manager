@@ -13,7 +13,10 @@ export const hostPlugin: WorkspaceHostPlugin = {
   async run(args, context) {
     const [command, action, value, ...extra] = args;
     if (command === "execution" && action === "capacity" && value && extra.length === 0) {
-      await runHostExecutionCapacity(value, context.signal, workerOptions(context)); return;
+      // Provider cancellation drains occupied workers. Their commands must use
+      // per-worker cancellation, not the host operation's already-aborted runner.
+      const { runner: _runner, ...options } = workerOptions(context);
+      await runHostExecutionCapacity(value, context.signal, options); return;
     }
     if (command === "execution" && action === "console") {
       const { runExecutionConsole } = await import("./console.js");
