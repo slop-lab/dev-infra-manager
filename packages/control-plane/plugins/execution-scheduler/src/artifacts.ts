@@ -9,6 +9,7 @@ import { ExecutionConflictError } from "@slop-lab/dim-contracts-execution";
 export class ExecutionArtifactStore {
   readonly #root: string;
   readonly #locks = new Map<string, Promise<unknown>>();
+  readonly #durableDirectories = new Set<string>();
   constructor(root: string) { this.#root = root; }
   async chunk(executionId: string, input: unknown, authorize: () => void = () => {}): Promise<void> {
     const value = executionArtifactChunkSchema.parse(input);
@@ -87,7 +88,18 @@ export class ExecutionArtifactStore {
     assertId(id);
     for (const directory of [this.#root, join(this.#root, id)]) {
       await mkdir(directory, { mode: 0o700 }).catch(error => { if (!exists(error)) throw error; });
-      const info = await lstat(directory); if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o077) !== 0) throw new ExecutionConflictError("invalid artifact directory");
+      const info = await lstat(directory);
+      if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o077) !== 0) {
+        throw new ExecutionConflictError("invalid artifact directory");
+      }
+      // File fsync cannot make its containing directory's name durable. Establish
+      // the namespace on first use, including directories left by a prior process.
+      const identity = `${info.dev}:${info.ino}`;
+      if (!this.#durableDirectories.has(identity)) {
+        const parent = await open(dirname(directory), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+        try { await parent.sync(); } finally { await parent.close(); }
+        this.#durableDirectories.add(identity);
+      }
     }
     return join(this.#root, id);
   }
