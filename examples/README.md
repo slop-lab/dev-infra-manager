@@ -119,6 +119,12 @@ than on every daily development check. It verifies workspace integration using
 the installed artifacts. It does not substitute for functional-KVM CI runner
 verification or provider/account acceptance.
 
+The practical artifact catalog includes `files/practical/selected-host-report.json`
+on success and failure. This private structured report retains both host results
+without console truncation; explicit artifact export redacts credential fields.
+Report retrieval never changes a failed recipe into a passing check, and raw child
+stderr and operator configuration files are not added to the catalog.
+
 The gate also runs from an explicitly KVM-enabled DIM workspace; see the
 [workspace setup and commands](../scripts/development.md#kvm-example-verification-inside-a-workspace).
 The ordinary `container` runtime intentionally has no KVM device.

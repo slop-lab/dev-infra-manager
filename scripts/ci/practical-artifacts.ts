@@ -31,7 +31,7 @@ export async function exportPracticalArtifacts(root: string, output: string, exi
     await writeFile(target, text, { mode: 0o600, flag: "wx" });
     entries.push({ path: relative, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), truncated: !json && bytes.length > maximum });
   };
-  await copy("source.json", true); await copy("roles.txt", false); await copy("practical-runtime.json", true);
+  await copy("source.json", true); await copy("roles.txt", false); await copy("practical-runtime.json", true); await copy("selected-host-report.json", true);
   await copy("separate-control-plane.log", false);
   try {
     const stages = join(root, "stages"), stageInfo = await lstat(stages); assert(stageInfo.isDirectory() && !stageInfo.isSymbolicLink());

@@ -1,3 +1,12 @@
+# Collect the structured report even when recipes fail, without replacing their exit status.
+examples_collect_smoke_report() {
+  local recipe_status="$1" report_status=0
+  timeout 60s "${BOOTSTRAP_SCP[@]}" dim@127.0.0.1:/home/dim/dim/selected-host-report.json "$BOOTSTRAP_EVIDENCE_ROOT/selected-host-report.json" || report_status=$?
+  if (( report_status != 0 )); then printf '%s\n' '[examples] structured selected-host report unavailable' >&2; fi
+  if (( recipe_status != 0 )); then return "$recipe_status"; fi
+  return "$report_status"
+}
+
 # Two simultaneously owned QEMU guests. Global bootstrap helpers select one at a time.
 declare -A EXAMPLES_VM_PID=() EXAMPLES_VM_START=() EXAMPLES_VM_ROOT=() EXAMPLES_VM_ID=() EXAMPLES_VM_PORT=()
 EXAMPLES_CP_SSH_PID=""
@@ -104,7 +113,8 @@ REMOTE
   EXAMPLES_CP_SSH_START="$(cut -d' ' -f22 "/proc/$EXAMPLES_CP_SSH_PID/stat")"
   examples_vm_select host
   printf '[examples] phase=host-installed-recipes log=%s/03-host-installed-recipes.log\n' "$CHECK_OUTPUT_ROOT"
-  check_output_run host-installed-recipes timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "${EXAMPLES_VM_PORT[control-plane]}" <<'REMOTE'
+  local recipe_status=0
+  check_output_run host-installed-recipes timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "${EXAMPLES_VM_PORT[control-plane]}" <<'REMOTE' || recipe_status=$?
 set -euo pipefail
 export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin
 chmod 0600 /home/dim/examples-cp-key /home/dim/examples-cp-known-hosts
@@ -128,9 +138,10 @@ node scripts/examples/wait-separated.ts /home/dim/dim/example-operator
 kill -0 "$tunnel"
 export DIM_EXAMPLE_PACKAGE_BUNDLE=/home/dim/dim/example-packages DIM_EXAMPLE_REMOTE_SETUP=/home/dim/dim/example-operator
 export DIM_EXAMPLE_REMOTE_ENDPOINT=http://127.0.0.1:18080 DIM_EXAMPLE_REMOTE_CI_ENDPOINT=http://127.0.0.1:18081
-export DIM_PRACTICAL_CI_REQUIRED=1 DIM_PRACTICAL_CI_RECEIPT=/home/dim/dim/practical-runtime.json
+export DIM_PRACTICAL_CI_REQUIRED=1 DIM_PRACTICAL_CI_RECEIPT=/home/dim/dim/practical-runtime.json DIM_PRACTICAL_CI_REPORT=/home/dim/dim/selected-host-report.json
 bash scripts/examples/verify-installed.bash
 REMOTE
+  examples_collect_smoke_report "$recipe_status" || return $?
   timeout 60s "${BOOTSTRAP_SCP[@]}" dim@127.0.0.1:/home/dim/dim/practical-runtime.json "$BOOTSTRAP_EVIDENCE_ROOT/practical-runtime.json"
   printf 'PASS separate control-plane and workspace-host VMs source=%s\n' "$SOURCE_SHA"
 }

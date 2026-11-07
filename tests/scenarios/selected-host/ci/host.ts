@@ -9,6 +9,7 @@ import { runCommand } from "../../web-lifecycle/process.ts";
 import { fixtureModel } from "./provider.ts";
 import { requirePracticalReport } from "./requiredReport.ts";
 import { fixtureArtifactIdentity } from "./artifacts.ts";
+import { persistPracticalSmokeReport } from "./smokeReport.ts";
 import { cleanupIncusForwarding } from "./fixtureNetwork.ts";
 
 const repository = resolve(import.meta.dirname, "../../../.."), facade = process.env.DIM_EXAMPLE_DIM_BIN, bundle = process.env.DIM_EXAMPLE_PACKAGE_BUNDLE,
@@ -67,9 +68,11 @@ try {
     expectedHostVersion: version, image, requiredPlugins: ["agent-tools", "host-llm-router", "external-urls", "vm"], ingress: "practical", sshPublicKey: publicKey, llm: {
       configFile: join(gateway, "gateway.json"), project: "practical-ci", route: "ci", provider: "dim-chat", model: fixtureModel, operatorConnectionFile: join(directory, "reader.json") }, vm: { image: prepared.imageFingerprint } })),
     isolatedUpdate: { beforeFacade, beforeBundle, afterFacade: facade, afterBundle: bundle, image } }), { mode: 0o600, flag: "wx" });
+  const reportTarget = process.env.DIM_PRACTICAL_CI_REPORT;
+  if (!reportTarget?.startsWith("/")) throw new Error("required practical report output is missing");
   const output = await runCommand(process.execPath, ["--import", join(repository, "tests/node_modules/tsx/dist/loader.mjs"), join(repository, "scripts/checks/selected-host-usability-smoke.ts"),
-    "--config", config, "--host", "local", "--host", "practical-ssh", "--json"], { env, cwd: repository, timeoutMs: 60 * 60_000 });
-  const report = requirePracticalReport(JSON.parse(output.stdout), sourceSha, image);
+    "--config", config, "--host", "local", "--host", "practical-ssh", "--json"], { env, cwd: repository, timeoutMs: 60 * 60_000, acceptFailure: true });
+  const report = requirePracticalReport(await persistPracticalSmokeReport(reportTarget, output), sourceSha, image);
   const after = await fixtureArtifactIdentity(bundle, repository), before = await fixtureArtifactIdentity(beforeBundle, repository);
   if (after.sourceSha !== sourceSha || after.sourceTree !== sourceTree || before.closureSha256 === after.closureSha256) throw new Error("practical fixture artifacts do not bind the exact distinct reviewed sources");
   const target = process.env.DIM_PRACTICAL_CI_RECEIPT;
