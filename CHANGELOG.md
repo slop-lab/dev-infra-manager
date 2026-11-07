@@ -57,7 +57,16 @@ is implied by these source changes.
   Offer an explicit Ubuntu hardware execution profile with nested KVM and
   disk-backed temporary storage and explicit bounded source manifests for exact
   scheduled practical VM validation; ordinary source checks keep their existing
-  lightweight execution path.
+  lightweight execution path. Allocate worker capacity from explicitly bounded
+  operator pools as compatible work queues, and drain idle workers without
+  interrupting execution, result upload or owned cleanup. Keep scheduling
+  decisions separate from host worker lifecycle and use pool-scoped authority.
+  Reuse verified dependency-only VM baselines for repeated practical checks,
+  while creating fresh control-plane and host identities and installing the
+  exact candidate anew. Retain an explicit cold-installation check and report
+  which preparation mode ran, with stage timings and downloadable evidence.
+  Reduce cold image transfers by storing the guest disk and bootstrap runtime
+  once, with their final permissions.
 - Add `dim cp` for explicit operator-machine to workspace file transfer through
   local or SSH-selected hosts. Preserve binary streams, require explicit
   recursive and overwrite choices, pin workspace/runtime identity, and reject
@@ -93,6 +102,8 @@ is implied by these source changes.
   recognize owned KVM containers during ingress restoration, and bound local
   package installation with descendant cleanup on timeout or cancellation. Prefer
   cached npm metadata without forcing offline resolution or changing user configuration.
+  Resolve bundled transitive dependencies from their reviewed local artifacts
+  instead of probing the registry for unpublished development versions.
   Support host-only installation from existing control-plane role connections,
   optional owned SSH forwarding, generation attestation and retained reconnect
   settings without deploying services on the new host. Add a dependencies-only
