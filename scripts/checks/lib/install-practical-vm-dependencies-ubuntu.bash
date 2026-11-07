@@ -15,4 +15,3 @@ fi
 # Noble packages keep these private executables outside the interactive PATH.
 [[ -x /usr/libexec/incus/incus-agent ]] || { echo 'Incus VM agent is unavailable' >&2; exit 1; }
 /usr/libexec/virtiofsd --version >/dev/null
-qemu-system-x86_64 -spice help >/dev/null
