@@ -17,7 +17,7 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
-mapfile -t inputs < <(node --input-type=module -e 'const {baselineRecipeFiles}=await import(process.argv[1]);console.log(baselineRecipeFiles.join("\n"));' "$script_dir/vm-baseline.ts")
+mapfile -t inputs < <(node "$script_dir/vm-baseline.ts" recipe-files)
 [[ "${#inputs[@]}" -gt 5 ]] || exit 2
 tar -cf "$BOOTSTRAP_WORK_ROOT/inputs.tar" -C "$repository" "${inputs[@]}"
 for role in control-plane host; do

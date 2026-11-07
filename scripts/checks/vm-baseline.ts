@@ -64,6 +64,10 @@ export function requireStandaloneQcow(value: unknown): void {
   const specific = info["format-specific"] as { data?: Record<string, unknown> } | undefined;
   if (specific?.data?.["data-file"] !== undefined) throw new Error("external qcow2 data files are forbidden");
 }
+export function baselineImageDockerfile(supervisor: string): string {
+  if (!/^[a-z0-9][a-z0-9./:_-]*@sha256:[a-f0-9]{64}$/.test(supervisor)) throw new Error("baseline supervisor requires an exact digest");
+  return `FROM ${supervisor}\nCOPY --chmod=0444 baselines/control-plane.qcow2 baselines/host.qcow2 baselines/manifest.json /opt/dim/tools/baselines/\nRUN chmod 0555 /opt/dim/tools/baselines\n`;
+}
 /** Validate the private copies that QEMU consumes, never hash then reopen the shared cache. */
 export async function consumeVmBaselines(manifestFile: string, destination: string, repository = root,
   inspectImage: (file: string) => unknown = (file) => JSON.parse(run("qemu-img", ["info", "--output=json", file]))): Promise<VmBaselineManifest> {
@@ -89,7 +93,9 @@ export async function consumeVmBaselines(manifestFile: string, destination: stri
 
 async function main(args: string[]): Promise<void> {
   const [operation, first, second, third] = args;
-  if (operation === "consume" && first && second && args.length === 3) {
+  if (operation === "recipe-files" && args.length === 1) {
+    console.log(baselineRecipeFiles.join("\n"));
+  } else if (operation === "consume" && first && second && args.length === 3) {
     await consumeVmBaselines(resolve(first), resolve(second));
   } else if (operation === "clone-check" && first && second && args.length === 3) {
     if (!isAbsolute(first) || !isAbsolute(second)) throw new Error("clone-check requires absolute manifest and new evidence directory");
@@ -122,7 +128,7 @@ async function main(args: string[]): Promise<void> {
     const stage = await mkdtemp(join(tmpdir(), "dim-baseline-image-"));
     try {
       await consumeVmBaselines(resolve(first), join(stage, "baselines"));
-      await writeFile(join(stage, "Dockerfile"), `FROM ${second}\nCOPY baselines /opt/dim/tools/baselines\nRUN chmod 0555 /opt/dim/tools/baselines && chmod 0444 /opt/dim/tools/baselines/*\n`);
+      await writeFile(join(stage, "Dockerfile"), baselineImageDockerfile(second));
       const built = spawnSync("docker", ["build", "--tag", third, stage], { stdio: "inherit", timeout: 30 * 60_000 });
       if (built.status !== 0) throw new Error("baseline supervisor image build failed");
       console.log(run("docker", ["image", "inspect", third, "--format", "{{.Id}}"]));
