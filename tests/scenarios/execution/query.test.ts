@@ -86,5 +86,7 @@ it("runs jobs and byte-preserving logs through the CLI against the real query AP
   expect(Buffer.concat(stderr).subarray(0, f.errorOutput.length)).toEqual(f.errorOutput);
   expect(Buffer.concat(stderr).toString()).toContain("stdout diagnostics truncated; retained 65536 bytes");
   const malformed = new Command(); registerCiCommands(malformed);
-  await expect(malformed.parseAsync(["ci", "logs", "invalid", "--connection", f.file], { from: "user" })).rejects.toThrow(/must be a UUID/);
+  await expect(malformed.parseAsync(["ci", "logs", "invalid", "--connection", f.file], { from: "user" })).rejects.toMatchObject({
+    issues: [{ code: "invalid_format", format: "uuid", path: [] }],
+  });
 });

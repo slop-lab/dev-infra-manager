@@ -212,7 +212,10 @@ it("retries durable artifact uploads after worker restart without reexecuting ca
 it("closes an upload outage at its persisted deadline despite healthy lease renewals and retains local failure proof", async () => {
   const directory = await root(), stop = new AbortController();
   const watchdog = setTimeout(() => stop.abort(new Error("upload deadline did not release the worker")), 2_000);
-  const store = new ExecutionStore(join(directory, "scheduler.sqlite3"), generation, 90);
+  // This scenario holds scheduler ownership healthy while the worker's real upload deadline expires.
+  // Journal/fsync latency must not consume the separate synthetic scheduler lease before first renewal.
+  let schedulerNow = 0;
+  const store = new ExecutionStore(join(directory, "scheduler.sqlite3"), generation, 90, () => schedulerNow);
   try {
     store.enqueue(event());
     const selected = store.reserve("worker-a", slot, randomUUID())!, authorized = store.attachGrant(selected.id, grant(selected));
@@ -230,12 +233,20 @@ it("closes an upload outage at its persisted deadline despite healthy lease rene
     };
     const client: ExecutionWorkerClient = {
       async claim() { return authorized; },
-      async renew(assignment) { renewals++; store.renew(assignment.id, assignment.workerId, assignment.slotId, assignment.leaseToken); return 90; },
+      async renew(assignment) {
+        renewals++; schedulerNow += 30;
+        const renewed = store.renew(assignment.id, assignment.workerId, assignment.slotId, assignment.leaseToken);
+        expect(renewed.leaseExpiresAt).toBe(schedulerNow + 90);
+        return 90;
+      },
       async candidate() { return { username: "candidate", password: "a".repeat(43), expiresAt: Date.now() + executionCandidateLeaseLifetimeMilliseconds }; },
       async artifactChunk() { throw new ExecutionServiceUnavailableError("artifact storage unavailable", "unavailable"); },
       async finalizeArtifacts() { throw new Error("unreachable"); },
       async exchange() { throw new Error("unused"); }, async recover() { throw new Error("must report failure"); },
-      async report(assignment, completed) { store.finish(assignment.id, assignment.workerId, assignment.slotId, assignment.leaseToken, completed); stop.abort(); },
+      async report(assignment, completed) {
+        expect(store.get(assignment.id).leaseExpiresAt).toBeGreaterThan(schedulerNow);
+        store.finish(assignment.id, assignment.workerId, assignment.slotId, assignment.leaseToken, completed); stop.abort();
+      },
     };
     await runExecutionWorker({ directory, client, backend, runner: new ProcessRunner(), gitEndpoint: "http://127.0.0.1:1234",
       gitExecutable: "/usr/bin/git", signal: stop.signal, artifactUploadTimeoutMilliseconds: 180 });
