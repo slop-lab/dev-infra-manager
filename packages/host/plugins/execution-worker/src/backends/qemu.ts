@@ -7,6 +7,7 @@ import type { BackendInput, ExecutionBackend } from "../backend.js";
 import type { ExecutionResult } from "@slop-lab/dim-contracts-ci/aggregate";
 import { candidateFailureCode } from "../candidate-failure.js";
 import { hardwareRunnerLabel, requireHardwareProfile } from "../hardwareProfile.js";
+import { publishPublicJobFiles } from "../publicJobFiles.js";
 
 export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBackend { return {
   kind: "qemu",
@@ -18,9 +19,19 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
     const output = new NativeOutputCollector(Number(descriptor.bounds.outputBytes), () => stop.abort(), join(input.root, "output"));
     let completion: ExecutionResult["completion"] = { kind: "executor-failure", code: "execution-failed" };
     try {
+      await prepareExecutionImage(input.runner, descriptor.runnerBaseImage, signal);
+      await prepareExecutionImage(input.runner, descriptor.jobImage, signal);
+      const profileInfo = await input.runner.run("docker", ["image", "inspect", descriptor.runnerBaseImage, "--format", `{{json (index .Config.Labels "${hardwareRunnerLabel}")}}`], { signal });
+      if (profileInfo.exitCode !== 0) throw new Error("trusted QEMU profile inspection failed");
+      const hardware = requireHardwareProfile(JSON.parse(profileInfo.stdout), descriptor);
+      if (hardware) {
+        const disk = await statfs(input.root, { bigint: true });
+        if (disk.type === 0x01021994n || disk.bavail * disk.bsize < 80n * 1024n ** 3n) throw new Error("hardware worker state requires 80 GiB free on disk, not tmpfs");
+        await mkdir(join(input.root, "hardware"), { mode: 0o700 });
+      }
       const job = join(input.root, "job"), workspace = join(input.root, "workspace"), script = join(job, "script");
       await mkdir(job, { mode: 0o700 });
-      await input.acquireCandidate({ workspace, scriptFile: script, signal });
+      await input.acquireCandidate({ workspace, scriptFile: script, signal, ...(hardware ? { sourceContextDirectory: join(job, "source-context") } : {}) });
       await writeFile(join(job, "working-directory"), `/workspace/${descriptor.repositoryId}`, { mode: 0o444, flag: "wx" });
       await writeFile(join(job, "descriptor.json"), JSON.stringify(descriptor), { mode: 0o444, flag: "wx" });
       const files = routing?.jobFiles ?? [];
@@ -34,16 +45,6 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
       await chmod(job, 0o755); await chmod(script, 0o444);
       const kvm = await stat("/dev/kvm"), uid = process.getuid?.(), gid = process.getgid?.();
       if (!kvm.isCharacterDevice() || uid === undefined || gid === undefined) throw new Error("KVM is required");
-      await prepareExecutionImage(input.runner, descriptor.runnerBaseImage, signal);
-      await prepareExecutionImage(input.runner, descriptor.jobImage, signal);
-      const profileInfo = await input.runner.run("docker", ["image", "inspect", descriptor.runnerBaseImage, "--format", `{{json (index .Config.Labels "${hardwareRunnerLabel}")}}`], { signal });
-      if (profileInfo.exitCode !== 0) throw new Error("trusted QEMU profile inspection failed");
-      const hardware = requireHardwareProfile(JSON.parse(profileInfo.stdout), descriptor);
-      if (hardware) {
-        const disk = await statfs(input.root, { bigint: true });
-        if (disk.type === 0x01021994n || disk.bavail * disk.bsize < 80n * 1024n ** 3n) throw new Error("hardware worker state requires 80 GiB free on disk, not tmpfs");
-        await mkdir(join(input.root, "hardware"), { mode: 0o700 });
-      }
       const imageInfo = await input.runner.run("docker", ["image", "inspect", descriptor.jobImage, "--format", "{{json .Config.Env}}"], { signal });
       if (imageInfo.exitCode !== 0) throw new Error("QEMU job image environment inspection failed");
       const imageEnvironment: unknown = JSON.parse(imageInfo.stdout);
@@ -60,6 +61,7 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
       await chmod(join(job, "rootfs.tar"), 0o444);
       if (!await cleanupNativeContainer(input.runner, input.grant, "qemu-rootfs", rootfsContainerName(input.grant))) throw new Error("QEMU image preparation cleanup is uncertain");
       }
+      await publishPublicJobFiles(job);
       const launched = await input.runner.run("docker", qemuContainerArguments(input, { uid, gid, kvmGroup: kvm.gid }, routing, hardware), { signal });
       if (launched.exitCode !== 0 || !/^[0-9a-f]{64}$/.test(launched.stdout.trim())) throw new Error("QEMU supervisor launch failed");
       const id = launched.stdout.trim();

@@ -26,7 +26,10 @@ is implied by these source changes.
   privately owned obsolete adapter bytes; preserve edited or unsafe files with
   actionable preparation failure. Require practical deterministic
   runtime coverage in the existing trusted CI gates without development-push
-  hardware runs; external provider qualification remains separate.
+  hardware runs. Explicit DIM CI qualification can use an operator-pinned Ubuntu
+  hardware VM, exact bounded parent context and redacted retained diagnostics;
+  the default DIM workflow remains source-only. External provider qualification
+  remains separate.
 
 - Make Git services independently composable through DIM-independent
   `@slop-lab/gs-*` packages. Support standalone durable repository policy and

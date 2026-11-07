@@ -23,7 +23,7 @@ need no human approval. The explicit `git-ci` policy requires the
 candidate-controlled `source` job before either managed branch can be promoted.
 The current policy/compiler has no per-branch job scope and schedules every job
 declared in `ci/runner.yml`; therefore that workflow contains only `source`.
-Native trusted acquisition also supplies checkout trees without `.git`, while
+Ordinary Native trusted acquisition supplies checkout trees without `.git`, while
 the runtime runner deliberately binds a canonical Git commit/tree. Main merge, `main`
 push and release-tag runtime acceptance use the restricted GitHub workflow on a
 separately provisioned disposable runner, or the same explicit preparation
@@ -51,3 +51,5 @@ For KVM acceptance inside a workspace, start with
 [development guide](../scripts/development.md#kvm-example-verification-inside-a-workspace)
 explains the operator-selected `container-kvm` runtime and the separate
 control-plane/host VM topology. No repository file grants access to host KVM.
+
+For explicitly scheduled hardware qualification, see [scheduler practical CI](../docs/development/scheduler-practical-ci.md). The alternate `ci/practical.example.yml` is a human opt-in template, never loaded at that filename; commit its reviewed contents as `ci/runner.yml` on an immutable qualification candidate. Default development jobs remain source-only.

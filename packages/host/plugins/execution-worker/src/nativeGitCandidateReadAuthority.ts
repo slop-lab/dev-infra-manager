@@ -1,9 +1,13 @@
 import type { ExecutionDescriptor } from "@slop-lab/dim-contracts-ci/execution";
 import type { NativeCandidateReadAuthority } from "./candidate.js";
+import { mkdir, chmod, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { publishPublicJobFiles } from "./publicJobFiles.js";
 import {
   materializeVerifiedTree,
   readVerifiedBlob,
   readVerifiedCommit,
+  readVerifiedCommitObject,
   type CandidateMaterializationBudget,
   type CandidateObjectLimits
 } from "./nativeGitCandidateObjects.js";
@@ -80,6 +84,39 @@ export function openNativeGitCandidateReadAuthority(
     if (head !== parsed.claim.expectedProtectedHead) throw new NativeGitCandidateReadError("protected head changed from the claim");
   }
   return {
+    async exportSourceContext(input) {
+      assertScope(parsed.claim, input);
+      if (input.mode !== "candidate-and-immediate-parents") throw new NativeGitCandidateReadError("unsupported source context mode");
+      await current(input.signal);
+      const selected = await candidate(input.signal);
+      const commit = await readVerifiedCommitObject(selected.git, parsed.claim.candidateCommit, input.signal);
+      if (commit.parents.length > 8 || new Set(commit.parents).size !== commit.parents.length) throw new NativeGitCandidateReadError("source context exceeds eight distinct immediate parents");
+      budget.bytes += commit.bytes.length;
+      if (budget.bytes > parsed.limits.maximumMaterializedBytes) throw new NativeGitCandidateReadError("source context exceeds the shared materialization budget");
+      // This lease already authorizes this repository's upload-pack. Only this
+      // operator-selected mode deepens acquisition; no credential reaches jobs.
+      await selected.git.runAuthenticated(["--git-dir", selected.git.repository, "fetch", "--depth=2", "--no-tags", "--no-write-fetch-head", "--force",
+        parsed.repositoryUrl, `${parsed.claim.candidateCommit}:refs/dim/candidate`], 64 * 1024, input.signal);
+      await selected.git.run(["--git-dir", selected.git.repository, "fsck", "--strict", "--full", "--no-reflogs", "--no-progress"], 64 * 1024, input.signal);
+      await mkdir(input.destination, { mode: 0o700 });
+      const parentsDirectory = join(input.destination, "parents"); await mkdir(parentsDirectory, { mode: 0o700 });
+      await writeFile(join(input.destination, "candidate.commit"), commit.bytes, { mode: 0o444, flag: "wx" });
+      const parents: { commit: string; tree: string }[] = [];
+      for (const objectId of commit.parents) {
+        const parent = await readVerifiedCommitObject(selected.git, objectId, input.signal);
+        budget.bytes += parent.bytes.length;
+        if (budget.bytes > parsed.limits.maximumMaterializedBytes) throw new NativeGitCandidateReadError("source context exceeds the shared materialization budget");
+        await materializeVerifiedTree({ git: selected.git, treeObjectId: parent.treeObjectId, destination: join(parentsDirectory, objectId),
+          limits: parsed.limits, budget, signal: input.signal });
+        await chmod(join(parentsDirectory, objectId), 0o755);
+        await writeFile(join(input.destination, `${objectId}.commit`), parent.bytes, { mode: 0o444, flag: "wx" });
+        parents.push({ commit: objectId, tree: parent.treeObjectId });
+      }
+      await writeFile(join(input.destination, "context.json"), JSON.stringify({ schemaVersion: 1, mode: input.mode,
+        candidate: { commit: commit.objectId, tree: commit.treeObjectId }, parents }) + "\n", { mode: 0o444, flag: "wx" });
+      await publishPublicJobFiles(input.destination);
+      await current(input.signal);
+    },
     async close() {
       if (closed) return; closed = true;
       if (opened !== undefined) {
@@ -266,7 +303,10 @@ export async function withNativeGitExecutionReadAuthority<T>(options: Omit<Nativ
   }
   const authority: NativeCandidateReadAuthority = { resolveProtectedHead: (input) => select(input).resolveProtectedHead(input),
     readCommit: (input) => select(input).readCommit(input), readBlob: (input) => select(input).readBlob(input),
-    materializeTree: (input) => select(input).materializeTree(input) };
+    materializeTree: (input) => select(input).materializeTree(input), exportSourceContext: (input) => {
+      if (input.repositoryId !== descriptor.repositoryId) throw new NativeGitCandidateReadError("source context is limited to the primary input");
+      return select(input).exportSourceContext!(input);
+    } };
   try {
     const result = await action(authority);
     // The remote probe authenticates the live execution lease again, including

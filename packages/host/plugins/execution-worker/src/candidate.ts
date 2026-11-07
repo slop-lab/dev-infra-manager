@@ -11,6 +11,7 @@ export type NativeCandidateBlob = {
 };
 
 export interface NativeCandidateReadAuthority {
+  exportSourceContext?(input: { readonly projectId: string; readonly repositoryId: string; readonly mode: "candidate-and-immediate-parents"; readonly destination: string; readonly signal: AbortSignal }): Promise<void>;
   resolveProtectedHead(input: { readonly projectId: string; readonly repositoryId: string; readonly protectedRef: string; readonly signal: AbortSignal }): Promise<string>;
   readCommit(input: { readonly projectId: string; readonly repositoryId: string; readonly objectId: string; readonly signal: AbortSignal }): Promise<{ readonly objectId: string; readonly treeObjectId: string }>;
   readBlob(input: { readonly projectId: string; readonly repositoryId: string; readonly treeObjectId: string; readonly path: string; readonly maximumBytes: number; readonly signal: AbortSignal }): Promise<NativeCandidateBlob>;
@@ -23,6 +24,7 @@ export type NativeCandidateVerificationInput = {
   readonly descriptorDigest: string;
   readonly workspace: string;
   readonly scriptFile: string;
+  readonly sourceContextDirectory?: string;
   readonly signal: AbortSignal;
 };
 
@@ -75,6 +77,10 @@ export async function verifyAndMaterializeCandidate(input: NativeCandidateVerifi
   }
   await writeFile(input.scriptFile, script.bytes, { mode: 0o400, flag: "wx" });
   await chmod(input.scriptFile, 0o400);
+  if (input.sourceContextDirectory !== undefined) {
+    if (!input.authority.exportSourceContext) throw new NativeHostVerificationError("trusted reader cannot provide the required source context");
+    await input.authority.exportSourceContext({ ...identity, mode: "candidate-and-immediate-parents", destination: input.sourceContextDirectory, signal: input.signal });
+  }
 }
 
 function assertBlob(

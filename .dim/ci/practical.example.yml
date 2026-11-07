@@ -1,0 +1,7 @@
+# Opt-in immutable qualification candidate only; not read at this filename.
+jobs:
+  source:
+    script: scripts/ci/source.bash
+  practical:
+    runtime: vm
+    script: scripts/ci/practical.bash

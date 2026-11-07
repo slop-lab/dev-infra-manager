@@ -43,6 +43,13 @@ export async function readVerifiedCommit(
   objectId: string,
   signal: AbortSignal
 ): Promise<{ readonly objectId: string; readonly treeObjectId: string }> {
+  const commit = await readVerifiedCommitObject(git, objectId, signal);
+  return { objectId: commit.objectId, treeObjectId: commit.treeObjectId };
+}
+
+export async function readVerifiedCommitObject(git: DisposableGit, objectId: string, signal: AbortSignal): Promise<{
+  readonly objectId: string; readonly treeObjectId: string; readonly bytes: Buffer; readonly parents: readonly string[]
+}> {
   const type = (await git.run(["--git-dir", git.repository, "cat-file", "-t", objectId], 64, signal)).toString("ascii").trim();
   if (type !== "commit") throw new CandidateObjectError("candidate object is not a commit");
   const bytes = await git.run(["--git-dir", git.repository, "cat-file", "commit", objectId], 1024 * 1024, signal);
@@ -57,7 +64,14 @@ export async function readVerifiedCommit(
   const match = lineEnd < 0 ? null : new RegExp(`^tree ([0-9a-f]{${objectIdLength}})$`)
     .exec(bytes.subarray(0, lineEnd).toString("ascii"));
   if (match?.[1] === undefined) throw new CandidateObjectError("candidate commit has no canonical tree header");
-  return { objectId, treeObjectId: match[1] };
+  const end = bytes.indexOf(Buffer.from("\n\n"));
+  if (end < 0) throw new CandidateObjectError("candidate commit has no header boundary");
+  const parents = bytes.subarray(0, end).toString("utf8").split("\n").filter(line => line.startsWith("parent ")).map(line => {
+    const parent = new RegExp(`^parent ([0-9a-f]{${objectIdLength}})$`).exec(line)?.[1];
+    if (!parent) throw new CandidateObjectError("candidate parent header is malformed");
+    return parent;
+  });
+  return { objectId, treeObjectId: match[1], bytes, parents };
 }
 
 export async function readVerifiedBlob(input: {
