@@ -4,6 +4,11 @@ set -Eeuo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$script_dir/lib/bootstrap-ubuntu-vm-source.bash"
 source "$script_dir/lib/bootstrap-ubuntu-vm-guest.bash"
+# Only the explicit reviewed option below may enable dependency reuse.
+BOOTSTRAP_BASELINE_DIRECTORY=""
+BOOTSTRAP_CLOUD_PACKAGE_UPDATE=true
+BOOTSTRAP_CLOUD_PACKAGES='[git]'
+BOOTSTRAP_EXAMPLES_CACHE_CLOUD_INIT=""
 
 if bootstrap_source_parse "$@"; then
   :
@@ -84,6 +89,17 @@ printf '%s  %s\n' "$BOOTSTRAP_IMAGE_SHA256" "$BOOTSTRAP_BASE_IMAGE" | sha256sum 
 printf 'image-url=%s\nimage-sha256=%s\nsource-sha=%s\nsource-tree=%s\n' \
   "$BOOTSTRAP_IMAGE_URL" "$BOOTSTRAP_IMAGE_SHA256" "$SOURCE_SHA" "$SOURCE_TREE" \
   >"$BOOTSTRAP_EVIDENCE_ROOT/input.txt"
+if [[ -n "$BOOTSTRAP_BASELINE_MANIFEST" ]]; then
+  [[ "${DIM_BOOTSTRAP_EXAMPLES_SEPARATE:-0}" == 1 ]] || { echo 'baselines require the separate CP/host lane' >&2; exit 2; }
+  BOOTSTRAP_BASELINE_DIRECTORY="$BOOTSTRAP_WORK_ROOT/baselines"
+  node "$script_dir/vm-baseline.ts" consume "$BOOTSTRAP_BASELINE_MANIFEST" "$BOOTSTRAP_BASELINE_DIRECTORY"
+  cp "$BOOTSTRAP_BASELINE_DIRECTORY/manifest.json" "$BOOTSTRAP_EVIDENCE_ROOT/dependency-baseline.json"
+  BOOTSTRAP_CLOUD_PACKAGE_UPDATE=false
+  BOOTSTRAP_CLOUD_PACKAGES='[]'
+  printf 'installation-mode=dependency-baseline\n' >>"$BOOTSTRAP_EVIDENCE_ROOT/input.txt"
+else
+  printf 'installation-mode=cold\n' >>"$BOOTSTRAP_EVIDENCE_ROOT/input.txt"
+fi
 
 if [[ "${DIM_BOOTSTRAP_EXAMPLES_SEPARATE:-0}" == 1 ]]; then
   source "$script_dir/lib/examples-separated-vms.bash"

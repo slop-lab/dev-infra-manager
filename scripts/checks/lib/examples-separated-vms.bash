@@ -49,7 +49,7 @@ bootstrap_examples_stop_all() {
   return "$failed"
 }
 bootstrap_examples_run() {
-  local cp_machine host_machine cp_key_type cp_key
+  local cp_machine host_machine cp_key_type cp_key cp_instance host_instance cp_fingerprint host_fingerprint
   source "$script_dir/lib/check-output.bash"
   check_output_init "$BOOTSTRAP_EVIDENCE_ROOT/stages"
   node "$script_dir/../examples/vm-cache.ts" prepare "$BOOTSTRAP_WORK_ROOT/cache.json" "$BOOTSTRAP_WORK_ROOT/cache-cloud-init.yml" "$BOOTSTRAP_EVIDENCE_ROOT/cache-routing.json"
@@ -62,8 +62,22 @@ bootstrap_examples_run() {
   examples_artifacts_seed_guest
   printf '[examples] phase=control-plane-tools log=%s/01-control-plane-tools.log\n' "$CHECK_OUTPUT_ROOT"
   check_output_run control-plane-tools timeout --signal=TERM --kill-after=30s 1800s "${BOOTSTRAP_SSH[@]}" \
-    'cd /home/dim/dim/workbench && sudo env DIM_BOOTSTRAP_DOWNLOAD_CACHE=/home/dim/dim/bootstrap-artifacts bash scripts/checks/lib/install-source-tools-ubuntu.bash && ! command -v docker'
+    bash -s -- "${BOOTSTRAP_BASELINE_DIRECTORY:+cached}" <<'REMOTE'
+set -euo pipefail
+cd /home/dim/dim/workbench
+if [[ "$1" == cached ]]; then
+  source scripts/lib/bootstrap-ubuntu-pins.bash
+  [[ "$($dim_node_root/bin/node --version)" == "v$dim_node_version" ]]
+  [[ "$($dim_source_tools_root/bin/pnpm --version)" == "$dim_pnpm_version" ]]
+  [[ "$($dim_source_tools_root/bin/just --version)" == "just $dim_just_version" ]]
+else
+  sudo env DIM_BOOTSTRAP_DOWNLOAD_CACHE=/home/dim/dim/bootstrap-artifacts bash scripts/checks/lib/install-source-tools-ubuntu.bash
+fi
+! command -v docker
+REMOTE
   cp_machine="$("${BOOTSTRAP_SSH[@]}" cat /etc/machine-id)"
+  cp_instance="$("${BOOTSTRAP_SSH[@]}" cloud-init query v1.instance_id)"
+  cp_fingerprint="$("${BOOTSTRAP_SSH[@]}" 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256' | awk '{print $2}')"
   printf '[examples] phase=boot-workspace-host log=%s/examples-workspace-host-console.log\n' "$BOOTSTRAP_EVIDENCE_ROOT"
   bootstrap_guest_start examples-workspace-host 8192; examples_vm_save host
   bootstrap_guest_copy_source; bootstrap_guest_prepare_source
@@ -71,10 +85,48 @@ bootstrap_examples_run() {
   timeout 300s "${BOOTSTRAP_SCP[@]}" "$BOOTSTRAP_BASE_IMAGE" dim@127.0.0.1:/home/dim/dim/bootstrap-base.qcow2
   # Keep this shell function outside check_output_run's conditional subshell:
   # Bash otherwise disables errexit inside its multi-step bootstrap body.
-  bootstrap_guest_run_acceptance ordinary
+  if [[ -n "${BOOTSTRAP_BASELINE_DIRECTORY:-}" ]]; then
+    check_output_run host-baseline-fresh-install timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "$SOURCE_SHA" <<'REMOTE'
+set -euo pipefail
+cd /home/dim/dim/workbench
+source scripts/lib/bootstrap-ubuntu-pins.bash
+source scripts/lib/bootstrap-host-preflight.bash
+source scripts/lib/bootstrap-host-state.bash
+dim_reject_docker_redirects
+dim_verify_local_docker_endpoint
+dim_verify_host_stack
+dim_docker_resources_are_empty
+for path in "$HOME/.config/dim" "$HOME/.local/state/dim" "$HOME/.local/state/dim-bootstrap" "$HOME/.local/share/dim" "$HOME/.local/lib/dim-candidates" "$HOME/.local/bin/dim"; do
+  [[ ! -e "$path" && ! -L "$path" ]] || { echo 'baseline contains unexpected DIM installation/state' >&2; exit 2; }
+done
+export PATH="$dim_source_tools_root/bin:$dim_node_root/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export DIM_SOURCE_ROOT_COMMIT="$1"
+if [[ -r /etc/dim-examples-cache.json ]]; then
+  changed="$(sudo "$dim_node_root/bin/node" scripts/examples/vm-cache.ts docker-config /etc/dim-examples-cache.json /etc/docker/daemon.json)"
+  if [[ "$changed" == configured ]]; then sudo systemctl kill --kill-who=main --signal=HUP docker; fi
+  sudo "$dim_node_root/bin/node" scripts/examples/vm-cache.ts verify-docker /etc/dim-examples-cache.json
+fi
+just prepare-local
+just install-local
+version="$(bash scripts/local-package-version.bash .local/dim-packages)"
+bash scripts/lib/install-candidate-facade.bash "$PWD/.local/dim-packages" "$version" "$1"
+[[ "$(git rev-parse HEAD)" == "$1" ]]
+REMOTE
+  else
+    bootstrap_guest_run_acceptance ordinary
+  fi
   host_machine="$("${BOOTSTRAP_SSH[@]}" cat /etc/machine-id)"
+  host_instance="$("${BOOTSTRAP_SSH[@]}" cloud-init query v1.instance_id)"
+  host_fingerprint="$("${BOOTSTRAP_SSH[@]}" 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256' | awk '{print $2}')"
   [[ -n "$cp_machine" && -n "$host_machine" && "$cp_machine" != "$host_machine" ]] || { echo 'CP and host must be different VM identities' >&2; return 1; }
   printf 'control-plane-machine=%s\nworkspace-host-machine=%s\n' "$cp_machine" "$host_machine" >"$BOOTSTRAP_EVIDENCE_ROOT/roles.txt"
+  node --input-type=module - "$BOOTSTRAP_EVIDENCE_ROOT/clone-identities.json" "$cp_machine" "$host_machine" \
+    "$cp_fingerprint" "$host_fingerprint" "$cp_instance" "$host_instance" <<'IDENTITY'
+import {writeFileSync} from 'node:fs';
+const [file,cp,host,cpKey,hostKey,cpInstance,hostInstance]=process.argv.slice(2);
+if(cp===host||cpKey===hostKey||!cpInstance||!hostInstance||cpInstance===hostInstance)throw Error('cloned VM identities are not independent');
+writeFileSync(file,JSON.stringify({schemaVersion:1,controlPlane:{machine:cp,sshHostKey:cpKey,instanceId:cpInstance},host:{machine:host,sshHostKey:hostKey,instanceId:hostInstance}})+'\n',{mode:0o600,flag:'wx'});
+IDENTITY
   printf '[examples] phase=host-build-images-artifacts log=%s/02-host-build-images-artifacts.log\n' "$CHECK_OUTPUT_ROOT"
   check_output_run host-build-images-artifacts timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "$SOURCE_SHA" "$BOOTSTRAP_IMAGE_SHA256" "$host_machine" <<'REMOTE'
 set -euo pipefail

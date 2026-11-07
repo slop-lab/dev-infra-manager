@@ -6,6 +6,10 @@ Usage:
   bash scripts/checks/bootstrap-ubuntu-vm-smoke.bash \
     --source-bundle BUNDLE --source-sha SHA --source-tree TREE
 
+The separate CP/host lane optionally accepts --baseline-manifest ABSOLUTE_FILE.
+Omitting it always qualifies cold installation; cached dependency qualification
+does not replace the main/release cold bootstrap lane.
+
 The manifest accepts schemaVersion 1, sourceSha, sourceTree and optional boundedParents.
 Bounded input declares exactly all immediate parents (one to eight), not arbitrary history.
 All paths must be absolute regular files. SHA and tree values are full lowercase
@@ -19,8 +23,12 @@ bootstrap_source_parse() {
   SOURCE_SHA=""
   SOURCE_TREE=""
   SOURCE_BOUNDED_PARENTS=""
+  BOOTSTRAP_BASELINE_MANIFEST=""
   while (($#)); do
     case "$1" in
+      --baseline-manifest)
+        [[ $# -ge 2 ]] || { printf '%s\n' '--baseline-manifest requires a value' >&2; return 2; }
+        BOOTSTRAP_BASELINE_MANIFEST="$2"; shift 2 ;;
       --source-bundle)
         [[ $# -ge 2 ]] || { printf '%s\n' '--source-bundle requires a value' >&2; return 2; }
         SOURCE_BUNDLE="$2"; shift 2 ;;
@@ -42,6 +50,7 @@ bootstrap_source_parse() {
     esac
   done
   bootstrap_source_regular_file "$SOURCE_BUNDLE" bundle || return
+  if [[ -n "$BOOTSTRAP_BASELINE_MANIFEST" ]]; then bootstrap_source_regular_file "$BOOTSTRAP_BASELINE_MANIFEST" baseline-manifest || return; fi
   if [[ -n "$manifest" ]]; then
     [[ -z "$SOURCE_SHA" && -z "$SOURCE_TREE" ]] || {
       printf '%s\n' 'manifest and explicit source identity forms are mutually exclusive' >&2

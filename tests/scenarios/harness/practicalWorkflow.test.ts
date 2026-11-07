@@ -7,7 +7,11 @@ it("compiles source-only and explicit hardware qualification workflows without c
   const example = await readFile(new URL("../../../.dim/ci/practical.example.yml", import.meta.url));
   expect(dimWorkflowCompiler.compile(current).map(job => ({ name: job.name, provider: job.provider }))).toEqual([{ name: "source", provider: "ordinary-sysbox" }]);
   expect(dimWorkflowCompiler.compile(example).map(job => ({ name: job.name, provider: job.provider, script: job.script }))).toEqual([
-    { name: "practical", provider: "qemu", script: "scripts/ci/practical.bash" },
+    { name: "practical", provider: "qemu", script: "scripts/ci/practical-cold.bash" },
     { name: "source", provider: "ordinary-sysbox", script: "scripts/ci/source.bash" }
   ]);
+  for (const [file, script] of [["practical-runtime.example.yml", "practical.bash"], ["practical-cached.example.yml", "practical-cached.bash"]]) {
+    const jobs = dimWorkflowCompiler.compile(await readFile(new URL(`../../../.dim/ci/${file}`, import.meta.url)));
+    expect(jobs.find(job => job.provider === "qemu")?.script).toBe(`scripts/ci/${script}`);
+  }
 });

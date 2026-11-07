@@ -22,6 +22,56 @@ No new development-push hardware trigger or repository-rule change is implied.
 
 ## Provisioned path
 
+### Reusing dependency baselines
+
+The canonical `examples-vm` main/release/manual commands remain cold: they call
+`examples-vm-smoke.bash` without a baseline. The opt-in
+`.dim/ci/practical.example.yml` uses `practical-cold.bash` for the same reason.
+Recurring scheduler runtime checks may instead select
+`.dim/ci/practical-runtime.example.yml`. Its normal `practical.bash` uses the
+fixed read-only `/mnt/dim-tools/baselines/manifest.json` only when the trusted
+supervisor provides it; otherwise it runs cold. It never chooses an image or
+host cache path from workflow input. The exported `qualification.json` records
+the actual mode, exact source/tree and baseline recipe identity.
+
+Build an operator-owned dependency artifact from reviewed source, outside a
+candidate job. The builder requires KVM, QEMU, cloud-localds, SSH, Node 24/26 and
+the exact pinned Ubuntu cloud image. It boots only one guest at a time (3 GiB
+CP, then 8 GiB host); reserve another 1 GiB for the builder and host headroom.
+
+```bash
+node scripts/checks/vm-baseline.ts build /absolute/new-baseline /absolute/pinned-ubuntu.qcow2
+node scripts/checks/vm-baseline.ts clone-check /absolute/new-baseline/manifest.json /absolute/new-clone-evidence
+node scripts/checks/vm-baseline.ts image /absolute/new-baseline/manifest.json \
+  registry.example/hardware-supervisor@sha256:REVIEWED_DIGEST registry.example/hardware-baseline:reviewed
+```
+
+The CP baseline contains OS and pinned Node/pnpm/Just; the host additionally
+contains pinned Docker/Sysbox and Incus dependency packages. No source checkout,
+DIM installation/configuration, SHA-bound bootstrap marker, workload, Incus
+project/network, or login/host credential is retained. Cloud-init, machine and
+SSH identities are scrubbed before flattening. Each file is standalone qcow2
+with no external backing/data-file reference, and the manifest binds its full
+SHA-256 and the complete installer/toolchain recipe. Consumers hash private
+copies before QEMU uses them. Changed recipes fail clearly and require rebuilding
+or explicit cold installation; there is no writable cache shared by jobs.
+
+Publish the built OCI layer normally and enroll its exact registry digest in
+trusted hardware profiles. It adds only read-only artifacts to the existing
+tools mount. A mixed cold/baseline QEMU pool remains valid for the normal runtime
+entrypoint. `practical-cached.bash` is a fail-closed cache qualification command;
+use its example only with an exclusively baseline-capable pool. Scheduler
+placement does not grant candidate-selected images or infer cache capability.
+
+Every run creates distinct writable CP and host disks, imports the exact source,
+and installs/builds current DIM afresh. Guest-observed machine IDs, cloud-init
+instance IDs and SSH host fingerprints prove independent identities. The clone
+check proves dependency/empty-state boot only; a successful cached practical job
+is still required for full runtime qualification. The nested Incus CI image is
+still prepared cold in this first implementation. Cached success never replaces
+the explicit main/release cold-bootstrap proof. Stage logs retain UTC timestamps
+and kernel-monotonic elapsed seconds in `stages.jsonl`, including quiet success.
+
 The existing QEMU provisioner owns two separate Ubuntu CP/host VMs and pinned
 inter-VM SSH. It prepares exact source/tree and package manifests, a private
 test issuer/read actor and shared ingress, plus an Incus VM image derived from
@@ -49,7 +99,7 @@ only the reported MainPID before enabling cpu/memory/pids at the service root.
 The budget root, hierarchy ownership and resource controls are unchanged.
 
 The Native/scheduler image check retains independent explicit package lists,
-including only the selected 34 public Native packages and six scheduler packages.
+including only the selected 35 public Native packages and six scheduler packages.
 Only Native admits private `@this-project/control-plane-deployment`. Declared
 builder inputs are regression-checked against these lists, including rejection
 of unexpected host/CLI/web/worker/LLM/test packages. Entrypoint, readiness,

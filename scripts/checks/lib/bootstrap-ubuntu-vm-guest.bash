@@ -13,11 +13,12 @@ PY
 }
 
 bootstrap_guest_write_cloud_init() {
-  local root="$1" role="$2" login_public host_public private_line
+  local root="$1" role="$2" login_public host_public private_line groups='[sudo]'
+  if [[ -n "${BOOTSTRAP_BASELINE_DIRECTORY:-}" && "$role" == examples-workspace-host ]]; then groups='[sudo, docker, incus-admin, kvm]'; fi
   login_public="$(<"$root/login-key.pub")"
   host_public="$(<"$root/host-key.pub")"
   cat >"$root/meta-data" <<EOF
-instance-id: dim-bootstrap-$role
+instance-id: dim-bootstrap-$role-${BOOTSTRAP_WORK_ROOT##*/}
 local-hostname: dim-bootstrap-$role
 EOF
   cat >"$root/user-data" <<EOF
@@ -26,7 +27,7 @@ ssh_deletekeys: false
 users:
   - name: dim
     uid: 1001
-    groups: [sudo]
+    groups: $groups
     shell: /bin/bash
     lock_passwd: true
     sudo: ALL=(ALL) NOPASSWD:ALL
@@ -53,15 +54,22 @@ EOF
 EOF
   if [[ -n "${BOOTSTRAP_EXAMPLES_CACHE_CLOUD_INIT:-}" ]]; then cat -- "$BOOTSTRAP_EXAMPLES_CACHE_CLOUD_INIT" >>"$root/user-data"; fi
   cat >>"$root/user-data" <<EOF
-package_update: true
-packages: [git]
+package_update: ${BOOTSTRAP_CLOUD_PACKAGE_UPDATE:-true}
+packages: ${BOOTSTRAP_CLOUD_PACKAGES:-[git]}
 runcmd:
   - [systemctl, restart, ssh]
 EOF
 }
 
 bootstrap_guest_start() {
-  local role="$1" memory_mb="${2:-2048}" port host_type host_key host_rest
+  local role="$1" memory_mb="${2:-2048}" port host_type host_key host_rest base="$BOOTSTRAP_BASE_IMAGE"
+  if [[ -n "${BOOTSTRAP_BASELINE_DIRECTORY:-}" ]]; then
+    case "$role" in
+      examples-control-plane) base="$BOOTSTRAP_BASELINE_DIRECTORY/control-plane.qcow2" ;;
+      examples-workspace-host) base="$BOOTSTRAP_BASELINE_DIRECTORY/host.qcow2" ;;
+      *) echo 'dependency baselines are only supported by separate CP/host qualification' >&2; return 2 ;;
+    esac
+  fi
   BOOTSTRAP_GUEST_ROOT="$BOOTSTRAP_WORK_ROOT/$role"
   mkdir -m 0700 "$BOOTSTRAP_GUEST_ROOT"
   BOOTSTRAP_GUEST_IDENTITY="$(stat -Lc '%d:%i' "$BOOTSTRAP_GUEST_ROOT")"
@@ -71,7 +79,7 @@ bootstrap_guest_start() {
   bootstrap_guest_write_cloud_init "$BOOTSTRAP_GUEST_ROOT" "$role"
   cloud-localds "$BOOTSTRAP_GUEST_ROOT/seed.img" \
     "$BOOTSTRAP_GUEST_ROOT/user-data" "$BOOTSTRAP_GUEST_ROOT/meta-data"
-  qemu-img create -q -f qcow2 -F qcow2 -b "$BOOTSTRAP_BASE_IMAGE" \
+  qemu-img create -q -f qcow2 -F qcow2 -b "$base" \
     "$BOOTSTRAP_GUEST_ROOT/root.qcow2" 32G
   port="$(bootstrap_guest_allocate_port)"
   BOOTSTRAP_SSH_PORT="$port"

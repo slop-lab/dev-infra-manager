@@ -1,0 +1,8 @@
+# Recurring runtime qualification: the trusted supervisor may provide an immutable
+# dependency baseline. Without it the same job performs cold installation.
+jobs:
+  source:
+    script: scripts/ci/source.bash
+  practical:
+    runtime: vm
+    script: scripts/ci/practical.bash

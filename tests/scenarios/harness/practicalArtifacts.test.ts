@@ -30,3 +30,22 @@ it("does not follow an allowlisted diagnostic symlink", async () => {
 it("redacts a private key block without suppressing surrounding errors", () => {
   expect(redactPracticalLog("before\n-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----\nafter")).toBe("before\n[REDACTED PRIVATE KEY]\nafter");
 });
+it("retains explicit baseline mode, observed clone identities and stage timings without exporting VM disks", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-baseline-artifacts-"));
+  try {
+    const evidence = join(root, "private"), output = join(root, "output"); await mkdir(evidence); await mkdir(output);
+    await mkdir(join(evidence, "stages/run.cached"), { recursive: true });
+    const files = { "input.txt": "installation-mode=dependency-baseline\n", "dependency-baseline.json": '{"recipeSha256":"reviewed"}',
+      "clone-identities.json": '{"controlPlane":{"machine":"cp"},"host":{"machine":"host"}}', "qualification.json": '{"installationMode":"dependency-baseline"}',
+      "stages/run.cached/stages.jsonl": '{"stage":"host-baseline-fresh-install","event":"finish","exitCode":0}\n',
+      "stages/run.cached/02-host-baseline-fresh-install.log": "fresh source installation passed\n" };
+    for (const [name, content] of Object.entries(files)) await writeFile(join(evidence, name), content);
+    await writeFile(join(evidence, "host.qcow2"), "NEVER-EXPORT-GUEST-DISK");
+    await exportPracticalArtifacts(evidence, output, 0);
+    for (const [name, content] of Object.entries(files)) {
+      const exported = await readFile(join(output, "practical", name), "utf8");
+      expect(name.endsWith(".json") ? JSON.parse(exported) : exported).toEqual(name.endsWith(".json") ? JSON.parse(content) : content);
+    }
+    expect(await readdir(join(output, "practical"))).not.toContain("host.qcow2");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

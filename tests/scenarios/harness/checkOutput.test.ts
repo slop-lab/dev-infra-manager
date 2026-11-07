@@ -22,6 +22,11 @@ describe("check command output", () => {
       const log = join(root, directory!, "01-fixture.log");
       expect(await readFile(log, "utf8")).toBe("successful-output\ndiagnostic\n");
       expect((await stat(log)).mode & 0o777).toBe(0o600);
+      const stages = (await readFile(join(root, directory!, "stages.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(stages[0]).toMatchObject({ stage: "fixture", event: "start", utc: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/), monotonicSeconds: expect.any(Number) });
+      expect(stages[1]).toMatchObject({ stage: "fixture", event: "finish", exitCode: 0, elapsedSeconds: expect.any(Number) });
+      expect(Number(stages[1]!["monotonicSeconds"])).toBeGreaterThanOrEqual(Number(stages[0]!["monotonicSeconds"]));
+      expect((await stat(join(root, directory!, "stages.jsonl"))).mode & 0o777).toBe(0o600);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
@@ -44,6 +49,8 @@ describe("check command output", () => {
       const log = await readFile(join(root, directory!, "01-fixture.log"), "utf8");
       expect(log).toContain("detail-0\n");
       expect(log).toContain("failure-marker");
+      const stages = (await readFile(join(root, directory!, "stages.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(stages.at(-1)).toMatchObject({ stage: "fixture", event: "finish", exitCode: 23 });
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

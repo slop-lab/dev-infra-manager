@@ -1,0 +1,6 @@
+jobs:
+  source:
+    script: scripts/ci/source.bash
+  practical-cached:
+    runtime: vm
+    script: scripts/ci/practical-cached.bash

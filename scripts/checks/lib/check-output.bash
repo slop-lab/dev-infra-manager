@@ -1,9 +1,16 @@
 # Source-check presentation only; commands keep their own exit and cleanup rules.
+check_output_monotonic_seconds() {
+  local uptime unused
+  read -r uptime unused </proc/uptime
+  printf '%s' "${uptime%%.*}"
+}
+
 check_output_init() {
   local parent="$1"
   CHECK_OUTPUT_ROOT="$(umask 077; mkdir -p -- "$parent"; mktemp -d "$parent/run.XXXXXX")"
   CHECK_OUTPUT_SEQUENCE=0
   CHECK_OUTPUT_HEARTBEAT=""
+  (umask 077; : >"$CHECK_OUTPUT_ROOT/stages.jsonl")
   printf '[check] logs: %s\n' "$CHECK_OUTPUT_ROOT"
 }
 
@@ -16,13 +23,16 @@ check_output_stop() {
 }
 
 check_output_run() {
-  local name="$1" log status started=$SECONDS
+  local name="$1" log status started ended utc
   shift
   [[ "$name" =~ ^[a-z0-9-]+$ ]] || return 2
+  started="$(check_output_monotonic_seconds)"
+  utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   CHECK_OUTPUT_SEQUENCE=$((CHECK_OUTPUT_SEQUENCE + 1))
   printf -v log '%s/%02d-%s.log' "$CHECK_OUTPUT_ROOT" "$CHECK_OUTPUT_SEQUENCE" "$name"
   (umask 077; : >"$log")
-  printf '[check] %s\n' "$name"
+  printf '[check] %s started=%s\n' "$name" "$utc"
+  printf '{"stage":"%s","event":"start","utc":"%s","monotonicSeconds":%s}\n' "$name" "$utc" "$started" >>"$CHECK_OUTPUT_ROOT/stages.jsonl"
   (
     timer=""
     trap 'if [[ -n "$timer" ]]; then kill "$timer" 2>/dev/null || true; wait "$timer" 2>/dev/null || true; fi; exit 0' TERM INT HUP
@@ -31,7 +41,7 @@ check_output_run() {
       timer=$!
       wait "$timer" || exit 0
       timer=""
-      printf '[check] %s running (%ss)\n' "$name" "$((SECONDS - started))" >&2
+      printf '[check] %s running (%ss) utc=%s\n' "$name" "$(( $(check_output_monotonic_seconds) - started ))" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
     done
   ) &
   CHECK_OUTPUT_HEARTBEAT=$!
@@ -40,6 +50,9 @@ check_output_run() {
     "$@"
   ) >"$log" 2>&1; then status=0; else status=$?; fi
   check_output_stop
+  ended="$(check_output_monotonic_seconds)"
+  utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '{"stage":"%s","event":"finish","utc":"%s","monotonicSeconds":%s,"elapsedSeconds":%s,"exitCode":%s}\n' "$name" "$utc" "$ended" "$((ended - started))" "$status" >>"$CHECK_OUTPUT_ROOT/stages.jsonl"
   if (( status != 0 )); then
     printf '[check] FAIL %s exit=%s log=%s (last 160 lines)\n' "$name" "$status" "$log" >&2
     tail -n 160 -- "$log" >&2
