@@ -79,6 +79,21 @@ describe("optional control-plane setup", () => {
     expect(() => parseControlPlaneServicePair(native, execution)).toThrow(/credentials.*distinct/);
   });
 
+  it.each(["identity", "secret"])("rejects capacity provider %s reused from a Native-only authority role", async (field) => {
+    const { directory } = await fixture();
+    const native = JSON.parse(await readFile(path.join(directory, "native-git.json"), "utf8"));
+    const execution = JSON.parse(await readFile(path.join(directory, "execution.json"), "utf8"));
+    const cost = { cpu: 1, memoryBytes: 134217728, pids: 64 };
+    const provider = { id: "capacity-pool", token: randomBytes(32).toString("base64url"), budget: cost,
+      members: [{ workerId: "pool-worker", cost }], maximumStarting: 1,
+      idleMilliseconds: 1000, startMilliseconds: 1000, failureBackoffMilliseconds: 1000 };
+    execution.capacityProviders = [provider];
+    expect(parseControlPlaneServicePair(native, execution).execution.capacityProviders).toHaveLength(1);
+    if (field === "identity") provider.id = native.projectRootImporters[0].username;
+    else provider.token = native.humanReviewers[0].password;
+    expect(() => parseControlPlaneServicePair(native, execution)).toThrow(/credentials.*distinct/);
+  });
+
   it("binds generated bootstrap and host connections to a real native service generation", async () => {
     const profile = { runnerBaseImage: `registry.example/qemu@sha256:${"e".repeat(64)}`,
       jobBaseImage: `registry.example/job@sha256:${"f".repeat(64)}`,

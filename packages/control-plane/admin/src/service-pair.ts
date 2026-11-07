@@ -20,6 +20,7 @@ export function parseControlPlaneServicePair(nativeValue: unknown, executionValu
     ...native.workspaceWriteIssuers, ...native.humanReviewers, ...native.hostPromoters,
     ...gitCiCredentials(native.ci), ...gitSyncCredentials(native.gitSync), ...(native.ci.query ? [] : [execution.credentials.query]), execution.credentials.operator,
     ...(execution.credentials.tasks === undefined ? [] : [execution.credentials.tasks]),
+    ...(execution.capacityProviders ?? []).map((provider) => ({ username: provider.id, password: provider.token })),
     ...execution.workers.map((worker) => ({ username: worker.id, password: worker.token }))];
   const values = credentials.flatMap((entry) => [entry.username, entry.password]);
   if (new Set(values).size !== values.length) throw new Error("control-plane credentials must be distinct");
