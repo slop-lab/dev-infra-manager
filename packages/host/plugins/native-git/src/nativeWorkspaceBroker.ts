@@ -31,7 +31,7 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
     try {
       const url = new URL(request.url ?? "/", "http://dim.invalid");
       const match = /^\/v1\/projects\/([a-z0-9-]+)\/repositories\/([a-z0-9][a-z0-9-]*)\.git(?:\/|$)/.exec(url.pathname);
-      const ci = /^\/v1\/projects\/([a-z0-9-]+)\/repositories\/([a-z0-9][a-z0-9-]*)\/workspace-ci\/requests(?:\/[0-9a-f-]{36})?$/.exec(url.pathname);
+      const ci = /^\/v1\/projects\/([a-z0-9-]+)\/repositories\/([a-z0-9][a-z0-9-]*)\/workspace-ci\/requests(?:\/([0-9a-f-]{36})(?:\/jobs(?:\/[0-9a-f-]{36}\/(?:logs|artifacts)(?:\/[0-9a-f]{64})?)?)?)?$/.exec(url.pathname);
       const health = request.method === "GET" && url.pathname === "/health" && url.search === "";
       const repositoryId = match?.[2] ?? ci?.[2], repository = repositoryId === undefined ? undefined : attachment.repositories[repositoryId];
       if (!health && ((match?.[1] ?? ci?.[1]) !== attachment.projectId || !repository)) { response.writeHead(404).end(); return; }
@@ -55,8 +55,8 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
       const protocol = request.method === "POST" && url.search === "" && url.pathname.startsWith(base)
         && ((endpoint === "/git-upload-pack" && request.headers["content-type"] === "application/x-git-upload-pack-request")
           || (endpoint === "/git-receive-pack" && request.headers["content-type"] === "application/x-git-receive-pack-request"));
-      const workspaceCi = ci !== null && url.search === "" && (request.method === "POST" && !ci[0].match(/\/[0-9a-f-]{36}$/)
-        || request.method === "GET" && /\/[0-9a-f-]{36}$/.test(ci[0]));
+      const workspaceCi = ci !== null && url.search === "" && (request.method === "POST" && ci[3] === undefined
+        || request.method === "GET" && ci[3] !== undefined);
       if (!discovery && !protocol && !workspaceCi) { response.writeHead(404).end(); return; }
       // A verified reconnect updates only this private host-side reference. The running
       // broker retains its original UUID, scope and workspace credential.
@@ -97,8 +97,19 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
             ...(request.headers["git-protocol"] ? { "git-protocol": request.headers["git-protocol"] } : {})
           }
         }, (incoming) => {
+          void (async () => {
           if ((incoming.statusCode ?? 500) >= 300 && (incoming.statusCode ?? 500) < 400) {
             incoming.destroy(); response.writeHead(502).end(); resolve(); return;
+          }
+          if (workspaceCi) {
+            const latest = await store.read(attachment.workspaceName).catch(() => undefined);
+            if (latest?.id !== attachment.workspaceId || !latest.initialized || latest.phase !== "running") {
+              incoming.destroy(); response.writeHead(410).end(); resolve(); return;
+            }
+            const latestAttachment = await readNativeWorkspaceAttachment(nativeWorkspaceAttachmentFile(attachment.managedStateRoot, attachment.workspaceId));
+            if (!isDeepStrictEqual(immutableAttachmentScope(attachment), immutableAttachmentScope(latestAttachment))) {
+              incoming.destroy(); response.writeHead(409).end(); resolve(); return;
+            }
           }
           response.writeHead(incoming.statusCode ?? 502, {
             ...(incoming.headers["content-type"] ? { "content-type": incoming.headers["content-type"] } : {}), "cache-control": "no-store"
@@ -106,6 +117,11 @@ export function createNativeWorkspaceBroker(attachment: NativeWorkspaceAttachmen
           incoming.once("end", resolve);
           incoming.once("error", resolve);
           incoming.pipe(response);
+          })().catch(() => {
+            incoming.destroy();
+            if (!response.destroyed) { if (!response.headersSent) response.writeHead(502); response.end(); }
+            resolve();
+          });
         });
         upstream.on("error", () => {
           if (!response.destroyed) {

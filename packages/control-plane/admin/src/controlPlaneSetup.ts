@@ -57,7 +57,7 @@ export async function prepareControlPlane(options: PrepareControlPlaneOptions): 
     workspaceWriteIssuers: [hostRole("writer")],
     gitSync: { operators: [hostRole("git-sync")] },
     humanReviewers: [{ reviewerId: "owner", ...credential("reviewer-owner") }], hostPromoters: [hostRole("promoter")],
-    ci: { grantIssuer: roles.grantIssuer, candidateReader: roles.candidateReader, resultReporter: roles.resultReporter,
+    ci: { grantIssuer: roles.grantIssuer, candidateReader: roles.candidateReader, resultReporter: roles.resultReporter, query: roles.query,
       webhook: { endpoint: "http://execution:8080/v1/jobs", ...roles.webhook } }
   };
   const execution = {

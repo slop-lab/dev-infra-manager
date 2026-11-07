@@ -13,11 +13,12 @@ export function parseControlPlaneServicePair(nativeValue: unknown, executionValu
   const roles = ["grantIssuer", "candidateReader", "resultReporter"] as const;
   for (const role of roles) assertPair(native.ci[role], execution.nativeGit[role]);
   if (execution.credentials.query === undefined) throw new Error("paired Git CI deployment requires a query credential");
+  if (native.ci.query !== undefined) assertPair(native.ci.query, execution.credentials.query);
   if (execution.credentials.webhook === undefined) throw new Error("paired Git CI deployment requires a webhook credential");
   assertPair(native.ci.webhook, execution.credentials.webhook);
   const credentials = [...native.projectRegistrars, ...native.projectRootImporters, ...native.projectRootReadIssuers,
     ...native.workspaceWriteIssuers, ...native.humanReviewers, ...native.hostPromoters,
-    ...gitCiCredentials(native.ci), ...gitSyncCredentials(native.gitSync), execution.credentials.query, execution.credentials.operator,
+    ...gitCiCredentials(native.ci), ...gitSyncCredentials(native.gitSync), ...(native.ci.query ? [] : [execution.credentials.query]), execution.credentials.operator,
     ...(execution.credentials.tasks === undefined ? [] : [execution.credentials.tasks]),
     ...execution.workers.map((worker) => ({ username: worker.id, password: worker.token }))];
   const values = credentials.flatMap((entry) => [entry.username, entry.password]);
@@ -54,7 +55,7 @@ export function repositoryConfiguration(config: ReturnType<typeof parseManagedGi
   return repository;
 }
 export function gitCiCredentials(config: ReturnType<typeof gitCiConfigSchema.parse>) {
-  return [config.grantIssuer, config.candidateReader, config.resultReporter, config.webhook];
+  return [config.grantIssuer, config.candidateReader, config.resultReporter, config.webhook, ...(config.query ? [config.query] : [])];
 }
 
 function gitSyncCredentials(config: ReturnType<typeof gitSyncConfigurationSchema.parse> | undefined) {

@@ -23,7 +23,10 @@ export const hostPlugin: WorkspaceHostPlugin = {
   async workspaceReady(workspace, context) {
     if (!workspace.source.url.startsWith("dim://")) return;
     await deployGuestIntegration({ service: context.service, workspace, signal: context.signal }, {
-      name: "native-git-ci-helper", files: [{ path: ".local/bin/dim-ci", contents: await readFile(new URL("./guest/dim-ci.mjs", import.meta.url)), mode: 0o700 }],
+      name: "native-git-ci-helper", files: [
+        { path: ".local/bin/dim-ci", contents: await readFile(new URL("./guest/dim-ci.mjs", import.meta.url)), mode: 0o700 },
+        { path: ".agents/skills/dim-native-ci/SKILL.md", contents: await readFile(new URL("./guest/native-ci-skill.md", import.meta.url)) },
+      ],
     });
   },
   workspaceServices: {

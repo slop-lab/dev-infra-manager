@@ -75,7 +75,7 @@ for container in "$native_container" "$execution_container"; do
     import assert from "node:assert/strict";
     import { readdirSync } from "node:fs";
     const expected = process.argv[1] === "native" ? [
-      "dim-contracts-ci", "dim-contracts-git", "dim-contracts-execution",
+      "dim-contracts-ci", "dim-contracts-git", "dim-contracts-execution", "dim-service-client-execution",
       "dim-control-plane-plugin-execution-scheduler", "dim-control-plane-core", "dim-control-plane-admin", "dim-control-plane-plugin-ci-workflows",
       "dim-control-plane-plugin-git-repositories", "dim-control-plane-plugin-git-review",
       "dim-control-plane-plugin-git-merge-policy", "dim-control-plane-plugin-git-ci", "dim-control-plane-plugin-webhooks",

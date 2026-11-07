@@ -13,3 +13,4 @@ await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README
 await copyFile(new URL("../../../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
 await mkdir(new URL("../dist/guest", import.meta.url), { recursive: true });
 await copyFile(new URL("../src/guest/dim-ci.mjs", import.meta.url), new URL("../dist/guest/dim-ci.mjs", import.meta.url));
+await copyFile(new URL("../src/guest/native-ci-skill.md", import.meta.url), new URL("../dist/guest/native-ci-skill.md", import.meta.url));

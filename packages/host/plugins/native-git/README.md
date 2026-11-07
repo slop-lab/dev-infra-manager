@@ -95,11 +95,33 @@ git push origin HEAD:refs/heads/feature/my-change
 REQUEST_ID="$(node --input-type=commonjs -p 'require("node:crypto").randomUUID()')"
 dim-ci request --request-id "$REQUEST_ID" --ref refs/heads/feature/my-change
 dim-ci status --request-id "$REQUEST_ID"
+dim-ci jobs --request-id "$REQUEST_ID"
+# Select an execution UUID from jobs:
+dim-ci logs --request-id "$REQUEST_ID" --job "$JOB_ID"
+dim-ci artifacts --request-id "$REQUEST_ID" --job "$JOB_ID"
+dim-ci download --request-id "$REQUEST_ID" --job "$JOB_ID" --artifact "$ARTIFACT_ID" --output ./failure-proof.zip
 ```
+
+After upgrading host plugins, `dim --host HOST exec WORKSPACE -- dim-ci --help`
+refreshes the scoped bridge, helper, agent skill and discovery through the normal
+workspace readiness path. It preserves running sessions and requires no container
+recreation. Selecting the control plane alone refreshes host brokers; ordinary
+`dim exec` performs guest integration delivery.
 
 The request binds the current ref, commit and tree unless explicit exact values
 are supplied. Reusing the ID with the same candidate resumes the same durable
 review and CI plan; changing its repository scope or candidate is rejected.
+`logs` verifies retained stdout/stderr before displaying their final 64KiB;
+`--stream stderr --tail-bytes 131072` selects a larger bounded tail. A missing
+retained stream falls back to an explicitly labelled diagnostic prefix. Select
+`--stream stdout --output ./stdout.log` to save a full retained stream. Downloads
+verify the bounded size and SHA-256 in a private staging file and atomically
+publish only to the explicitly selected new destination; existing files and
+symlinks are preserved. Artifact names never determine local write paths.
+The delivered `dim-native-ci` agent skill describes fail → inspect → fix → new
+request, including per-checkout discovery. Query credentials remain private to
+the control-plane service. Reads cannot enumerate other requests, repositories
+or jobs, and are fenced by the current generation, policy and workspace grant.
 Protected refs cannot be candidate inputs, and the helper receives no reviewer,
 promoter, CI-worker or operator credential. Ordinary Git
 workspaces report the installed integration as unconfigured. Guest discovery

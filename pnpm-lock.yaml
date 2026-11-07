@@ -336,6 +336,9 @@ importers:
       '@slop-lab/dim-contracts-git':
         specifier: workspace:0.10.0
         version: link:../../../contracts/git
+      '@slop-lab/dim-service-client-execution':
+        specifier: workspace:0.10.0
+        version: link:../../../service-clients/execution
       '@slop-lab/gs-ci':
         specifier: workspace:0.10.0
         version: link:../../../gs/ci

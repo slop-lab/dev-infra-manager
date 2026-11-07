@@ -31,6 +31,27 @@ intake `endpoint` URL. `compiler` selects an installed compiler by extension nam
 and defaults to `dim`. The core control-plane runtime only resolves declared
 extensions; it contains no workflow-specific configuration fields.
 
+## Workspace evidence reads
+
+An optional distinct private `query` credential authenticates the Git CI service
+to the execution scheduler at the webhook endpoint's origin. The paired setup
+configures it automatically; developer `install-local` also connects the matching
+credential in an existing local pair without rotating it. It is never copied to
+the host attachment, guest, discovery response or agent helper.
+
+The existing workspace Git lease authorizes
+`GET /v1/projects/P/repositories/R/workspace-ci/requests/REQUEST/jobs`, with
+`/EXECUTION/logs`, `/EXECUTION/artifacts` and `/EXECUTION/artifacts/ARTIFACT`
+subroutes. Each read resolves the owning request's immutable review plan and
+only its exact event executions. The request workspace, repository, candidate
+commit/tree, policy and service generation are revalidated before and after
+private execution reads. Arbitrary execution IDs, operator actions and global
+query routes are not forwarded. Artifact bytes must match the execution result's
+descriptor digest and immutable manifest; retained valid entries remain readable
+when other artifact capture was incomplete. The logs HTTP projection contains
+bounded diagnostic prefixes; `dim-ci logs` uses retained artifacts for verified
+tails and explicitly labels diagnostic fallback.
+
 ## Reviewed repository policy
 
 The repository policy's `extensions["git-ci"]` contains `ciRepositoryIds` and

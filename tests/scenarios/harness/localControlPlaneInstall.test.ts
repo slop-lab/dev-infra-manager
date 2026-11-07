@@ -6,6 +6,7 @@ import { installLocalControlPlane, type LocalControlPlaneOperations } from "../.
 import { installLocalProfile } from "../../../scripts/install-local-profile.ts";
 import type { ControlPlaneInstalledState } from "../../../packages/installer/src/controlPlaneState.js";
 import type { Command } from "../../../scripts/local-uninstall/command.ts";
+import { idleNativeConfig, idleExecutionConfig } from "../../control-plane/plugins/git-repositories/bundleConfigFixture.js";
 
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -22,17 +23,21 @@ async function fixture(existing = false) {
     return { status: 0, stderr: "", stdout: args.includes("{{.Id}}") ? `${id}\n`
       : args.includes("{{json .RepoDigests}}") ? JSON.stringify([`127.0.0.1:5555/dim/${args.at(-1)!.includes("/git-service:") ? "git-service" : "execution-service"}@${id}`]) : "" };
   };
-  // Only fields consumed by adoption; the production reader attests the full record.
+  const retainedNative = { ...idleNativeConfig(), gitSync: { operators: [{ hostId: "host-a", username: "sync-operator", password: Buffer.alloc(32, 42).toString("base64url") }] } };
+  const retainedExecution = idleExecutionConfig(); retainedExecution.workers[0]!.id = "existing-worker";
   const prior = { record: { deploymentId: "dim", nativeGitImage: `prior.example/native@${id}`, executionImage: `prior.example/execution@${id}`, nativeGitPublish: { host: "127.0.0.1", port: 3310 }, executionPublish: { host: "127.0.0.1", port: 3311 } },
-    snapshots: { nativeGit: { config: Buffer.from('{"upstreamSecret":"retain-me","gitSync":{"operators":[]}}'), readinessToken: Buffer.from("native-token") },
-      execution: { config: Buffer.from('{"workers":[{"id":"existing-worker"}]}'), readinessToken: Buffer.from("execution-token") } } } as ControlPlaneInstalledState;
+    snapshots: { nativeGit: { config: Buffer.from(JSON.stringify(retainedNative)), readinessToken: Buffer.from("native-token") },
+      execution: { config: Buffer.from(JSON.stringify(retainedExecution)), readinessToken: Buffer.from("execution-token") } } } as ControlPlaneInstalledState;
   const ops: LocalControlPlaneOperations = {
     current: async () => existing ? prior : undefined,
     async registry() { calls.push(["registry"]); return "127.0.0.1:5555"; },
     async prepare(options) {
       calls.push(["prepare"]); await mkdir(options.directory);
+      await writeFile(join(options.directory, "native-git.json"), JSON.stringify(retainedNative), { mode: 0o600 });
+      await writeFile(join(options.directory, "execution.json"), JSON.stringify(retainedExecution), { mode: 0o600 });
       await writeFile(join(options.directory, "install.json"), JSON.stringify({ schemaVersion: 1, deploymentId: "dim",
-        nativeGit: { image: options.nativeGitImage }, execution: { image: options.executionImage } }), { mode: 0o600 });
+        nativeGit: { image: options.nativeGitImage, configFile: join(options.directory, "native-git.json") },
+        execution: { image: options.executionImage, configFile: join(options.directory, "execution.json") } }), { mode: 0o600 });
     },
     async deploy(config, _state, _backups, prior) { calls.push(["deploy", prior ? "checkpoint-update" : "first-install"]); expect(JSON.parse(await readFile(config, "utf8")).nativeGit.image).toBe(`127.0.0.1:5555/dim/git-service@${id}`); },
     async connect(directory, output) {
@@ -55,8 +60,11 @@ it("adopts deployed credentials, ports and worker profiles without touching work
   await installLocalControlPlane(f.bundle, f.env, f.run, f.ops);
   expect(f.calls).toContainEqual(["deploy", "checkpoint-update"]); expect(f.calls).not.toContainEqual(["prepare"]);
   const setup = join(f.env.XDG_CONFIG_HOME, "dim/local-control-plane");
-  expect(JSON.parse(await readFile(join(setup, "native-git.json"), "utf8")).upstreamSecret).toBe("retain-me");
-  expect(JSON.parse(await readFile(join(setup, "execution.json"), "utf8")).workers).toEqual([{ id: "existing-worker" }]);
+  const native = JSON.parse(await readFile(join(setup, "native-git.json"), "utf8"));
+  const execution = JSON.parse(await readFile(join(setup, "execution.json"), "utf8"));
+  expect(native.gitSync.operators[0].password).toBe(Buffer.alloc(32, 42).toString("base64url"));
+  expect(native.ci.query).toEqual(execution.credentials.query);
+  expect(execution.workers[0].id).toBe("existing-worker");
   expect(JSON.parse(await readFile(join(setup, "install.json"), "utf8")).nativeGit.publish.port).toBe(3310);
   expect(await readFile(join(workspace, "sentinel"), "utf8")).toBe("checkout/home/docker data");
   expect(f.calls.some((args) => args.includes("rm") || args.includes("stop"))).toBe(false);

@@ -22,6 +22,7 @@ import {
 } from "@slop-lab/dim-control-plane-plugin-git-review/plugin-api";
 import type { GitCiRuntime } from "./runtime.js";
 import { readWorkspaceCiStatus } from "./workspace-status.js";
+import { workspaceCiEvidence, type WorkspaceCiEvidenceClient } from "./workspace-evidence.js";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
@@ -44,14 +45,16 @@ const storedRequestSchema = requestObjectSchema.extend({
   policyDigest: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict().readonly();
 type StoredRequest = z.infer<typeof storedRequestSchema>;
+export type StoredWorkspaceCiRequest = StoredRequest;
 const resultSchema = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid(), reviewId: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly();
 
 export async function handleWorkspaceCandidateCi(context: RepositoryExtensionContext, runtime: GitCiRuntime,
-  http: { readonly request: IncomingMessage; readonly response: ServerResponse; readonly url: URL; readonly accepted: () => void }): Promise<boolean> {
+  http: { readonly request: IncomingMessage; readonly response: ServerResponse; readonly url: URL; readonly accepted: () => void },
+  evidenceClient?: WorkspaceCiEvidenceClient): Promise<boolean> {
   const { request, response, url } = http;
-  const match = /^\/v1\/projects\/([a-z0-9][a-z0-9-]{0,63})\/repositories\/([a-z0-9][a-z0-9-]{0,63})\/workspace-ci\/requests(?:\/([0-9a-f-]{36}))?$/.exec(url.pathname);
+  const match = /^\/v1\/projects\/([a-z0-9][a-z0-9-]{0,63})\/repositories\/([a-z0-9][a-z0-9-]{0,63})\/workspace-ci\/requests(?:\/([0-9a-f-]{36})(\/jobs(?:\/[0-9a-f-]{36}\/(?:logs|artifacts)(?:\/[0-9a-f]{64})?)?)?)?$/.exec(url.pathname);
   if (!match || url.search !== "" || !["GET", "POST"].includes(request.method ?? "")) return false;
-  const projectId = match[1], repositoryId = match[2], routeRequestId = match[3];
+  const projectId = match[1], repositoryId = match[2], routeRequestId = match[3], evidenceSuffix = match[4];
   if (!projectId || !repositoryId || request.method === "GET" && !routeRequestId || request.method === "POST" && routeRequestId) {
     sendNotFound(response); return true;
   }
@@ -63,11 +66,21 @@ export async function handleWorkspaceCandidateCi(context: RepositoryExtensionCon
         const stored = await optionalRequest(join(root, `${routeRequestId}.request.json`));
         const completed = await optionalResult(join(root, `${routeRequestId}.result.json`));
         if (!stored || !completed || stored.projectId !== projectId || stored.repositoryId !== repositoryId || stored.workspaceId !== lease.workspaceId) return;
-        return publishedStatus({ runtime: { ...runtime, authoritativeTargetProofs: new Map() }, request: stored, reviewId: completed.reviewId });
+        const currentRuntime = { ...runtime, authoritativeTargetProofs: new Map() };
+        const status = await publishedStatus({ runtime: currentRuntime, request: stored, reviewId: completed.reviewId });
+        if (evidenceSuffix === undefined) return { status };
+        if (!evidenceClient || stored.generationId !== runtime.expectedGenerationId || status.status.state === "stale") return;
+        const target = await resolveAuthoritativeNativeRepositoryTarget(currentRuntime, { projectId, repositoryId,
+          ...(stored.protectedRef === undefined ? {} : { protectedRef: stored.protectedRef }) });
+        const evidence = await workspaceCiEvidence({ client: evidenceClient, target, request: stored, reviewId: completed.reviewId, suffix: evidenceSuffix });
+        // Network reads do not extend authority: revalidate the reviewed candidate and policy afterward.
+        const final = await publishedStatus({ runtime: { ...runtime, authoritativeTargetProofs: new Map() }, request: stored, reviewId: completed.reviewId });
+        return final.status.state === "stale" || evidence === undefined ? undefined : { evidence };
       });
       await context.authorizeWorkspaceLease(request, { projectId, repositoryId });
       if (result === undefined) sendNotFound(response);
-      else sendJson(response, 200, result);
+      else if ("status" in result) sendJson(response, 200, result.status);
+      else response.writeHead(200, { "content-type": result.evidence.contentType, "cache-control": "no-store" }).end(result.evidence.body);
       return true;
     }
     await context.mutate({ projectId, repositoryId }, async () => {

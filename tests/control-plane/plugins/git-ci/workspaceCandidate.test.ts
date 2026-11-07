@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
+import { createServer } from "node:http";
 import { afterEach, expect, it } from "vitest";
 import { encodeDimReviewJobAvailableEvent, executionGrantSchema } from "@slop-lab/dim-contracts-ci/execution";
 import { activateFinalizeServiceForGeneration, activationTokenB, cleanupFinalizeFixtures, closeFinalizeService,
@@ -10,6 +12,88 @@ import { authoritativePolicy } from "../git-repositories/authoritativeNativeCand
 import { gitPolicy } from "../../../support/git-policy.js";
 
 afterEach(cleanupFinalizeFixtures);
+
+it("reads failed candidate jobs, logs and artifacts only through the owning workspace request", async () => {
+  const details: Map<string, object> = new Map();
+  const payload = Buffer.from('{"failure":"expected test failure"}\n'), artifactId = createHash("sha256").update("failure.json").digest("hex");
+  const queryCredential = { username: "workspace-evidence-query", password: Buffer.alloc(32, 99).toString("base64url") };
+  let manifest: object | undefined, wrongGeneration = false;
+  const reads: string[] = [];
+  const scheduler = createServer(async (request, response) => {
+    if (request.method === "POST") { request.resume(); response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end("{}"); return; }
+    reads.push(request.url ?? "");
+    if (request.headers.authorization !== `Basic ${Buffer.from(`${queryCredential.username}:${queryCredential.password}`).toString("base64")}`
+      || request.headers["x-dim-generation-id"] !== generationId) { response.writeHead(401).end(); return; }
+    const event = /^\/v1\/jobs\/by-event\/([0-9a-f]{64})$/.exec(request.url ?? "");
+    let body: unknown;
+    if (event) {
+      const detail = details.get(event[1]!);
+      body = { jobs: detail === undefined ? [] : [wrongGeneration ? { ...detail, job: { ...Reflect.get(detail, "job"), generationId: "f".repeat(64) } } : detail] };
+    } else if (request.url?.endsWith("/artifacts")) body = manifest;
+    else if (request.url?.endsWith(`/artifacts/${artifactId}`)) {
+      response.writeHead(200, { "content-type": "application/octet-stream", "cache-control": "no-store" }).end(payload); return;
+    } else { response.writeHead(404).end(); return; }
+    response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(body));
+  });
+  await new Promise<void>((resolve) => scheduler.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = scheduler.address(); if (!address || typeof address === "string") throw new Error("scheduler fixture is unavailable");
+    const native = idleNativeConfig();
+    const fixture = await nativeBundleReviewFixture("workspace-evidence", undefined, undefined, undefined, undefined, undefined, undefined,
+      { ci: { ...native.ci, query: queryCredential, webhook: { ...native.ci.webhook, endpoint: `http://127.0.0.1:${address.port}/v1/jobs` } } });
+    const candidateRef = "refs/heads/evidence-candidate";
+    await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${candidateRef}`]);
+    const candidateCommit = (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD"])).stdout.trim();
+    const candidateTree = (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD^{tree}"])).stdout.trim();
+    const lease = await issueWorkspaceLease(fixture.service.origin, fixture.repositoryId);
+    const authorization = `Basic ${Buffer.from(`${lease.username}:${lease.password}`).toString("base64")}`;
+    const requestId = randomUUID(), base = `${fixture.service.origin}/v1/projects/project-a/repositories/root/workspace-ci/requests`;
+    const response = await fetch(base, { method: "POST", headers: { authorization, "content-type": "application/json" },
+      body: JSON.stringify({ schemaVersion: 1, requestId, candidateRef, candidateCommit, candidateTree }) });
+    expect(response.status, await response.clone().text()).toBe(200);
+    const receipt: unknown = await response.json();
+    const envelope = (await publishedReviewEnvelopes(fixture.root)).find(({ review }) => review.reviewId === Reflect.get(Object(receipt), "reviewId"));
+    if (!envelope?.events[0]) throw new Error("candidate fixture has no planned job");
+    const event = envelope.events[0], executionId = randomUUID();
+    const granted = await post({ origin: fixture.service.origin, path: "/v1/execution-grants", credential: native.ci.grantIssuer, body: {
+      executionId, generationId, event: encodeDimReviewJobAvailableEvent(event), workerId: "worker-a", slotId: "primary", profile: slot.profile,
+    } });
+    expect(granted.status, await granted.clone().text()).toBe(201);
+    const grant = executionGrantSchema.parse(await granted.json());
+    const completed = { ...result(grant), result: "failure", completion: { kind: "exited", exitCode: 1 },
+      stdout: { bytes: String(payload.length), sha256: `sha256:${createHash("sha256").update(payload).digest("hex")}`, truncated: false },
+      logs: { stdout: { base64: payload.toString("base64"), truncated: false }, stderr: { base64: "", truncated: false } } };
+    const job = { id: executionId, eventId: event.eventId, projectId: "project-a", repositoryId: "root", jobName: event.checkName,
+      executionKind: event.provider, phase: "finished", generationId, createdAt: Date.now(), publication: "accepted",
+      outcome: "failure", completion: completed.completion, finishedAt: completed.finishedAt };
+    details.set(event.eventId, { job, result: completed, descriptorDigest: grant.descriptorDigest });
+    manifest = { executionId, descriptorDigest: grant.descriptorDigest, availability: "complete", artifacts: [{ id: artifactId, name: "failure.json",
+      bytes: payload.length, sha256: `sha256:${createHash("sha256").update(payload).digest("hex")}`, mediaType: "application/json" }] };
+    const own = `${base}/${requestId}`, headers = { authorization };
+    const jobs = await fetch(`${own}/jobs`, { headers }); expect(jobs.status, await jobs.clone().text()).toBe(200);
+    const shown = await jobs.text(); expect(shown).toContain(executionId); expect(shown).not.toContain(queryCredential.password);
+    expect(await (await fetch(`${own}/jobs/${executionId}/logs`, { headers })).json()).toMatchObject({ result: { result: "failure", completion: { exitCode: 1 }, logs: { stdout: { base64: payload.toString("base64") } } } });
+    expect(await (await fetch(`${own}/jobs/${executionId}/artifacts`, { headers })).json()).toMatchObject({ artifacts: [{ id: artifactId }] });
+    expect(Buffer.from(await (await fetch(`${own}/jobs/${executionId}/artifacts/${artifactId}`, { headers })).arrayBuffer())).toEqual(payload);
+    const foreign = await issueWorkspaceLease(fixture.service.origin, fixture.repositoryId, Buffer.alloc(32, 17).toString("base64url"));
+    for (const path of ["/jobs", `/jobs/${executionId}/logs`, `/jobs/${executionId}/artifacts/${artifactId}`]) {
+      expect((await fetch(`${own}${path}`, { headers: { authorization: `Basic ${Buffer.from(`${foreign.username}:${foreign.password}`).toString("base64")}` } })).status).toBe(404);
+    }
+    expect((await fetch(`${own}/jobs/${randomUUID()}/logs`, { headers })).status).toBe(404);
+    expect((await fetch(`${own.replace("/root/", "/foreign/")}/jobs`, { headers })).status).toBe(404);
+    wrongGeneration = true; expect((await fetch(`${own}/jobs`, { headers })).status).toBe(404); wrongGeneration = false;
+    expect(reads.every((path) => path.startsWith("/v1/jobs/by-event/") || path.includes(`/v1/jobs/${executionId}/artifacts`))).toBe(true);
+    await addCandidateCommit(fixture.clone, "fixed.txt", Buffer.from("fixed\n"));
+    await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${candidateRef}`]);
+    expect((await fetch(`${own}/jobs`, { headers })).status).toBe(404);
+    const fixed = await fetch(base, { method: "POST", headers: { authorization, "content-type": "application/json" }, body: JSON.stringify({
+      schemaVersion: 1, requestId: randomUUID(), candidateRef,
+      candidateCommit: (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD"])).stdout.trim(),
+      candidateTree: (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD^{tree}"])).stdout.trim(),
+    }) });
+    expect(fixed.status, await fixed.clone().text()).toBe(200);
+  } finally { await new Promise<void>((resolve) => { scheduler.close(() => resolve()); scheduler.closeAllConnections(); }); }
+}, 30_000);
 
 it("requests and reports exact ordinary-branch CI idempotently within the workspace repository grant", async () => {
   // Given

@@ -398,3 +398,26 @@ review-enabled target. The review plugin validates these policies at import and
 policy update; existing incomplete policies return an actionable configuration
 error when resolved. Review-disabled targets need no review declaration, while
 explicit malformed review declarations are rejected.
+
+
+## Workspace CI evidence
+
+The Native Git workspace broker may forward only its selected repository's
+workspace CI request collection and exact request status/evidence routes.
+Evidence routes are read-only jobs, logs and artifact manifest/blob reads beneath
+an existing workspace-owned request UUID. They do not authorize global execution
+queries, worker operations, cancellation, retries, review approval or promotion.
+
+The Git CI adapter binds reads to the stored request's workspace identity,
+project/repository, candidate commit/tree and immutable review-plan events. It
+rechecks live lease, service generation, reviewed candidate and policy after
+private scheduler reads before publishing bytes. Execution IDs are accepted only
+when the scheduler's exact event lookup returns their matching repository,
+generation, job name and execution kind. Artifact manifests must bind that
+execution result's descriptor digest. Private scheduler query credentials stay
+in the control plane and are replaced by no guest or host query capability.
+
+Guest helpers verify bounded blob size and SHA-256 before presenting retained
+log tails or atomically publishing downloads. Artifact names are metadata;
+only an explicit operator/agent argument may select a new destination. Existing
+files and symlinks must never be overwritten by evidence retrieval.

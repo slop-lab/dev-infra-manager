@@ -16,6 +16,7 @@ const packages = [
   "gs/diff", "gs/discussions", "gs/blame", "gs/pull-requests",
   "control-plane/plugins/webhooks", "control-plane/plugins/ci-workflows",
   "contracts/git", "contracts/ci", "contracts/execution",
+  "service-clients/execution",
   // The managed pair validates scheduler configuration without loading its runtime.
   "control-plane/plugins/execution-scheduler"
 ];

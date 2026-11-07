@@ -13,6 +13,7 @@ import { privateDirectory, privateJson, replaceJson } from "./local-control-plan
 import { metadata, object } from "./local-uninstall/files.ts";
 import { preparedServiceImages, services } from "./local-control-plane/images.ts";
 import { ensureLocalImageRegistry } from "./local-control-plane/registry.ts";
+import { ensureLocalCiQuery } from "./local-control-plane/ci-query.ts";
 
 export interface LocalControlPlaneOperations {
   current(state: string): Promise<ControlPlaneInstalledState | undefined>;
@@ -111,6 +112,8 @@ export async function installLocalControlPlane(bundle: string, env: NodeJS.Proce
   const source = object(config), nativeGit = object(source.nativeGit), execution = object(source.execution);
   // An explicitly selected setup must still be the existing local deployment.
   if (prior && source.deploymentId !== prior.record.deploymentId) throw new Error("local setup selects another deployment");
+  if (typeof nativeGit.configFile !== "string" || typeof execution.configFile !== "string") throw new Error("local setup service config paths are missing");
+  await ensureLocalCiQuery(nativeGit.configFile, execution.configFile);
   const candidate = { ...source, nativeGit: { ...nativeGit, image: pinned["native-git"] }, execution: { ...execution, image: pinned.execution } };
   const stage = join(directory, `install-candidate-${randomUUID()}.json`);
   await replaceJson(stage, candidate);
