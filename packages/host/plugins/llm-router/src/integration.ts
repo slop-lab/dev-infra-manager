@@ -10,9 +10,13 @@ export async function deployRouterHelpers(workspace: WorkspaceRecord, context: W
     name: "llm-router-assets", files: [
       { path: adapterPath, contents: await readFile(new URL("./opencode.js", import.meta.url)), mode: 0o600 },
       { path: ".config/dim/opencode-launch.js", contents: await readFile(new URL("./opencode-launch.js", import.meta.url)), mode: 0o600 },
+      { path: ".config/dim/opencode-retire.js", contents: await readFile(new URL("./opencode-retire.js", import.meta.url)), mode: 0o600 },
       { path: ".config/dim/opencode-ready.js", contents: await readFile(new URL("./opencode-ready.js", import.meta.url)), mode: 0o600 }
     ]
   });
+  const retirement = await readFile(new URL("./opencode-retire.js", import.meta.url), "utf8");
+  const code = await context.service.exec(workspace.name, ["node", "--input-type=module", "-e", retirement + "\nretireLegacyAdapter();"], { workspaceId: workspace.id, signal: context.signal });
+  if (code !== 0) throw new Error("Cannot safely retire obsolete DIM OpenCode adapter; inspect XDG_CONFIG_HOME/opencode/plugins/dim-llm-router.js (default HOME/.config) and any .dim-adapter-retirement-* retained files, move conflicting user files out of plugin discovery, and retry tool preparation.");
 }
 export async function repairRouterConnectionEndpoint(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void> {
   if (await workspaceRouterServices.resolve("llm-router", workspace, context)) {

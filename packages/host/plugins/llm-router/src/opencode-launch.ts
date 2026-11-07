@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { retireLegacyAdapter } from "./opencode-retire.js";
 
 type JsoncParser = {
   parse: (text: string, errors: unknown[], options: { allowTrailingComma: boolean }) => unknown;
@@ -48,6 +49,7 @@ export async function prepareOpenCode(): Promise<Record<string, string>> {
   const home = homedir();
   const connection = await privateText(process.env.DIM_LLM_ROUTER_CONNECTION_FILE ?? join(home, ".config/dim/llm-router.json"), true);
   if (connection !== undefined) {
+    retireLegacyAdapter();
     const configHome = process.env.XDG_CONFIG_HOME ?? join(home, ".config");
     const adapterFile = join(configHome, "opencode/plugins/dim-llm-router.mjs");
     await privateText(adapterFile);
