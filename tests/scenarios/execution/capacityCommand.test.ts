@@ -32,7 +32,11 @@ it("drains the real capacity command without passing host cancellation into its 
     capacityProviders: [{ id: "pool", token: secret(4), budget: { cpu: 1, memoryBytes: 134217728, pids: 64 },
       members: [{ workerId: "worker", cost: { cpu: 1, memoryBytes: 134217728, pids: 64 } }], maximumStarting: 1,
       idleMilliseconds: 1000, startMilliseconds: 10_000, failureBackoffMilliseconds: 1000 }] });
-  const service = configuredExecutionServer({ config, stateDirectory: join(root, "scheduler"), readinessToken: "ready", activationToken: "activate", expectedGenerationId: generationId });
+  // This proves command cancellation, not expiry under unrelated scheduler load.
+  // Keep scheduler authority healthy while exercising real HTTP renewals.
+  const schedulerNow = Date.now();
+  const service = configuredExecutionServer({ now: () => schedulerNow, config, stateDirectory: join(root, "scheduler"), readinessToken: "ready", activationToken: "activate", expectedGenerationId: generationId });
+  const renew = vi.spyOn(service.store, "renew");
   await new Promise<void>(resolve => service.server.listen(0, "127.0.0.1", resolve));
   const address = service.server.address(); if (!address || typeof address === "string") throw new Error("missing listener");
   const endpoint = `http://127.0.0.1:${address.port}`;
@@ -61,6 +65,15 @@ it("drains the real capacity command without passing host cancellation into its 
   const task = runScheduledTask({ signal: taskStop.signal, endpoint, generationId, credential: config.credentials.tasks!, taskType: handler.taskType, handlerRevision: revision, payload: {}, async exchange() { throw new Error("unused"); } });
   // Attach immediately so the RED case cannot hide its real failed task result.
   const result = task.then(value => ({ value }), error => ({ error }));
+  const diagnostic = () => JSON.stringify({ drained, renewals: renew.mock.calls.length,
+    jobs: service.store.list().map(job => ({ phase: job.phase, publication: job.publication, result: job.result?.result })),
+    occupied: service.store.occupiedSlots().length });
+  async function within<T>(phase: string, operation: Promise<T>, milliseconds = 4000): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try { return await Promise.race([operation, new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(`${phase} did not complete: ${diagnostic()}`)), milliseconds);
+    })]); } finally { clearTimeout(timer); }
+  }
   try {
     const deadline = Date.now() + 10_000;
     let pid: number;
@@ -69,18 +82,27 @@ it("drains the real capacity command without passing host cancellation into its 
       catch { if (Date.now() > deadline) throw new Error("task command did not start"); await delay(20); }
     }
     expect(service.store.occupiedSlots()).toHaveLength(1);
+    const renewedBeforeDrain = renew.mock.calls.length;
     stop.abort(); // The same context signal that direct host SIGTERM aborts.
     await delay(6100); // Beyond the transport CLI's separate five-second kill bound.
+    expect(renew.mock.calls.length).toBeGreaterThan(renewedBeforeDrain);
+    expect(service.store.list()[0]).toMatchObject({ phase: "running", leaseExpiresAt: schedulerNow + config.claimLeaseMilliseconds });
     expect(drained).toBe(false);
     expect(() => process.kill(pid, 0)).not.toThrow();
     expect(service.store.occupiedSlots()).toHaveLength(1);
     await writeFile(join(root, "release"), "release", { mode: 0o600 });
-    expect(await result).toEqual({ value: { commandSurvived: true } });
-    await running;
+    expect(await within("task result after release", result)).toEqual({ value: { commandSurvived: true } });
+    await within("provider drain after accepted result", running);
     expect(service.store.list()[0]).toMatchObject({ phase: "finished", publication: "accepted", result: { result: "success", cleanupComplete: true } });
   } finally {
     stop.abort(); await writeFile(join(root, "release"), "release", { mode: 0o600 });
-    taskStop.abort(); await result;
-    await running; await service.close(); await rm(root, { recursive: true, force: true });
+    try {
+      taskStop.abort(); await within("task cancellation during cleanup", result);
+      await within("provider cleanup drain", running);
+    } finally {
+      await service.close();
+      if (drained) await rm(root, { recursive: true, force: true });
+      else console.error(`Capacity fixture retained without confirmed drain: ${root}; ${diagnostic()}`);
+    }
   }
 }, 25_000);
