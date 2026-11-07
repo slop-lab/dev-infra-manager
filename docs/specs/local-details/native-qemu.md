@@ -68,6 +68,13 @@ directories MUST be traversable by the guest job UID. Preserve Git executable
 identity. The outer worker root, hardware disks, credentials and artifact
 pending storage MUST remain private. The guest job may reconstruct an exact
 local shallow object database from this context; it grants no source authority.
+When canonical verification transfers this database through a Git bundle, its
+source manifest MUST explicitly carry `boundedParents`. Operator validation and
+every fresh guest import MUST match the ordered list to all raw candidate parent
+headers, reject additional commit objects, restore only those boundaries and run
+strict full object verification. A bundle alone does not preserve shallow
+metadata. Full-history input omits this field; missing ancestors MUST NOT be
+silently accepted, synthesized or fetched beyond the reviewed context.
 
 The full guest runs the candidate in its own systemd unit with its task limit
 and normal guest sudo. Host CPU/memory and supervisor PID limits remain

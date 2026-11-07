@@ -28,11 +28,7 @@ mkdir -p -- "$evidence"
 work="$(mktemp -d "${TMPDIR:-/tmp}/dim-examples-candidate.XXXXXXXX")"
 trap 'rm -rf -- "$work"' EXIT
 git bundle create "$work/candidate.bundle" HEAD
-node --input-type=module - "$work/source.json" "$source_sha" "$source_tree" <<'JS'
-import { writeFileSync } from 'node:fs';
-writeFileSync(process.argv[2], JSON.stringify({ schemaVersion: 1,
-  sourceSha: process.argv[3], sourceTree: process.argv[4] }) + '\n', { mode: 0o600 });
-JS
+node scripts/checks/source-manifest.ts create "$repo_root" "$work/source.json"
 cp -- "$work/source.json" "$evidence/source.json"
 DIM_BOOTSTRAP_EXAMPLES_SEPARATE=1 DIM_BOOTSTRAP_VM_LOG_ROOT="$evidence" bash scripts/checks/bootstrap-ubuntu-vm-smoke.bash \
   --source-bundle "$work/candidate.bundle" --source-manifest "$work/source.json"

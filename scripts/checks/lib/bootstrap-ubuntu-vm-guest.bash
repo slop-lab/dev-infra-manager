@@ -149,20 +149,24 @@ bootstrap_guest_stop() {
 bootstrap_guest_copy_source() {
   timeout --signal=TERM --kill-after=15s 300s "${BOOTSTRAP_SCP[@]}" \
     "$SOURCE_BUNDLE" dim@127.0.0.1:/home/dim/root.bundle
+  timeout --signal=TERM --kill-after=15s 300s "${BOOTSTRAP_SCP[@]}" \
+    "$script_dir/lib/bootstrap-ubuntu-vm-source.bash" dim@127.0.0.1:/home/dim/root-source.bash
 }
 
 bootstrap_guest_prepare_source() {
   timeout --signal=TERM --kill-after=15s 300s "${BOOTSTRAP_SSH[@]}" \
-    bash -s -- "$SOURCE_SHA" "$SOURCE_TREE" <<'REMOTE'
+    bash -s -- "$SOURCE_SHA" "$SOURCE_TREE" "${SOURCE_BOUNDED_PARENTS:--}" <<'REMOTE'
 set -euo pipefail
-source_sha="$1"; source_tree="$2"
+source_sha="$1"; source_tree="$2"; bounded="$3"; [[ "$bounded" != - ]] || bounded=""
 mkdir -p /home/dim/dim
-git clone --quiet /home/dim/root.bundle /home/dim/dim/workbench
+source /home/dim/root-source.bash
+git init --quiet /home/dim/dim/workbench
+bootstrap_source_import_bundle /home/dim/dim/workbench /home/dim/root.bundle "$source_sha" "$source_tree" "$bounded"
 git -C /home/dim/dim/workbench checkout --quiet --detach "$source_sha"
 [[ "$(git -C /home/dim/dim/workbench rev-parse HEAD)" == "$source_sha" ]]
 [[ "$(git -C /home/dim/dim/workbench rev-parse 'HEAD^{tree}')" == "$source_tree" ]]
 [[ -z "$(git -C /home/dim/dim/workbench status --porcelain=v1 --untracked-files=all)" ]]
-rm -f /home/dim/root.bundle
+rm -f /home/dim/root.bundle /home/dim/root-source.bash
 REMOTE
 }
 

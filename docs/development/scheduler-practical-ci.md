@@ -37,8 +37,13 @@ The opt-in wrapper verifies all exported object hashes and reconstructs exact
 local Git objects, with each immediate parent marked shallow. Merge candidates
 retain all immediate parents, while canonical update verification uses the first
 parent baseline. A root commit cannot qualify an upgrade because it has no
-baseline. The resulting bundle/clone preserves exact commit/tree identity without
-inventing a snapshot commit or exposing history. The wrapper installs the pinned
+baseline. Git bundles do not preserve a repository’s shallow boundary. Canonical source
+manifests therefore carry optional `boundedParents` naming exactly every immediate
+parent. Both the operator validator and pristine guest importer verify that list
+against the raw candidate and reject extra commit ancestry before applying the
+boundary, fetching and running strict object verification. Full-history manifests
+omit the field. This preserves exact commit/tree identity without inventing a
+snapshot commit or exposing history. The wrapper installs the pinned
 source tools, builds the exact source, then invokes the unmodified canonical
 `scripts/checks/examples-vm-smoke.bash` and mandatory exact-source receipt verifier.
 

@@ -225,6 +225,11 @@ For the examples' separate control-plane and host VM acceptance, run
 `just verify examples-vm-preflight`, then `just verify examples-vm`. This also
 runs inside an explicitly KVM-enabled DIM workspace; see the
 [workspace development instructions](scripts/development.md#kvm-example-verification-inside-a-workspace).
+Scheduled hardware qualification uses an exact source manifest: full-history input
+omits `boundedParents`; bounded input declares every immediate parent and is
+verified by both the operator and fresh guest imports. Git bundle creation or
+clone success alone does not prove a complete bounded import. See
+[scheduled practical CI](docs/development/scheduler-practical-ci.md).
 
 `just typecheck` checks both TypeScript and all source JavaScript (`.js`,
 `.mjs`, `.cjs`) with the shared strict compiler settings. JavaScript sources

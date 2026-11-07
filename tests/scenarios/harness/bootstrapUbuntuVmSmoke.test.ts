@@ -41,7 +41,7 @@ test("rejects incomplete protected input before QEMU or network access", async (
   ], { encoding: "utf8" });
 
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /manifest must contain only schemaVersion, sourceSha, and sourceTree/);
+  assert.match(result.stderr, /manifest requires exact source SHA and tree|manifest must contain only schemaVersion, sourceSha, sourceTree/);
 });
 
 test("exposes only strict standalone source arguments", () => {

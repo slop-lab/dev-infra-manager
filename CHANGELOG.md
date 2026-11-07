@@ -49,8 +49,9 @@ is implied by these source changes.
   after runtime cleanup, resume interrupted uploads without rerunning candidate
   code, and connect the private execution query role during local installation.
   Offer an explicit Ubuntu hardware execution profile with nested KVM and
-  disk-backed temporary storage for scheduled practical VM validation; ordinary
-  source checks keep their existing lightweight execution path.
+  disk-backed temporary storage and explicit bounded source manifests for exact
+  scheduled practical VM validation; ordinary source checks keep their existing
+  lightweight execution path.
 - Add `dim cp` for explicit operator-machine to workspace file transfer through
   local or SSH-selected hosts. Preserve binary streams, require explicit
   recursive and overwrite choices, pin workspace/runtime identity, and reject
