@@ -100,7 +100,9 @@ export function qemuContainerArguments(input: Pick<BackendInput, "grant" | "root
   identity: { uid: number; gid: number; kvmGroup: number }, routing?: HostExecutionRouting, hardware = false): string[] {
   if (hardware && ["host", "none"].includes(routing?.network ?? "bridge")) throw new Error("verification SSH requires an isolated bridge network");
   const descriptor = input.grant.descriptor;
-  const supervisorMemory = BigInt(descriptor.bounds.memoryBytes) + 256n * 1024n * 1024n;
+  // Full Ubuntu guests need headroom for QEMU, the supervisor and container kernel costs.
+  const overhead = hardware ? 1024n * 1024n * 1024n : 256n * 1024n * 1024n;
+  const supervisorMemory = BigInt(descriptor.bounds.memoryBytes) + overhead;
   return ["run", "--detach", "--init", "--name", containerName(input.grant), "--read-only", "--network", routing?.network ?? "bridge",
     "--user", `${identity.uid}:${identity.gid}`, "--group-add", String(identity.kvmGroup),
     "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--device", "/dev/kvm:/dev/kvm",

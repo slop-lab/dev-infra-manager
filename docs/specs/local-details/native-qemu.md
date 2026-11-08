@@ -17,7 +17,13 @@ before launch. Candidate content controls its script and fixed compiled argv;
 it cannot choose host commands, images, devices, mounts, networks or credentials.
 The supervisor is an owned bounded container running as the worker UID/GID with
 the KVM device group, all capabilities dropped and no-new-privileges. Its memory
-limit includes the guest bound plus 256 MiB of supervisor overhead.
+limit includes the guest bound plus 256 MiB of supervisor overhead for small
+QEMU guests. The full Ubuntu hardware profile below reserves 1 GiB of outer
+headroom for QEMU, its supervisor and container kernel costs, without increasing
+the guest memory bound. Operator host and capacity-pool reservations MUST include
+that outer allowance for every slot, plus the separate worker supervisor and
+other host services. The execution scheduler does not derive this allowance
+from an image label or raise an operator reservation automatically.
 
 Job metadata/script and the guest-root image are read-only mounts. The writable
 workspace uses mapped-xattr 9p metadata so guest ownership changes do not change

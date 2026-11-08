@@ -14,6 +14,20 @@ it("routes QEMU through a bounded unprivileged KVM supervisor with public candid
   expect(args.join(" ")).not.toMatch(/docker\.sock|--privileged|--env|password|credential/);
 });
 
+it.each([20, 32])("reserves hardware supervisor headroom separately from the %s GiB guest bound", gibibytes => {
+  const selected = assignment(), original = grant({ ...selected, event: event("practical", "qemu") });
+  const authorized = { ...original, descriptor: { ...original.descriptor,
+    bounds: { ...original.descriptor.bounds, memoryBytes: String(BigInt(gibibytes) * 1024n ** 3n) } } };
+  const args = qemuContainerArguments({ grant: authorized, root: "/private/job" }, { uid: 1000, gid: 1000, kvmGroup: 108 }, undefined, true);
+  const option = (name: string) => args[args.indexOf(name) + 1];
+  expect(option("--memory")).toBe(String(BigInt(gibibytes + 1) * 1024n ** 3n));
+  expect(option("--cpus")).toBe(authorized.descriptor.bounds.cpu);
+  expect(option("--pids-limit")).toBe(authorized.descriptor.bounds.pids);
+  // The supervisor receives the original guest bounds, never the outer allowance.
+  expect(args.slice(-3)).toEqual([authorized.descriptor.bounds.cpu, authorized.descriptor.bounds.memoryBytes, authorized.descriptor.bounds.pids]);
+  expect(args).not.toContain("--memory-swap");
+});
+
 it("retains failed trusted acquisition diagnostics without starting QEMU or changing cleanup", async () => {
   const { mkdtemp, readFile, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");

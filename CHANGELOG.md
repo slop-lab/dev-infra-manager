@@ -62,7 +62,8 @@ is implied by these source changes.
   Offer an explicit Ubuntu hardware execution profile with nested KVM and
   disk-backed temporary storage and explicit bounded source manifests for exact
   scheduled practical VM validation, with temporary host-loopback emergency SSH
-  and fresh pinned per-VM keys for operator diagnosis; ordinary source checks keep their existing
+  and fresh pinned per-VM keys for operator diagnosis. Reserve separate bounded
+  hypervisor headroom without increasing guest memory; ordinary source checks keep their existing
   lightweight execution path. Allocate worker capacity from explicitly bounded
   operator pools as compatible work queues, and drain idle workers without
   interrupting execution, result upload or owned cleanup. Keep scheduling
