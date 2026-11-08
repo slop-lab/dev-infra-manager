@@ -1,3 +1,8 @@
+# Private practical presentation boundary; generic output capture owns no schema.
+examples_read_progress() {
+  node "$script_dir/../../tests/scenarios/selected-host/progress.ts" --read-log "$1" "$2"
+}
+
 # Time fixed preparation steps without putting multi-command functions in an
 # errexit-suppressing conditional. The owning command keeps its output and exit.
 examples_timed_preparation() (
@@ -128,7 +133,7 @@ REMOTE
   # Keep this shell function outside check_output_run's conditional subshell:
   # Bash otherwise disables errexit inside its multi-step bootstrap body.
   if [[ -n "${BOOTSTRAP_BASELINE_DIRECTORY:-}" ]]; then
-    check_output_run host-baseline-fresh-install timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "$SOURCE_SHA" <<'REMOTE'
+    check_output_run --progress-reader examples_read_progress host-baseline-fresh-install timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "$SOURCE_SHA" <<'REMOTE'
 set -euo pipefail
 cd /home/dim/dim/workbench
 source scripts/lib/bootstrap-ubuntu-pins.bash
@@ -172,7 +177,7 @@ if(cp===host||cpKey===hostKey||!cpInstance||!hostInstance||cpInstance===hostInst
 writeFileSync(file,JSON.stringify({schemaVersion:1,controlPlane:{machine:cp,sshHostKey:cpKey,instanceId:cpInstance},host:{machine:host,sshHostKey:hostKey,instanceId:hostInstance}})+'\n',{mode:0o600,flag:'wx'});
 IDENTITY
   printf '[examples] phase=host-build-images-artifacts log=%s/02-host-build-images-artifacts.log\n' "$CHECK_OUTPUT_ROOT"
-  check_output_run host-build-images-artifacts timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "$SOURCE_SHA" "$BOOTSTRAP_IMAGE_SHA256" "$host_machine" <<'REMOTE'
+  check_output_run --progress-reader examples_read_progress host-build-images-artifacts timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "$SOURCE_SHA" "$BOOTSTRAP_IMAGE_SHA256" "$host_machine" <<'REMOTE'
 set -euo pipefail
 export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin
 cd /home/dim/dim/workbench
@@ -208,7 +213,7 @@ REMOTE
   examples_vm_select host
   printf '[examples] phase=host-installed-recipes log-root=%s\n' "$CHECK_OUTPUT_ROOT"
   local recipe_status=0
-  check_output_run host-installed-recipes timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "${EXAMPLES_VM_PORT[control-plane]}" <<'REMOTE' || recipe_status=$?
+  check_output_run --progress-reader examples_read_progress host-installed-recipes timeout --signal=TERM --kill-after=30s 5400s "${BOOTSTRAP_SSH[@]}" bash -s -- "${EXAMPLES_VM_PORT[control-plane]}" <<'REMOTE' || recipe_status=$?
 set -euo pipefail
 export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin
 chmod 0600 /home/dim/examples-cp-key /home/dim/examples-cp-known-hosts

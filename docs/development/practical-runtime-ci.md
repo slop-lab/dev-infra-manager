@@ -75,6 +75,8 @@ Selected-host recipes also emit bounded structured progress on stderr: the
 current command, completed command duration/exit status, scenario checkpoints
 and UTC/monotonic elapsed time. JSON mode reserves stdout for the final report;
 the CI parent forwards only this progress channel, not arbitrary child stderr.
+The outer stage heartbeat forwards newly completed progress and fixed preparation
+timing records from its private log every 30 seconds and flushes them on exit.
 An `incomplete` report is preserved for diagnosis before its nonzero exit is
 rejected; blocked coverage never becomes a passing qualification.
 

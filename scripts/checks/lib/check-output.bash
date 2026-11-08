@@ -54,7 +54,22 @@ check_output_stop() {
   fi
 }
 
+# Internal optional presentation reader: stdout is a byte offset followed by
+# already-safe lines. Reader errors must never change command execution/status.
+check_output_forward_progress() {
+  local reader="$1" log="$2" cursor="$3" offset result next
+  offset="$(cat -- "$cursor" 2>/dev/null)" || return 0
+  [[ "$offset" =~ ^[0-9]+$ ]] || return 0
+  result="$("$reader" "$log" "$offset" 2>/dev/null)" || return 0
+  next="${result%%$'\n'*}"
+  [[ "$next" =~ ^[0-9]+$ ]] || return 0
+  printf '%s\n' "$next" >"$cursor" || return 0
+  if [[ "$result" == *$'\n'* ]]; then printf '%s\n' "${result#*$'\n'}" >&2 || :; fi
+}
+
 check_output_run() {
+  local progress_reader="" cursor=""
+  if [[ "${1:-}" == --progress-reader ]]; then progress_reader="$2"; shift 2; fi
   local name="$1" log status started ended utc
   shift
   [[ "$name" =~ ^[a-z0-9-]+$ ]] || return 2
@@ -63,12 +78,17 @@ check_output_run() {
   CHECK_OUTPUT_SEQUENCE=$((CHECK_OUTPUT_SEQUENCE + 1))
   printf -v log '%s/%02d-%s.log' "$CHECK_OUTPUT_ROOT" "$CHECK_OUTPUT_SEQUENCE" "$name"
   (umask 077; : >"$log")
+  if [[ -n "$progress_reader" ]]; then
+    cursor="${log}.progress-offset"
+    (umask 077; printf '0\n' >"$cursor") || progress_reader=""
+  fi
   printf '[check] %s started=%s\n' "$name" "$utc"
   printf '{"stage":"%s","event":"start","utc":"%s","monotonicSeconds":%s}\n' "$name" "$utc" "$started" >>"$CHECK_OUTPUT_ROOT/stages.jsonl"
   (
     timer=""
     trap 'if [[ -n "$timer" ]]; then kill "$timer" 2>/dev/null || true; wait "$timer" 2>/dev/null || true; fi; exit 0' TERM INT HUP
     while true; do
+      if [[ -n "$progress_reader" ]]; then check_output_forward_progress "$progress_reader" "$log" "$cursor" || :; fi
       sleep 30 &
       timer=$!
       wait "$timer" || exit 0
@@ -84,6 +104,10 @@ check_output_run() {
     "$@"
   ) >"$log" 2>&1; then status=0; else status=$?; fi
   check_output_stop
+  if [[ -n "$progress_reader" ]]; then
+    check_output_forward_progress "$progress_reader" "$log" "$cursor" || :
+    rm -f -- "$cursor" || :
+  fi
   ended="$(check_output_monotonic_seconds)"
   utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf '{"stage":"%s","event":"finish","utc":"%s","monotonicSeconds":%s,"elapsedSeconds":%s,"exitCode":%s}\n' "$name" "$utc" "$ended" "$(check_output_elapsed_seconds "$ended" "$started")" "$status" >>"$CHECK_OUTPUT_ROOT/stages.jsonl"
