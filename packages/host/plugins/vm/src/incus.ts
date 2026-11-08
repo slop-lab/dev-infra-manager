@@ -160,13 +160,14 @@ export class IncusMachines {
         const command = probe === "agent" ? ["true"] : ["docker", "info", "--format", "{{.ServerVersion}}"];
         const result = await this.runner.run("incus", this.args(["exec", this.name(record), "--", ...command]));
         if (result.exitCode === 0) return;
-        lastTransportFailure = readinessTransportFailure(result, this.config.project);
+        const transport = readinessTransportFailure(result, this.config.project);
+        if (transport) lastTransportFailure = transport;
         const unavailable = probe === "agent"
           ? /VM agent isn.t currently running|connection refused|not connected|Instance is not running/i.test(result.stderr)
           : /Cannot connect|failed to connect|connection refused|no such file or directory|VM agent isn.t currently running|Instance is not running/i.test(result.stderr)
             && !/Command not found|executable file not found/.test(result.stderr);
         const securityFailure = /\btls\b|\bx509\b|certificate|authenticat|authori[sz]|permission denied|access denied|invalid credentials/i.test(result.stderr);
-        if (!lastTransportFailure && (securityFailure || !unavailable)) throw new UserError(`VM guest ${probe === "agent" ? "readiness" : "Docker readiness"} failed: Incus exit ${result.exitCode}: ${result.stderr.trim()}`);
+        if (!transport && (securityFailure || !unavailable)) throw new UserError(`VM guest ${probe === "agent" ? "readiness" : "Docker readiness"} failed: Incus exit ${result.exitCode}: ${result.stderr.trim()}`);
         await deadline.retry();
       }
     } catch (error) {

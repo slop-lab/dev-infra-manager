@@ -288,3 +288,43 @@ it("cancels a recorded operation reconnect without accepting its late zero or ca
     .startReady(workspace(), finish)).rejects.toThrow("operation reconnect cancelled");
   expect(probes).toBe(2); expect(finish).not.toHaveBeenCalled(); expect(runner.running).toBe(false);
 });
+
+it.each([
+  { exitCode: 255, stderr: "Error: local error: tls: bad record MAC" },
+  { exitCode: 1, stderr: recordedOperationEof }
+])("retains the last known transport across ordinary unavailability until the shared deadline: $exitCode", async failure => {
+  let now = 0, probes = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => now);
+  const runner = new FakeIncus(); runner.exists = true;
+  const run = runner.run.bind(runner);
+  vi.spyOn(runner, "run").mockImplementation(async (command, args, options) => {
+    if (args.at(-1) === "true") {
+      now += 350;
+      return { command, args, stdout: "", ...(++probes === 1 ? failure : { exitCode: 1, stderr: "VM agent isn't currently running" }) };
+    }
+    if (args.includes("stop")) expect(options?.signal?.aborted).toBe(false);
+    return run(command, args, options);
+  });
+  const release = vi.fn(async () => {}), finish = vi.fn();
+  await expect(new IncusMachines({ ...config, startupTimeoutMilliseconds: 1000 }, runner, { apply: async () => {}, verify: async () => {}, release })
+    .startReady(workspace(), finish)).rejects.toThrow(`last Incus readiness probe failed (exit ${failure.exitCode}): ${failure.stderr}`);
+  expect(probes).toBe(3); expect(finish).not.toHaveBeenCalled(); expect(runner.running).toBe(false); expect(release).toHaveBeenCalledOnce();
+});
+
+it.each([
+  "Error: Failed to connect to agent: authentication failed",
+  "Error: Failed to connect to agent: tls: failed to verify certificate: x509: certificate signed by unknown authority"
+])("rejects a current security failure immediately despite retained transport history: %s", async stderr => {
+  const runner = new FakeIncus(); runner.exists = true;
+  const run = runner.run.bind(runner); let probes = 0;
+  vi.spyOn(runner, "run").mockImplementation(async (command, args, options) => {
+    if (args.at(-1) === "true") {
+      return { command, args, stdout: "", exitCode: 1, stderr: ++probes === 1 ? recordedOperationEof : stderr };
+    }
+    return run(command, args, options);
+  });
+  const finish = vi.fn();
+  await expect(new IncusMachines(config, runner, { apply: async () => {}, verify: async () => {} }).startReady(workspace(), finish))
+    .rejects.toThrow(`VM guest readiness failed: Incus exit 1: ${stderr}`);
+  expect(probes).toBe(2); expect(finish).not.toHaveBeenCalled(); expect(runner.running).toBe(false);
+});
