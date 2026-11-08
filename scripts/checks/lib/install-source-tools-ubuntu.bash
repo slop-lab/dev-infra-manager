@@ -46,9 +46,9 @@ trap '/usr/bin/rm -rf -- "$work"' EXIT
 mkdir -m 0755 "$work/stage" "$work/stage/bin"
 source "${download_helper:-$script_dir/bootstrap-download.bash}"
 dim_bootstrap_artifact pnpm amd64
-dim_bootstrap_download "$dim_artifact_url" "$dim_artifact_sha256" "$work/pnpm"
+dim_bootstrap_download "$dim_artifact_url" "$dim_artifact_sha256" "$work/pnpm" "${dim_artifact_headers[@]}"
 dim_bootstrap_artifact just amd64
-dim_bootstrap_download "$dim_artifact_url" "$dim_artifact_sha256" "$work/just.tar.gz"
+dim_bootstrap_download "$dim_artifact_url" "$dim_artifact_sha256" "$work/just.tar.gz" "${dim_artifact_headers[@]}"
 tar -xzf "$work/just.tar.gz" -C "$work/stage/bin" just
 install -m 0755 "$work/pnpm" "$work/stage/bin/pnpm"
 chown -R root:root "$work/stage"

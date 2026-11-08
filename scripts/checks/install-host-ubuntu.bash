@@ -87,7 +87,7 @@ install_sysbox() {
   checksum="$dim_artifact_sha256"; url="$dim_artifact_url"
   sysbox_work="$(mktemp -d /tmp/dim-sysbox-install.XXXXXX)"
   sysbox_deb="$sysbox_work/sysbox.deb"
-  dim_bootstrap_download "$url" "$checksum" "$sysbox_deb"
+  dim_bootstrap_download "$url" "$checksum" "$sysbox_deb" "${dim_artifact_headers[@]}"
   sudo apt-get install -y "$sysbox_deb"
 
   if [[ -f /etc/apparmor.d/fusermount3 ]]; then

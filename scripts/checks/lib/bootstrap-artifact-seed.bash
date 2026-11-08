@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Explicit test-tooling reuse of the optional VM package's digest artifact cache.
 examples_artifacts_prepare() {
-  local repository kind cached
+  local repository kind cached status
   repository="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
   source "$repository/scripts/lib/bootstrap-ubuntu-pins.bash"
   source "$repository/packages/host/plugins/vm/scripts/artifact-cache.bash"
@@ -9,7 +9,11 @@ examples_artifacts_prepare() {
   mkdir -m 0700 -- "$EXAMPLES_ARTIFACTS_DIRECTORY"
   for kind in node pnpm just sysbox; do
     dim_bootstrap_artifact "$kind" amd64 || return
-    cached="$(dim_artifact_cache "$dim_artifact_url" "$dim_artifact_sha256")" || return
+    cached="$(dim_artifact_cache "$dim_artifact_url" "$dim_artifact_sha256" "${dim_artifact_headers[@]}")" || {
+      status=$?
+      printf '[bootstrap] artifact=%s cache-exit=%s\n' "$kind" "$status" >&2
+      return "$status"
+    }
     cp -- "$cached" "$EXAMPLES_ARTIFACTS_DIRECTORY/$dim_artifact_sha256" || return
     chmod 0600 -- "$EXAMPLES_ARTIFACTS_DIRECTORY/$dim_artifact_sha256" || return
     printf '%s  %s\n' "$dim_artifact_sha256" "$EXAMPLES_ARTIFACTS_DIRECTORY/$dim_artifact_sha256" | sha256sum --check --status || return

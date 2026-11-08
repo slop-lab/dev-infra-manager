@@ -219,7 +219,15 @@ Backend facts: [Incus VM creation](https://linuxcontainers.org/incus/docs/main/h
 [resource options](https://linuxcontainers.org/incus/docs/main/reference/instance_options/),
 [console transport](https://linuxcontainers.org/incus/docs/main/api-extensions/#console-vga-type).
 
-Reviewed VM image downloads can share a persistent host artifact cache:
+Reviewed VM image downloads can share a persistent host artifact cache.
+
+The cache script accepts optional trailing literal `Name: value` HTTP headers,
+for example `bash scripts/artifact-cache.bash URL SHA256 'Accept: application/octet-stream'`.
+Names must be RFC tokens and values printable ASCII, with at most eight headers,
+1024 bytes per header and 4096 bytes total. Curl flags, `@file` indirection and
+control characters are rejected. Headers do not change the digest cache key,
+checksum verification or TLS policy. Download failure diagnostics print the content
+SHA-256 and numeric curl/HTTP status, without URLs, headers or credentials.
 
 ```bash
 dim vm image import https://images.example/dim-vm.tar.xz --sha256 REVIEWED_SHA256

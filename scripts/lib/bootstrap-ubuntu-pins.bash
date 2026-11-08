@@ -15,18 +15,23 @@ dim_node_root=/usr/local/lib/dim-qemu-node-24.19.0
 dim_source_tools_root=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1
 
 # Immutable downloads used by both fresh-VM bootstrap and its outer cache seed.
+# Reset literal request headers on every selection; callers never supply curl flags.
 dim_bootstrap_artifact() {
   local kind="$1" architecture="$2" node_arch
+  dim_artifact_kind="$kind"
+  dim_artifact_headers=()
   case "$kind:$architecture" in
     node:amd64|node:x64)
       node_arch=x64; dim_artifact_sha256=14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647 ;;
     node:arm64)
       node_arch=arm64; dim_artifact_sha256=01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc ;;
     pnpm:amd64|pnpm:x64)
-      dim_artifact_url="https://github.com/pnpm/pnpm/releases/download/v${dim_pnpm_version}/pnpm-linux-x64"
+      dim_artifact_url="https://api.github.com/repos/pnpm/pnpm/releases/assets/271328060"
+      dim_artifact_headers=('Accept: application/octet-stream' 'X-GitHub-Api-Version: 2022-11-28')
       dim_artifact_sha256=e1cab530ea8252eb90e4add71d95838fd6f2656e6977f120df5ecb6f5b2822e0; return ;;
     just:amd64|just:x64)
-      dim_artifact_url="https://github.com/casey/just/releases/download/${dim_just_version}/just-${dim_just_version}-x86_64-unknown-linux-musl.tar.gz"
+      dim_artifact_url="https://api.github.com/repos/casey/just/releases/assets/315676085"
+      dim_artifact_headers=('Accept: application/octet-stream' 'X-GitHub-Api-Version: 2022-11-28')
       dim_artifact_sha256=6a3003f68fa4d86ada8afe33830a88ffdb6c2fcaff4e5a840b1cb90eaf6f46fc; return ;;
     sysbox:amd64)
       dim_artifact_sha256=eeff273671467b8fa351ab3d40709759462dc03d9f7b50a1b207b37982ce40a9 ;;

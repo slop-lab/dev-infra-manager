@@ -70,7 +70,7 @@ archive="$work/node.tar.xz"
 stage="$work/extracted"
 download_helper="${download_helper:-$script_dir/bootstrap-download.bash}"
 source "$download_helper"
-dim_bootstrap_download "$url" "$checksum" "$archive"
+dim_bootstrap_download "$url" "$checksum" "$archive" "${dim_artifact_headers[@]}"
 [[ ! -L "$archive" && -f "$archive" ]] &&
   [[ "$(/usr/bin/stat -c '%u:%g' -- "$archive")" == 0:0 ]] || {
     echo "downloaded Node.js archive is not a root-owned regular file" >&2
