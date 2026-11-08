@@ -19,6 +19,14 @@ it("prepares helpers without repository configuration or npm installation and di
     let launches = 0;
     vi.spyOn(service, "exec").mockImplementation(async (name, args, options) => {
       expect(name).toBe(workspace.name); expect(options?.workspaceId).toBe(workspace.id);
+      if (args[0] === "bash") {
+        expect(args.slice(1)).toEqual(["-c", 'exec bash "$HOME/.local/share/dim-agent-tools/opencode-service.bash" __resume']);
+        expect((await stat(join(home, ".local/share/dim-agent-tools/opencode-service.bash"))).isFile()).toBe(true);
+        return new Promise<number>((resolve, reject) => {
+          const child = spawn("bash", args.slice(1), { env: { ...process.env, HOME: home }, stdio: ["ignore", "ignore", "ignore"] });
+          child.once("error", reject); child.once("close", (code) => resolve(code ?? 1));
+        });
+      }
       if (args[0] !== "node") { expect(args).toEqual(["dim-agent", "codex"]); expect((await stat(join(home, ".local/bin/dim-agent"))).isFile()).toBe(true); launches++; return 0; }
       const chunks: Buffer[] = []; if (options?.stdin) for await (const chunk of options.stdin) chunks.push(Buffer.from(chunk));
       return new Promise<number>((resolve, reject) => {
@@ -32,6 +40,7 @@ it("prepares helpers without repository configuration or npm installation and di
     expect((await stat(join(home, ".local/share/dim-agent-tools/opencode-runtime.bash"))).mode & 0o777).toBe(0o700);
     expect(await readFile(setup, "utf8")).toContain("tool-setup.bash");
     expect(await hostPlugin.guest!.inspect!(workspace, context)).toMatchObject({ state: "unconfigured", message: expect.stringContaining("no npm tools were installed automatically") });
+    await expect(stat(join(home, ".local/state/dim/services/dim-agent-tools-opencode.json"))).rejects.toThrow();
     const inode = (await stat(helper)).ino;
     await hostPlugin.workspaceReady!(workspace, context); expect((await stat(helper)).ino).toBe(inode);
     await unlink(helper); await hostPlugin.run!(["tools", "run", workspace.name, "codex"], context);

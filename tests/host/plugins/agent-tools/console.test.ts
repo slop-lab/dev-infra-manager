@@ -82,3 +82,16 @@ it("transports password updates only through guest stdin and returns credentials
   expect(await invokeToolsConsole("server.credentials", identity, context)).toEqual({ ...identity, username: "opencode", password });
   await expect(invokeToolsConsole("server.password", { ...identity, password: "too short" }, context)).rejects.toThrow("12–128");
 }));
+
+it("allows explicit stop and setup repair without first resuming an unhealthy service", async () => fixture(async (context, workspace) => {
+  const execute = vi.spyOn(context.service, "exec").mockImplementation(async (_name, command, options) => {
+    expect(command.join(" ")).not.toContain("__resume");
+    if (command[0] === "node") { options?.stdout?.write(JSON.stringify({ tools: [] })); return 0; }
+    if (command.at(-1) === "stop") options?.stdout?.write(JSON.stringify({ state: "stopped", port: 4096 }));
+    return 0;
+  });
+  await expect(invokeToolsConsole("server.stop", { workspace: workspace.name, workspaceId: workspace.id }, context)).resolves.toMatchObject({ state: "stopped" });
+  await invokeToolsConsole("tools.setup", { workspace: workspace.name, workspaceId: workspace.id, tool: "opencode" }, context);
+  expect(execute.mock.calls.some(([, command]) => command.at(-1) === "stop")).toBe(true);
+  expect(execute.mock.calls.some(([, command]) => command.includes("dim-tools-setup"))).toBe(true);
+}));

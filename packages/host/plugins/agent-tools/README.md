@@ -105,6 +105,17 @@ dim tools server development status --json
 dim tools server development stop --json
 ```
 
+Starting the server registers an agent-tools-owned foreground service with the
+existing workspace service registry. Workspace starts and container recreation
+resume that service with the same private credentials, saved public port/CORS
+settings and retained OpenCode session data. Explicit stop removes its automatic
+start intent. A project service occupying the reserved name is rejected without
+replacement. No tools are installed automatically. The host plugin also converges only its
+existing owned registration after the workspace channel is ready; this recovers
+an early boot attempt without restoring intent removed by an explicit stop.
+Named guest `dim-workspace service resume NAME` resumes only that registration;
+boot's unnamed form continues to resume all explicitly registered services.
+
 Only `opencode serve` runs in the workspace, bound to its loopback port 4096.
 The launcher creates private Basic credentials, preserves the same password
 across launches, verifies listener ownership before reuse and does not stop

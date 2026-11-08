@@ -1,11 +1,11 @@
-import { deployToolHelpers, inspectTools } from "./integration.js";
+import { deployToolHelpers, inspectTools, prepareToolWorkspace } from "./integration.js";
 import { UserError } from "@slop-lab/dim-host-core/workspace";
 import { type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { runToolsConsole } from "./console.js";
 
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "agent-tools",
-  workspaceReady: deployToolHelpers,
+  workspaceReady: prepareToolWorkspace,
   guest: {
     description: "Coding-agent helper commands; installing this host plugin prepares small helpers automatically, while pinned npm tools require explicit setup",
     commands: [

@@ -184,7 +184,8 @@ async function services(args) {
     if (rest.length !== 1 || !serviceName(rest[0])) throw new Error("invalid service supervisor name");
     await superviseService(rest[0]); return;
   }
-  if ((command !== "resume" && command !== "list") || rest.length) throw new Error("usage: dim-workspace service register|resume|list|remove");
+  if ((command !== "resume" && command !== "list") || rest.length > (command === "resume" ? 1 : 0)
+    || (rest.length === 1 && !serviceName(rest[0]))) throw new Error("usage: dim-workspace service register|resume [NAME]|list|remove");
   const names = await readdir(servicesRoot).catch((error) => { if (error.code === "ENOENT") return []; throw error; });
   const entries = names.filter((name) => name.endsWith(".json") && serviceName(name.slice(0, -5))).map((name) => name.slice(0, -5)).sort();
   if (command === "list") {
@@ -193,7 +194,9 @@ async function services(args) {
     console.log(JSON.stringify(result)); return;
   }
   /** @type {string[]} */ const failures = [];
-  for (const name of entries) {
+  const selected = rest[0];
+  if (selected !== undefined && !entries.includes(selected)) throw new Error(`service '${selected}' is not registered`);
+  for (const name of selected === undefined ? entries : [selected]) {
     try {
       if (await serviceAlive(name)) continue;
       const log = await open(path.join(servicesRoot, `${name}.log`), "a", 0o600);

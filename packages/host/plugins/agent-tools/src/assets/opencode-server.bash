@@ -14,12 +14,18 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "required command not found on PATH: $1"
 }
 
+foreground=false
+direct=false
+password_no_restart=false
 operation="start"
 json_output=false
 operation_selected=false
 for argument in "$@"; do
   case "$argument" in
     start|status|stop|credentials|password) [[ "$operation_selected" = false ]] || fail 'specify one operation'; operation="$argument"; operation_selected=true ;;
+    __serve) [[ "$operation_selected" = false ]] || fail 'specify one operation'; operation=start; operation_selected=true; foreground=true; direct=true ;;
+    __password) [[ "$operation_selected" = false ]] || fail 'specify one operation'; operation=password; operation_selected=true; password_no_restart=true; direct=true ;;
+    --direct) direct=true ;;
     --json) json_output=true ;;
     *) fail 'usage: opencode-server.bash [start|status|stop|credentials|password] [--json]' ;;
   esac
@@ -30,6 +36,16 @@ done
 
 [[ -n "${HOME:-}" && "$HOME" = /* && -d "$HOME" && -w "$HOME" ]] || \
   fail 'HOME must be an absolute, writable directory'
+
+# DIM's existing guest registry owns durable intent; standalone use remains direct.
+if [[ "$direct" = false && -e "$HOME/.config/dim/workspace.json" ]]; then
+  command -v dim-workspace >/dev/null 2>&1 || fail 'DIM workspace service registry is unavailable; repair the workspace helpers'
+  service_helper="$HOME/.local/share/dim-agent-tools/opencode-service.bash"
+  [[ -f "$service_helper" ]] || service_helper="$(dirname -- "${BASH_SOURCE[0]}")/opencode-service.bash"
+  arguments=("$operation")
+  [[ "$json_output" = false ]] || arguments+=(--json)
+  exec bash "$service_helper" "${arguments[@]}"
+fi
 
 port="${OPENCODE_WEB_PORT:-$DEFAULT_PORT}"
 port="$(node - "$port" <<'NODE' 2>/dev/null
@@ -300,7 +316,7 @@ process.stdin.on("end", () => {
     mv -- "$temporary_credentials" "$credentials_file"
     mapfile -t credentials <"$credentials_file"
     password="${credentials[1]}"
-    if [[ -n "$owned_pid" ]]; then operation=start; else print_result stopped; exit 0; fi
+    if [[ -n "$owned_pid" && "$password_no_restart" = false ]]; then operation=start; else print_result stopped; exit 0; fi
   fi
   if [[ "$operation" = stop && -n "$owned_pid" ]]; then
     stop_process "$owned_pid" "$recorded_start" "$recorded_instance" || fail 'owned OpenCode Web process did not stop'
@@ -316,7 +332,7 @@ process.stdin.on("end", () => {
     exit 0
   fi
 fi
-require_command nohup
+[[ "$foreground" = true ]] || require_command nohup
 require_command opencode
 runtime_helper="$HOME/.local/share/dim-agent-tools/opencode-runtime.bash"
 [[ -f "$runtime_helper" ]] || runtime_helper="$(dirname -- "${BASH_SOURCE[0]}")/opencode-runtime.bash"
@@ -429,6 +445,12 @@ if [[ -f "$pid_file" && ! -L "$pid_file" ]]; then
   fi
 fi
 
+# A foreground service must own its child, never merely adopt a detached daemon.
+if [[ "$foreground" = true && -n "${server_pid:-}" ]]; then
+  stop_process "$server_pid" "$recorded_start" "$recorded_instance" || fail 'previous owned OpenCode process did not stop'
+  rm -f -- "$pid_file"
+  server_pid=""
+fi
 started_pid=""
 started_start=""
 launch_complete=false
@@ -450,6 +472,19 @@ if [[ -z "${server_pid:-}" ]]; then
   : >"$log_file"
   chmod 0600 "$log_file"
   instance_id="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+  if [[ "$foreground" = true ]]; then
+    # Exec keeps the actual server as the registry's direct child. The public
+    # lifecycle lock serializes start/stop; status refuses this record until the
+    # exact instance owns its listener and passes authenticated health checks.
+    printf '%s %s %s %s\n' "$$" "$(process_start_time "$$")" "$port" "$instance_id" >"$pid_file"
+    chmod 0600 "$pid_file"
+    export LD_PRELOAD="$runtime_preload" OPENCODE_SERVER_USERNAME="$SERVER_USERNAME" OPENCODE_SERVER_PASSWORD="$password"
+    export DIM_OPENCODE_WEB_INSTANCE_ID="$instance_id" DIM_OPENCODE_WEB_CORS_ORIGINS_CANONICAL="$cors_origins_json"
+    export DIM_OPENCODE_WEB_CONFIGURATION_FINGERPRINT="$configuration_fingerprint"
+    flock -u "$lock_fd"
+    exec {lock_fd}>&-
+    exec opencode serve --hostname 127.0.0.1 --port "$port" "${cors_arguments[@]}" </dev/null >>"$log_file" 2>&1
+  fi
   LD_PRELOAD="$runtime_preload" \
   OPENCODE_SERVER_USERNAME="$SERVER_USERNAME" \
   OPENCODE_SERVER_PASSWORD="$password" \

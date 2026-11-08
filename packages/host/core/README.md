@@ -68,3 +68,15 @@ commands to that application on the selected host.
 
 See [plugin responsibilities](../../../docs/guides/plugins.md) and
 [host/guest preparation](../../../docs/guides/plugin-scopes.md).
+
+
+## Registered guest services
+
+`dim-workspace service register --name NAME -- COMMAND...` retains an explicit
+workspace-user command in persistent HOME. Boot's `dim-workspace service resume`
+resumes all registered commands; `dim-workspace service resume NAME` resumes only
+that exact registration, allowing a plugin to reconcile its own service after
+its dependencies are ready. The existing supervisor owns the foreground child.
+`dim-workspace service remove NAME` stops that owned service and removes its
+future start intent. Plugins must verify their reserved registration's command
+before replacing or removing it; a matching name alone does not grant ownership.

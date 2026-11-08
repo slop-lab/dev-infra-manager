@@ -491,6 +491,11 @@ is implied by these source changes.
   appear inside each workspace management row, discover selected controllers,
   install pinned OpenCode/Codex explicitly and
   start, inspect or stop owned OpenCode servers without repository setup.
+  Retain explicit server start intent through workspace restart/recreation with
+  foreground guest-service ownership, the same private authentication, public
+  port/CORS settings and session data. Reconcile its existing registration after
+  channel readiness; explicit stop clears that intent without restarting other
+  project services or taking over a same-named foreign registration.
   Load the verified local OMO installation and refresh its authenticated model
   catalog before launch. Preserve role chains and variants while skipping
   nonexistent provider/model pairs during initial selection and retries.

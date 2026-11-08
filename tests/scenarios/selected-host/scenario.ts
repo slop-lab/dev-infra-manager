@@ -168,7 +168,10 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
       { workspaceId: owned.id, workspaceName: owned.name, workspaceSourceSha: profile.workspaceSourceSha,
         requiredPlugins: profile.requiredPlugins });
     if (recreatedDiscovery.generation !== discovery.generation) throw new SmokeFailure(profile.name, "recreated generic workspace discovery", "workspace bridge generation changed without an installed source change");
-    await waitForAuthenticationBoundary(url);
+    await waitForAuthenticationBoundary(url, async () => {
+      const status = record(json((await checked(profile, "recreated OpenCode failure status", ["tools", "server", recreated.name, "status", "--json"], 15_000)).stdout, "recreated server status"), "recreated server status");
+      return status.state === "running" || status.state === "stopped" ? status.state : "unavailable";
+    });
     await expectSmokeApplication(applicationUrl, token);
     const recoveredSession = record(await client.get(`/session/${inference.sessionId}`, 30_000), "recovered owned session");
     if (recoveredSession.id !== inference.sessionId) throw new SmokeFailure(profile.name, "OpenCode recovery", "authentication or the owned session did not survive recreation");
@@ -204,7 +207,18 @@ async function expectAuthenticationBoundary(urlValue: string): Promise<void> {
   if (status !== 401) throw new OperatorInputError(`shared ingress must reach the credential boundary (expected HTTP 401, received ${status})`);
 }
 
-async function waitForAuthenticationBoundary(url: string): Promise<void> {
+export function authenticationBoundaryObservation(error: unknown): string {
+  if (error instanceof Error) {
+    const status = /^shared ingress must reach the credential boundary \(expected HTTP 401, received ([0-9]{3})\)$/.exec(error.message)?.[1];
+    if (status) return `HTTP ${status}`;
+    if (error.name === "TimeoutError" || error.name === "AbortError") return "request timeout or cancellation";
+    const code = "code" in error ? error.code : undefined;
+    if (typeof code === "string" && ["ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH", "ENOTFOUND", "ETIMEDOUT"].includes(code)) return code;
+  }
+  return "request failed";
+}
+
+async function waitForAuthenticationBoundary(url: string, inspectServer: () => Promise<string>): Promise<void> {
   const deadline = Date.now() + 60_000;
   let last: unknown;
   while (Date.now() < deadline) {
@@ -212,5 +226,7 @@ async function waitForAuthenticationBoundary(url: string): Promise<void> {
     catch (error) { last = error; }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new OperatorInputError("shared ingress did not reconnect to the recreated owned server", { cause: last });
+  let backend = "unavailable";
+  try { backend = await inspectServer(); } catch { /* Retain the original boundary failure if status itself is unavailable. */ }
+  throw new OperatorInputError(`shared ingress did not reconnect to the recreated owned server (last: ${authenticationBoundaryObservation(last)}; owned server: ${backend})`, { cause: last });
 }

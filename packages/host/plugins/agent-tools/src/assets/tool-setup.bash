@@ -414,6 +414,8 @@ for helper in opencode-runtime.bash omo-model-availability.mjs; do
 done
 if [[ "$selected_tool" = opencode ]]; then
   [[ ! -L "$install_prefix/bin/dim-opencode-server" ]] || fail 'unsafe server launcher target'
+  [[ ! -L "$install_prefix/bin/opencode-service.bash" ]] || fail 'unsafe managed server helper target'
+  install -m 0700 "$asset_dir/opencode-service.bash" "$install_prefix/bin/opencode-service.bash"
   install -m 0700 "$asset_dir/opencode-server.bash" "$install_prefix/bin/dim-opencode-server"
 fi
 node - "$tool_manifest" "$install_prefix/bin/$selected_executable_name" "$selected_tool" "$selected_version" <<'NODE'
