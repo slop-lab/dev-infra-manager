@@ -71,6 +71,12 @@ the explicit main/release cold-bootstrap proof. Stage logs retain UTC timestamps
 and elapsed seconds from an available monotonic clock in `stages.jsonl`, including
 quiet success. A run selects one clock source; unavailable readings become JSON
 `null` and never replace the command's exit status or discard its private log.
+Selected-host recipes also emit bounded structured progress on stderr: the
+current command, completed command duration/exit status, scenario checkpoints
+and UTC/monotonic elapsed time. JSON mode reserves stdout for the final report;
+the CI parent forwards only this progress channel, not arbitrary child stderr.
+An `incomplete` report is preserved for diagnosis before its nonzero exit is
+rejected; blocked coverage never becomes a passing qualification.
 
 The existing QEMU provisioner owns two separate Ubuntu CP/host VMs and pinned
 inter-VM SSH. It prepares exact source/tree and package manifests, a private

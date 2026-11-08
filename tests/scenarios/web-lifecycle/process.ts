@@ -12,6 +12,7 @@ export type CommandOptions = {
   readonly env?: NodeJS.ProcessEnv;
   readonly maxOutputBytes?: number;
   readonly timeoutMs?: number;
+  readonly onStderr?: (chunk: string) => void;
 };
 
 export class CommandFailure extends Error {
@@ -49,7 +50,7 @@ export async function runCommand(file: string, arguments_: readonly string[], op
       return;
     }
     if (stream === "stdout") stdout += chunk;
-    else stderr += chunk;
+    else { stderr += chunk; options.onStderr?.(chunk); }
   };
   child.stdout.on("data", (chunk: string) => { append("stdout", chunk); });
   child.stderr.on("data", (chunk: string) => { append("stderr", chunk); });

@@ -9,6 +9,7 @@ import { runCommand } from "../../web-lifecycle/process.ts";
 import { fixtureModel } from "./provider.ts";
 import { requirePracticalReport } from "./requiredReport.ts";
 import { fixtureArtifactIdentity } from "./artifacts.ts";
+import { forwardSmokeProgress } from "../progress.ts";
 import { persistPracticalSmokeReport } from "./smokeReport.ts";
 import { cleanupIncusForwarding } from "./fixtureNetwork.ts";
 
@@ -76,7 +77,7 @@ try {
   const reportTarget = process.env.DIM_PRACTICAL_CI_REPORT;
   if (!reportTarget?.startsWith("/")) throw new Error("required practical report output is missing");
   const output = await runCommand(process.execPath, ["--import", join(repository, "tests/node_modules/tsx/dist/loader.mjs"), join(repository, "scripts/checks/selected-host-usability-smoke.ts"),
-    "--config", config, "--host", "local", "--host", "practical-ssh", "--json"], { env, cwd: repository, timeoutMs: 60 * 60_000, acceptFailure: true });
+    "--config", config, "--host", "local", "--host", "practical-ssh", "--json"], { env, cwd: repository, timeoutMs: 60 * 60_000, acceptFailure: true, onStderr: forwardSmokeProgress() });
   const report = requirePracticalReport(await persistPracticalSmokeReport(reportTarget, output), sourceSha, image);
   const after = await fixtureArtifactIdentity(bundle, repository), before = await fixtureArtifactIdentity(beforeBundle, repository);
   if (after.sourceSha !== sourceSha || after.sourceTree !== sourceTree || before.closureSha256 === after.closureSha256) throw new Error("practical fixture artifacts do not bind the exact distinct reviewed sources");

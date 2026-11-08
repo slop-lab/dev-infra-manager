@@ -59,12 +59,13 @@ export function dim(host: string, args: readonly string[], acceptFailure: boolea
   });
 }
 
-export function selectedCommandTracker(onCommand?: (evidence: CommandEvidence) => void, writeFailure?: FixtureFailureWriter) {
+export function selectedCommandTracker(onCommand?: (evidence: CommandEvidence) => void, writeFailure?: FixtureFailureWriter, onStart?: (step: string) => void) {
   const commands: CommandEvidence[] = [];
   return { commands, async checked(profile: HostProfile, step: string, args: readonly string[], timeoutMs = 120_000, target?: FixtureCommandTarget): Promise<CommandResult> {
     if (target !== undefined) assertFixtureTarget(profile, step, args, target);
     let failureReceipt: CommandEvidence["failureReceipt"], failureReceiptUnavailable = false;
     const started = performance.now(); let exitCode: number | null = null, diagnostic: VmReadinessDiagnostic | undefined;
+    onStart?.(step);
     try {
       const result = await dim(profile.name, args, true, timeoutMs); exitCode = result.exitCode;
       if (result.exitCode !== 0) {

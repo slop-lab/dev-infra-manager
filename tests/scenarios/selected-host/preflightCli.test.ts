@@ -18,14 +18,14 @@ it.each([false, "empty"] as const)("rejects exit-zero doctor output with failed 
       sshPublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFixtureSelectedHostKey fixture@example.invalid",
       llm: { configFile: join(root, "not-read.json"), project: "fixture", route: "default", provider: "dim-responses", model: "reviewed-model", operatorConnectionFile: join(root, "not-read-operator.json") },
     }] }), { mode: 0o600 });
-    // Ignore only the pinned tsx loader deprecation; application stderr must stay empty.
+    // Ignore only the pinned loader deprecation; progress must not expose private diagnostics.
     const child = spawn(process.execPath, ["--disable-warning=DEP0205", "--import", "tsx", script, "--config", config, "--host", "fixture", "--preflight-only", "--json"], {
       cwd: new URL("../../", import.meta.url).pathname, env: { PATH: `${bin}:${process.env.PATH ?? ""}`, HOME: root }, stdio: ["ignore", "pipe", "pipe"], timeout: 10_000,
     });
     let stdout = "", stderr = "";
     child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); }); child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
     const code = await new Promise<number | null>((resolve, reject) => { child.once("error", reject); child.once("close", resolve); });
-    expect(code).toBe(2); expect(stderr).toBe(""); expect(stdout).not.toContain("PRIVATE_DIAGNOSTIC");
+    expect(code, stderr).toBe(2); expect(stderr).toContain("[selected-host] "); expect(stderr).not.toContain("PRIVATE_DIAGNOSTIC"); expect(stdout).not.toContain("PRIVATE_DIAGNOSTIC");
     expect(JSON.parse(stdout)).toMatchObject({ outcome: "unavailable", completion: "not-assessed", preflights: [{ host: "fixture", ok: false }] });
   } finally { await rm(root, { recursive: true, force: true }); }
 });

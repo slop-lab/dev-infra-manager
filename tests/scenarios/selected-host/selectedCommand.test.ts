@@ -14,11 +14,14 @@ it("retains failed command exit evidence without recording scripts, prompts or r
   await writeFile(path.join(bin, "dim"), `#!${process.execPath}\nprocess.stderr.write("PRIVATE_STDERR");process.exit(7);\n`, { mode: 0o700 });
   vi.stubEnv("DIM_BIN", path.join(bin, "dim"));
   try {
-    const tracker = selectedCommandTracker();
+    const events: string[] = [];
+    const tracker = selectedCommandTracker(evidence => { events.push(`finished:${evidence.exitCode}`); }, undefined, step => { events.push(`started:${step}`); });
     await expect(tracker.checked(profile, "scoped command", ["exec", "dim-smoke-test", "--", "node", "-e", "PRIVATE_SCRIPT"]))
       .rejects.toThrow("command exited 7");
     expect(tracker.commands[0]).toMatchObject({ step: "scoped command", exitCode: 7, surface: ["dim", "--host", "fixture", "exec", "<owned-workspace>", "--", "node"] });
     expect(JSON.stringify(tracker.commands)).not.toContain("PRIVATE");
+    expect(events).toEqual(["started:scoped command", "finished:7"]);
+    expect(tracker.commands[0]?.durationMilliseconds).toBeGreaterThan(0);
   } finally { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); }
 });
 

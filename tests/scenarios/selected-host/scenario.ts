@@ -24,7 +24,7 @@ export type SmokeResult = { readonly workspace: OwnedWorkspace; readonly runtime
 
 export async function runHostSmoke(selected: HostProfile, options: SmokeOptions = {}): Promise<SmokeResult> {
   const profile = { ...selected, workspace: smokeWorkspaceName(selected.workspace) };
-  const { checked, commands } = selectedCommandTracker(options.onCommand, options.writeFixtureFailure);
+  const { checked, commands } = selectedCommandTracker(options.onCommand, options.writeFixtureFailure, step => options.onProgress?.(step, "progress"));
   const endpoints: EndpointEvidence[] = [];
   let owned: OwnedWorkspace | undefined;
   let attemptedCreate = false, branchAttempted = false, candidateCommit: string | undefined;

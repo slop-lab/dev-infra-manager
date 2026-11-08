@@ -7,6 +7,7 @@ import { preflightHost, runHostSmoke } from "../../tests/scenarios/selected-host
 import { monitorInspection } from "../../tests/scenarios/selected-host/monitorCommand.ts";
 import { verifyIsolatedInstallationUpdate } from "../../tests/scenarios/selected-host/isolatedUpdate.js";
 import { runCommand } from "../../tests/scenarios/web-lifecycle/process.js";
+import { smokeProgress } from "../../tests/scenarios/selected-host/progress.ts";
 import { fixtureFailureWriter, type CommandEvidence } from "../../tests/scenarios/selected-host/selectedCommand.js";
 import type { OrdinaryRuntimeVersions } from "../../tests/scenarios/selected-host/ordinaryLifecycle.js";
 
@@ -22,7 +23,7 @@ async function main(): Promise<void> {
     process.stdout.write(`${helpText}\n`);
     return;
   }
-  const input = parseOperatorArguments(values);
+  const input = parseOperatorArguments(values), progress = smokeProgress();
   const configuration = parseSmokeConfiguration(JSON.parse(await readFile(input.configPath, "utf8")));
   const selected = input.hosts.map((name) => {
     const profile = configuration.hosts.find((candidate) => candidate.name === name);
@@ -32,7 +33,7 @@ async function main(): Promise<void> {
   let available = true;
   const preflights: { readonly host: string; readonly ok: boolean; readonly details: readonly string[] }[] = [];
   for (const profile of selected) {
-    if (!input.json) process.stdout.write(`progress\t${profile.name}\tchecking selected-host version, capabilities and ownership\n`);
+    progress.phase(profile.name, "checking selected-host version, capabilities and ownership");
     const result = await preflightHost(profile, configuration.installedSourceSha);
     preflights.push({ host: profile.name, ...result });
     if (!input.json) for (const detail of result.details) process.stdout.write(`${result.ok ? "ok" : "unavailable"}\t${profile.name}\t${detail}\n`);
@@ -57,15 +58,15 @@ async function main(): Promise<void> {
     ? fixtureFailureWriter(join(dirname(configurationReportPath()), "selected-command-diagnostics.jsonl")) : undefined;
   const results = [];
   for (const profile of selected) {
-    if (!input.json) process.stdout.write(`progress\t${profile.name}\tstarting selected-host usability smoke\n`);
+    progress.phase(profile.name, "starting selected-host usability smoke");
     const observedCommands: CommandEvidence[] = [];
     let observedRuntimeVersions: OrdinaryRuntimeVersions | undefined;
     const smokeOptions = { ...(writeFixtureFailure === undefined ? {} : { writeFixtureFailure }),
-      onCommand: (evidence: CommandEvidence) => observedCommands.push(evidence),
+      onCommand: (evidence: CommandEvidence): void => { observedCommands.push(evidence); progress.command(profile.name, evidence); },
       onRuntimeVersions: (versions: OrdinaryRuntimeVersions): void => {
         observedRuntimeVersions = versions;
         if (!input.json) process.stdout.write(`runtime-versions\t${profile.name}\tnode=${versions.node}\tkernel=${versions.kernel}\tnested-docker=${versions.nestedDocker}\n`);
-      }, ...(input.json ? {} : { onProgress: (step: string, phase: "pass" | "progress" | "incomplete"): void => { process.stdout.write(`${phase}\t${profile.name}\t${step}\n`); } }) };
+      }, onProgress: (step: string, phase: "pass" | "progress" | "incomplete"): void => { progress.phase(profile.name, step, phase); } };
     try {
       const { workspace, runtimeVersions, auxiliaryVm, inference, sessionModel, monitor, lanes, commands, endpoints } = await runHostSmoke(profile, smokeOptions);
       const outcome = lanes.some((lane) => lane.status === "BLOCKED") || monitor !== null && monitorInspection(monitor) !== "inspected" ? "incomplete" : "passed";
@@ -79,11 +80,13 @@ async function main(): Promise<void> {
       if (!input.json) process.stderr.write(`FAIL\t${profile.name}\t${step}: ${detail}\n`);
     }
   }
+  progress.phase("isolated-update", "starting isolated installation update");
   const update = configuration.isolatedUpdate === undefined
     ? { status: "BLOCKED", reason: "No reviewed isolated update facades/bundles/image supplied; installed fleet was not modified" }
     : await verifyIsolatedInstallationUpdate(configuration.isolatedUpdate).then((evidence) => ({ status: "PASS", ...evidence }), (error: unknown) => ({
       status: "FAIL", reason: error instanceof OperatorInputError || error instanceof AggregateError ? error.message : "Isolated update failed; inspect private fixture diagnostics"
     }));
+  progress.phase("isolated-update", "isolated installation update finished", update.status === "PASS" ? "pass" : "incomplete");
   const outcome = results.some((result) => result.outcome === "failed") || update.status === "FAIL" ? "failed"
     : results.every((result) => result.outcome === "passed") && update.status === "PASS" ? "passed" : "incomplete";
   if (input.json) process.stdout.write(`${JSON.stringify({ outcome, completion: "not-assessed", driverSourceSha, installedSourceSha: configuration.installedSourceSha, preflights, results, isolatedUpdate: update })}\n`);
