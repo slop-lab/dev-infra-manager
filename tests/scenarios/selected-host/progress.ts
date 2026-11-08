@@ -1,3 +1,4 @@
+import { incusPreparationLabels } from "./ci/preparationTiming.ts";
 import type { CommandEvidence } from "./selectedCommand.ts";
 import { closeSync, fstatSync, openSync, readSync, constants } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -47,7 +48,7 @@ export function forwardSmokeProgress(write: (line: string) => void = line => { p
   };
 }
 
-const preparationLabels = new Set(["host-cold-bootstrap", "host-source-install", "host-source-build", "host-service-images", "host-installer-checks", "host-current-pack", "host-operator-prepare", "host-service-prepare", "host-before-pack", "host-fixture-prepare", "host-guest-preparation"]);
+const preparationLabels = new Set<string>([...incusPreparationLabels, "host-cold-bootstrap", "host-source-install", "host-source-build", "host-service-images", "host-installer-checks", "host-current-pack", "host-operator-prepare", "host-service-prepare", "host-before-pack", "host-fixture-prepare", "host-guest-preparation"]);
 
 /** Read only newly completed lines, bounded even when the private raw log is huge. */
 export function readPracticalProgress(log: string, offset: number): { offset: number; lines: string[] } {
