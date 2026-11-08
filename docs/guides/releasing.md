@@ -134,6 +134,13 @@ or a host pnpm installation. Its root-owned fixtures exist only inside its
 disposable container. `just check-source-native` is for an already pinned,
 disposable environment, not an ordinary hosted-runner user or a live sudo shell.
 
+Hosted `verify.yml` is a portable compatibility signal on pinned Node 24.19.0
+and 26.5.0, not full source or physical-runtime acceptance. The managed DIM
+`source` required job still runs the complete workspace build, type checks and
+tests through `scripts/ci/source.bash`, using its actual digest-pinned Node image
+and worker resource profile. Retain that exact-candidate result independently;
+do not infer a full dual-Node DIM matrix from the hosted portable checks.
+
 The GitHub workflows `.github/workflows/verify.yml`,
 `.github/workflows/integration.yml`, and `.github/workflows/examples.yml` must run against the canonical candidate
 SHA. Dispatch ordinary and `qemu-kvm` integration lanes on fresh matching

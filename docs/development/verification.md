@@ -117,14 +117,30 @@ qualification. Such account qualification remains an optional authorized lane.
 
 ## Source checks and logs
 
-`just check-source` runs the same complete gate as GitHub CI in a disposable,
+GitHub's `verify.yml` runs portable checks on pinned Node 24.19.0 and 26.5.0:
+locked dependencies, CLI–host contract type checking/build/packing, frozen wire
+checks, actual local/SSH transport, host source architecture and content-bound
+package identity. Run `node scripts/checks/check-portable-source.ts` with one
+of those toolchains to reproduce it. Per-stage logs and the actual contract
+package archive are retained. A green hosted check is neither the complete
+source gate nor hardware acceptance.
+
+`just check-source` runs the complete developer gate in a disposable,
 pinned Node 24 container: type checks, builds, tests, executable example recipes,
 privileged service fixtures, package shapes and the production dependency audit. Select the other
-supported lane with `DIM_SOURCE_NODE_MAJOR=26 just check-source`. Both lanes use
-a fixed two-CPU container limit on local hosts and GitHub runners.
+supported lane with `DIM_SOURCE_NODE_MAJOR=26 just check-source`. Both complete developer lanes use
+a fixed two-CPU container limit. The portable hosted jobs do not run that container.
 `just check-source-native` runs type checks, builds, ordinary tests and the
 examples' lightweight `verify` stages with the installed supported
 toolchain; it does not run privileged fixtures or VM example stages.
+
+The authoritative managed DIM `source` job remains the full locked workspace
+build, type checks and ordinary test suite. `.dim/ci/runner.yml` selects
+`scripts/ci/source.bash`; `.dim/repos.yml` requires that ordinary-sysbox job.
+Its Node version and resource profile come from the operator's digest-pinned
+job image and worker slot; it is not automatically a Node 24/26 matrix.
+Review the actual descriptor and runtime evidence. Cold/cached practical VM
+qualification remains a separate explicit hardware workflow and release gate.
 
 The repository's DIM source job, `scripts/ci/source.bash`, prepares pinned pnpm
 10.13.1 and Just 1.43.1 inside the disposable job. Just uses the same verified
