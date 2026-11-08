@@ -9,11 +9,12 @@ const descriptor = { ...selected.descriptor, jobImage: selected.descriptor.runne
   bounds: { ...selected.descriptor.bounds, cpu: "4", memoryBytes: String(20 * 1024 ** 3), wallClockSeconds: "10800" } };
 it("requires operator image identity and sufficient hardware bounds without changing tiny QEMU", () => {
   expect(requireHardwareProfile(null, selected.descriptor)).toBe(false);
-  expect(requireHardwareProfile("ubuntu-hardware-v1", descriptor)).toBe(true);
+  expect(requireHardwareProfile("ubuntu-hardware-v2", descriptor)).toBe(true);
+  expect(() => requireHardwareProfile("ubuntu-hardware-v1", descriptor)).toThrow("unknown");
   expect(() => requireHardwareProfile("candidate-selected", descriptor)).toThrow("unknown");
-  expect(() => requireHardwareProfile("ubuntu-hardware-v1", { ...descriptor, jobImage: "other@sha256:" + "a".repeat(64) })).toThrow("identical");
+  expect(() => requireHardwareProfile("ubuntu-hardware-v2", { ...descriptor, jobImage: "other@sha256:" + "a".repeat(64) })).toThrow("identical");
   for (const bounds of [{ ...descriptor.bounds, memoryBytes: "1024" }, { ...descriptor.bounds, cpu: "2" }, { ...descriptor.bounds, wallClockSeconds: "3600" }])
-    expect(() => requireHardwareProfile("ubuntu-hardware-v1", { ...descriptor, bounds })).toThrow("20 GiB");
+    expect(() => requireHardwareProfile("ubuntu-hardware-v2", { ...descriptor, bounds })).toThrow("20 GiB");
 });
 it("separates private hardware disks from the only candidate-visible workspace share", () => {
   const input = { grant: selected, root: "/private/job" }, identity = { uid: 1000, gid: 1000, kvmGroup: 108 };

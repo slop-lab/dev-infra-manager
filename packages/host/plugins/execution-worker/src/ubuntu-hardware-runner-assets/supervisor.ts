@@ -20,8 +20,9 @@ const root = join(directory, "root.qcow2"), scratch = join(directory, "scratch.r
 run("qemu-img", ["create", "-f", "qcow2", "-F", "qcow2", "-b", "/opt/dim/ubuntu.qcow2", root, "24G"]);
 run("qemu-img", ["create", "-f", "raw", scratch, "64G"]);
 const bootstrap = readFileSync("/opt/dim/guest-run.bash", "utf8").replaceAll("@DIM_PIDS@", pids);
-const cloud = { users: [{ name: "dim", uid: 1000, groups: ["sudo"], sudo: "ALL=(ALL) NOPASSWD:ALL", shell: "/bin/bash", lock_passwd: true }],
-  ssh_pwauth: false, disable_root: true, package_update: false, package_upgrade: false,
+const cloud = { users: [{ name: "dim", uid: 1000, groups: ["sudo"], sudo: "ALL=(ALL) NOPASSWD:ALL", shell: "/bin/bash", lock_passwd: true, ssh_authorized_keys: [readFileSync(join(directory, "operator-key.pub"), "utf8").trim()] }],
+  ssh_pwauth: false, disable_root: true, ssh_deletekeys: true,
+  ssh_keys: { ed25519_private: readFileSync(join(directory, "guest-host-key"), "utf8"), ed25519_public: readFileSync(join(directory, "guest-host-key.pub"), "utf8").trim() }, package_update: false, package_upgrade: false,
   write_files: [{ path: "/usr/local/sbin/dim-hardware-job", permissions: "0700", encoding: "b64", content: Buffer.from(bootstrap).toString("base64") }],
   runcmd: [["/bin/bash", "/usr/local/sbin/dim-hardware-job"]] };
 writeFileSync(join(directory, "user-data"), "#cloud-config\n" + JSON.stringify(cloud), { flag: "wx", mode: 0o600 });
@@ -31,7 +32,7 @@ const child = spawn("qemu-system-x86_64", ["-machine", "q35,accel=kvm", "-cpu", 
   "-nodefaults", "-no-reboot", "-display", "none", "-serial", "stdio", "-device", "virtio-rng-pci", "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04",
   "-chardev", `file,id=result,path=${join(directory, "exit-status")}`, "-device", "virtio-serial-pci", "-device", "virtserialport,chardev=result,name=dim.result",
   "-drive", `file=${root},if=virtio,format=qcow2`, "-drive", `file=${scratch},if=virtio,format=raw`, "-drive", `file=${seed},if=virtio,format=raw,readonly=on`,
-  "-netdev", "user,id=jobnet", "-device", "virtio-net-pci,netdev=jobnet",
+  "-netdev", "user,id=jobnet,hostfwd=tcp:0.0.0.0:2222-:22", "-device", "virtio-net-pci,netdev=jobnet",
   "-fsdev", "local,id=job,path=/run/dim/job,security_model=none,readonly=on", "-device", "virtio-9p-pci,fsdev=job,mount_tag=job",
   "-fsdev", "local,id=tools,path=/opt/dim/tools,security_model=none,readonly=on", "-device", "virtio-9p-pci,fsdev=tools,mount_tag=tools",
   "-fsdev", "local,id=workspace,path=/run/dim/workspace,security_model=mapped-xattr", "-device", "virtio-9p-pci,fsdev=workspace,mount_tag=workspace"], { stdio: "inherit" });

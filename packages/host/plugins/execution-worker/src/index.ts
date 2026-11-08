@@ -22,6 +22,12 @@ export const hostPlugin: WorkspaceHostPlugin = {
       const { runExecutionConsole } = await import("./console.js");
       await runExecutionConsole(args.slice(2)); return;
     }
+    if (command === "execution" && action === "worker" && value === "ssh-info") {
+      const config = option(extra, "--config"), execution = option(extra, "--execution");
+      if (!config || !execution || extra.length !== 5 || extra[4] !== "--json") throw usage();
+      const { hardwareSshInfo } = await import("./hardwareSsh.js");
+      console.log(JSON.stringify(await hardwareSshInfo(config, execution, context.runner, context.signal))); return;
+    }
     if (command === "execution" && action === "worker" && value === "enroll") {
       const connection = option(extra, "--connection"), spec = option(extra, "--spec"), output = option(extra, "--output");
       if (connection === undefined || spec === undefined || output === undefined || extra.length !== 6) throw usage();
@@ -61,7 +67,7 @@ function option(args: readonly string[], name: string): string | undefined {
   const index = args.indexOf(name); return index < 0 ? undefined : args[index + 1];
 }
 function usage(): UserError {
-  return new UserError("usage: dim execution capacity ABS_CONFIG | dim execution worker enroll --connection ABS --spec ABS --output ABS | dim execution worker export --connection ABS --spec ABS --output ABS | dim execution worker discover --connection ABS --json | dim execution worker CONFIG | dim execution qemu-image IMAGE [--profile ubuntu-hardware] [--ubuntu-image ABS]");
+  return new UserError("usage: dim execution worker ssh-info --config ABS --execution UUID --json | dim execution capacity ABS_CONFIG | dim execution worker enroll --connection ABS --spec ABS --output ABS | dim execution worker export --connection ABS --spec ABS --output ABS | dim execution worker discover --connection ABS --json | dim execution worker CONFIG | dim execution qemu-image IMAGE [--profile ubuntu-hardware] [--ubuntu-image ABS]");
 }
 function workerOptions(context: Parameters<NonNullable<WorkspaceHostPlugin["run"]>>[1]) {
   return { runner: context.runner, taskHandlers: executionTaskHandlers(context.extensions ?? []),

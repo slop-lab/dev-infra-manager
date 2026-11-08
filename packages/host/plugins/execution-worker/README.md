@@ -49,7 +49,9 @@ operator image label selects this mode, not a candidate environment variable.
 Ordinary Sysbox and the existing small QEMU runner retain their behavior.
 
 The supervisor stays unprivileged, has only KVM and exact owned job/workspace/
-private disk mounts, and exposes no Docker socket, host credentials or SSH port.
+private disk mounts, and exposes no Docker socket or reusable host credentials.
+This profile provides temporary emergency operator SSH by default, through an
+ephemeral port published only on the selected execution host's loopback.
 Inside the full disposable guest, the job has normal sudo so it can provision
 nested disposable machines. A fresh non-root guest process must successfully
 create and close a nested KVM VM before the job starts. CPU/memory and supervisor
@@ -62,6 +64,53 @@ mount is read-only; evidence is written through the dedicated
 are outside that share. A private virtio exit channel preserves the actual job
 exit status and must agree with the VM termination signal. Building/enrolling
 this profile does not itself qualify any source commit or run a hardware gate.
+## Emergency access to a running hardware verification VM
+
+The worker requires the normal host OpenSSH client tools (`ssh` and
+`ssh-keygen`). Each hardware attempt creates a fresh login key and separate
+fresh guest server key beneath its owned mode-0700 `hardware` directory. Only
+the login public key enters the guest; its private key is never in the job,
+workspace or tools shares. Cloud-init replaces image SSH host keys with the
+fresh server identity. Password/root login and agent forwarding are disabled.
+The new image is identified by `ubuntu-hardware-v2`; earlier v1 images are
+rejected because they do not provide this access contract. Rebuild the trusted
+image normally and select its reviewed immutable digest. SSH starts before APT/bootstrap, so an operator can investigate a stalled
+bootstrap as well as a running job. It remains subject to the ordinary job
+lease, deadline and exact cleanup; access does not keep a failed job alive.
+
+Use the normal selected host to discover the endpoint for an exact execution:
+
+```bash
+dim --host devbox execution worker ssh-info --config /absolute/private/worker.json \
+  --execution 00000000-0000-0000-0000-000000000001 --json
+```
+
+The response contains `sshConfig` and a command array, never key contents or
+worker credentials. Discovery checks the current worker assignment, private
+root identity, exact owned running supervisor and its sole host-loopback port.
+Run the returned `ssh -F ABS_PRIVATE_SSH_CONFIG dim-verification` **on that
+execution host**. For a remote host, use its existing operator transport, for
+example `ssh -t devbox -- ssh -F ABS_REMOTE_SSH_CONFIG dim-verification`; the
+local machine cannot use a private key or loopback port that exists remotely.
+No new interactive CLI–host protocol is needed. The generated configuration
+pins the fresh server key with `StrictHostKeyChecking yes` and disables agent
+forwarding. Do not copy the key into a workspace, disable host-key checking or
+publish the port publicly.
+
+Docker publishes `127.0.0.1::2222/tcp` on the real execution host; QEMU forwards
+the supervisor's port2222 to guest22. Container loopback alone would not be
+reachable through that host publication. Host/none supervisor networks are
+rejected for this profile. Normal exact attempt cleanup removes its supervisor
+port, private keys and SSH configuration together. An ended or changed attempt
+is unavailable, even if historical discovery output remains. Small QEMU and
+Sysbox do not gain SSH listeners.
+
+The separate baseline/examples guest bootstrap already creates fresh login and
+host keys and a pinned host-loopback SSH forward per owned role VM. Its trusted
+`BOOTSTRAP_SSH`/`BOOTSTRAP_SCP` arrays and private role root are the corresponding
+access path when operating that fixture directly; those inner ports are local
+to its owning outer verification guest, not public host ports.
+
 ## Durable execution artifacts
 
 CI backends spool the complete accepted stdout/stderr within the reviewed output bound, alongside existing64KiB diagnostics. Jobs opt into file capture by writing regular files below the fixed `DIM_ARTIFACTS_DIR=/workspace/.dim-ci-artifacts`; they appear as `files/<relative-path>`, with reserved `logs/stdout.log` and `logs/stderr.log`. Symlinks, special files, changed files, traversal and oversized collections are rejected. Limits are128files,128MiB/file and256MiB/job.

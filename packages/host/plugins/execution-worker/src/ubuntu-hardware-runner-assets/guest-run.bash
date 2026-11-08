@@ -16,6 +16,11 @@ finish() {
   poweroff -f
 }
 trap finish EXIT
+# Emergency operator SSH is ready independently of later APT/bootstrap work.
+# Its fresh public key and server keys were supplied by this attempt's trusted supervisor.
+install -m 0755 -d /etc/ssh/sshd_config.d
+printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' 'PermitRootLogin no' 'AllowUsers dim' 'AllowAgentForwarding no' > /etc/ssh/sshd_config.d/00-dim-verification.conf
+systemctl enable --now ssh
 mkdir -p /run/dim/job /mnt/dim-tools /mnt/dim-source /workspace /scratch
 chmod 0755 /run/dim
 mount -t 9p -o trans=virtio,ro job /run/dim/job

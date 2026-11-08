@@ -1,3 +1,4 @@
+import { prepareHardwareSsh, publishHardwareSsh, hardwareSshPort } from "../hardwareSsh.js";
 import { acquisitionOperation, writeAcquisitionDiagnostic } from "../acquisitionDiagnostics.js";
 import type { HostExecutionRouting } from "@slop-lab/dim-host-core/plugin-api";
 import { chmod, mkdir, stat, statfs, writeFile } from "node:fs/promises";
@@ -29,6 +30,7 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
         const disk = await statfs(input.root, { bigint: true });
         if (disk.type === 0x01021994n || disk.bavail * disk.bsize < 80n * 1024n ** 3n) throw new Error("hardware worker state requires 80 GiB free on disk, not tmpfs");
         await mkdir(join(input.root, "hardware"), { mode: 0o700 });
+        await prepareHardwareSsh(join(input.root, "hardware"), input.runner, signal);
       }
       const job = join(input.root, "job"), workspace = join(input.root, "workspace"), script = join(job, "script");
       await mkdir(job, { mode: 0o700 });
@@ -66,6 +68,7 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
       const launched = await input.runner.run("docker", qemuContainerArguments(input, { uid, gid, kvmGroup: kvm.gid }, routing, hardware), { signal });
       if (launched.exitCode !== 0 || !/^[0-9a-f]{64}$/.test(launched.stdout.trim())) throw new Error("QEMU supervisor launch failed");
       const id = launched.stdout.trim();
+      if (hardware) await publishHardwareSsh(join(input.root, "hardware"), input.grant, input.runner, signal);
       const [waited, logs] = await Promise.all([
         input.runner.run("docker", ["wait", id], { signal }),
         input.runner.runStreaming("docker", ["logs", "--follow", id], { signal, stdout: output.stdout, stderr: output.stderr })
@@ -95,6 +98,7 @@ async function cleanupQemu(runner: BackendInput["runner"], grant: BackendInput["
 }
 export function qemuContainerArguments(input: Pick<BackendInput, "grant" | "root">,
   identity: { uid: number; gid: number; kvmGroup: number }, routing?: HostExecutionRouting, hardware = false): string[] {
+  if (hardware && ["host", "none"].includes(routing?.network ?? "bridge")) throw new Error("verification SSH requires an isolated bridge network");
   const descriptor = input.grant.descriptor;
   const supervisorMemory = BigInt(descriptor.bounds.memoryBytes) + 256n * 1024n * 1024n;
   return ["run", "--detach", "--init", "--name", containerName(input.grant), "--read-only", "--network", routing?.network ?? "bridge",
@@ -104,7 +108,7 @@ export function qemuContainerArguments(input: Pick<BackendInput, "grant" | "root
     ...ownershipLabels(input.grant, "qemu").flatMap((label) => ["--label", label]),
     "--mount", `type=bind,src=${join(input.root, "job")},dst=/run/dim/job,readonly`,
     "--mount", `type=bind,src=${join(input.root, "workspace")},dst=/run/dim/workspace`,
-    ...(hardware ? ["--mount", `type=bind,src=${join(input.root, "hardware")},dst=/run/dim/hardware`] : []),
+    ...(hardware ? ["--publish", `127.0.0.1::${hardwareSshPort}/tcp`, "--mount", `type=bind,src=${join(input.root, "hardware")},dst=/run/dim/hardware`] : []),
     "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=16m", descriptor.runnerBaseImage,
     "/usr/local/bin/dim-native-qemu-run", "/run/dim/job/descriptor.json", "/run/dim/job/script", "/run/dim/workspace",
     descriptor.jobImage, descriptor.bounds.cpu, descriptor.bounds.memoryBytes, descriptor.bounds.pids];

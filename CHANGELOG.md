@@ -60,7 +60,8 @@ is implied by these source changes.
   code, and connect the private execution query role during local installation.
   Offer an explicit Ubuntu hardware execution profile with nested KVM and
   disk-backed temporary storage and explicit bounded source manifests for exact
-  scheduled practical VM validation; ordinary source checks keep their existing
+  scheduled practical VM validation, with temporary host-loopback emergency SSH
+  and fresh pinned per-VM keys for operator diagnosis; ordinary source checks keep their existing
   lightweight execution path. Allocate worker capacity from explicitly bounded
   operator pools as compatible work queues, and drain idle workers without
   interrupting execution, result upload or owned cleanup. Keep scheduling

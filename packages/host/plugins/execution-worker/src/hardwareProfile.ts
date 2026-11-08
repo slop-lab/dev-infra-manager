@@ -1,7 +1,7 @@
 import type { BackendInput } from "./backend.js";
 
 export const hardwareRunnerLabel = "io.dim.execution.runner-profile";
-export const hardwareRunnerProfile = "ubuntu-hardware-v1";
+export const hardwareRunnerProfile = "ubuntu-hardware-v2";
 
 /** Operator-pinned image metadata selects the full OS; candidate input cannot. */
 export function requireHardwareProfile(value: unknown, descriptor: Pick<BackendInput["grant"]["descriptor"],

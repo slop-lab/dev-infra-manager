@@ -11,4 +11,4 @@ COPY --from=node --chmod=0555 /usr/local/bin/node /opt/dim/tools/node
 COPY --chmod=0444 supervisor.ts guest-run.bash /opt/dim/
 COPY --chmod=0555 dim-native-qemu-run /usr/local/bin/dim-native-qemu-run
 RUN printf '{"type":"module"}\n' > /opt/dim/package.json && chmod 0555 /opt/dim /opt/dim/tools && ln -s /opt/dim/tools/node /usr/local/bin/node
-LABEL io.dim.execution.runner-profile="ubuntu-hardware-v1"
+LABEL io.dim.execution.runner-profile="ubuntu-hardware-v2"

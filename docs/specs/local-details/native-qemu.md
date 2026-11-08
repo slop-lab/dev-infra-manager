@@ -21,8 +21,9 @@ limit includes the guest bound plus 256 MiB of supervisor overhead.
 
 Job metadata/script and the guest-root image are read-only mounts. The writable
 workspace uses mapped-xattr 9p metadata so guest ownership changes do not change
-host ownership. Guests use user-mode networking without host port forwarding or reusable operator
-credentials. Host-side private acquisition material is outside guest mounts.
+host ownership. Guests use user-mode networking without reusable operator credentials. Small
+QEMU guests have no host port forwarding; the explicit full Ubuntu profile
+below adds a temporary host-loopback emergency SSH endpoint. Host-side private acquisition material is outside guest mounts.
 
 Wall time, output bounds, cancellation, process observation and exact owned
 cleanup produce the shared terminal result. Failed or uncertain cleanup keeps
@@ -38,7 +39,7 @@ root-container ownership test cannot establish physical KVM mechanics. See
 ## Explicit full Ubuntu hardware profile
 
 An operator-pinned runner image MAY declare
-`io.dim.execution.runner-profile=ubuntu-hardware-v1`. This mode MUST require the
+`io.dim.execution.runner-profile=ubuntu-hardware-v2`. This mode MUST require the
 identical immutable runner/job image digest, at least 4 CPU and 20 GiB memory,
 and a three-hour wall budget. Unknown labels MUST fail closed. It MUST NOT be
 selected by candidate environment or a repository image reference. Small QEMU
@@ -82,3 +83,27 @@ enforced outside the VM. A private virtio channel MUST preserve the actual
 exit code and agree with QEMU termination; bootstrap success is not job success.
 The fixed job artifact directory is `/workspace/.dim-ci-artifacts`; only that
 share returns candidate evidence, never the private hypervisor disks.
+
+## Emergency operator SSH for full hardware verification
+
+The explicit Ubuntu hardware profile MUST provision emergency SSH by default.
+The trusted worker MUST generate fresh per-attempt login and guest server keys
+under its exact owned private hardware root. Only the login public key and this
+guest's server identity MAY enter cloud-init. Reusable host credentials, login
+private keys and host sockets MUST remain outside all guest shares. Password
+and root login MUST be disabled; SSH MUST start before dependency bootstrap.
+
+The owned supervisor MUST publish an ephemeral SSH port on the actual execution
+host's127.0.0.1 interface only, with a fixed supervisor-to-guest22 forward.
+Host-network and network-none configurations MUST fail closed for this profile.
+The trusted operator discovery command MUST validate the private worker config,
+current exact assignment/root identity and the exact owned running container
+and loopback publication. It MUST NOT accept a candidate-selected path, key,
+port or privilege. It returns only connection metadata; the generated private
+SSH configuration MUST pin the fresh guest host key and disable agent forwarding.
+Remote access uses the selected host's normal trusted operator SSH transport.
+
+Emergency access MUST NOT extend lease, deadline, resource or cleanup lifetime.
+Existing exact owned container/root cleanup MUST remove the endpoint and its
+private access material. Failed or uncertain cleanup remains fenced under the
+normal worker contract. Small QEMU and Sysbox are unchanged.
