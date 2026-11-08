@@ -203,6 +203,58 @@ http.createServer((q,s)=>{s.statusCode=q.headers.authorization===auth?200:401;s.
   } finally { await f.run("stop").catch(() => {}); await rm(f.root, { recursive: true, force: true }); }
 }, 40_000);
 
+it("waits for an owned startup holding the launch lock during model discovery", async () => {
+  const f = await fixture();
+  const registry = fileURLToPath(new URL("../../../../packages/host/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
+  const entered = path.join(f.home, "models-entered"), release = path.join(f.home, "models-release");
+  let startup: ReturnType<typeof f.run> | undefined;
+  try {
+    await writeFile(path.join(f.bin, "dim-workspace"), `#!/bin/sh\nexec '${process.execPath}' '${registry}' "$@"\n`, { mode: 0o700 });
+    await mkdir(path.join(f.home, ".config/dim"), { recursive: true });
+    await writeFile(path.join(f.home, ".config/dim/workspace.json"), "{}", { mode: 0o600 });
+    await writeFile(path.join(f.bin, "opencode"), `#!${process.execPath}
+// @ts-check
+const fs=require('node:fs'),http=require('node:http');
+if(process.argv.includes('--version')){console.log('1.18.31');process.exit(0);}
+if(process.argv.includes('models')){fs.writeFileSync('${entered}','');const t=setInterval(()=>{if(fs.existsSync('${release}')){clearInterval(t);console.log('openai/test-model\\n{\\n  "id": "test-model"\\n}');}},20);}
+else{const auth='Basic '+Buffer.from(process.env.OPENCODE_SERVER_USERNAME+':'+process.env.OPENCODE_SERVER_PASSWORD).toString('base64');http.createServer((q,s)=>{s.statusCode=q.headers.authorization===auth?200:401;s.end(JSON.stringify({healthy:true}));}).listen(Number(process.env.OPENCODE_WEB_PORT),'127.0.0.1');}
+`, { mode: 0o700 });
+    startup = f.run("start");
+    // Observe the rejection immediately so the old implementation's real
+    // five-second timeout remains evidence rather than an unhandled promise.
+    const result = startup.then(value => ({ value }), error => ({ error }));
+    await expect.poll(() => access(entered).then(() => true, () => false), { timeout: 5_000 }).toBe(true);
+    await expect(execute("bash", [launcher, "__probe", "--json"], { env: f.env })).rejects.toMatchObject({ code: 75, stdout: "", stderr: "" });
+    // The kernel lock, not a model response or a successful server probe,
+    // controls this boundary. Keep the prelaunch worker blocked past the
+    // launcher's existing five-second public lock wait; do not change it.
+    await expect(execute("flock", ["--exclusive", "--timeout", "6", path.join(f.home, ".local/state/opencode-web/launch.lock"), "true"])).rejects.toMatchObject({ code: 1 });
+    await writeFile(release, "release");
+    const outcome = await result;
+    if ("error" in outcome) throw outcome.error;
+    expect(outcome.value.state).toBe("running");
+  } finally {
+    await writeFile(release, "release");
+    await startup?.catch(() => {});
+    await f.run("stop").catch(() => {});
+    await rm(f.root, { recursive: true, force: true });
+  }
+}, 20_000);
+
+it("does not retry another private startup probe failure as lock contention", async () => {
+  const f = await fixture();
+  const registry = fileURLToPath(new URL("../../../../packages/host/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
+  try {
+    await writeFile(path.join(f.bin, "dim-workspace"), `#!/bin/sh\nexec '${process.execPath}' '${registry}' "$@"\n`, { mode: 0o700 });
+    await mkdir(path.join(f.home, ".config/dim"), { recursive: true });
+    await writeFile(path.join(f.home, ".config/dim/workspace.json"), "{}", { mode: 0o600 });
+    await writeFile(path.join(f.bin, "flock"), '#!/bin/sh\nif [ "$1" = --nonblock ]; then echo probe-failed >&2; exit 42; fi\nexec /usr/bin/flock "$@"\n', { mode: 0o700 });
+    await mkdir(path.join(f.home, ".local/state/opencode-web"), { recursive: true, mode: 0o700 });
+    // A missing OpenCode binary must not hide the earlier distinct probe error.
+    await expect(f.run("start")).rejects.toMatchObject({ code: 42, stderr: expect.stringContaining("probe-failed") });
+  } finally { await f.run("stop").catch(() => {}); await rm(f.root, { recursive: true, force: true }); }
+});
+
 it("fails clearly when DIM guest service helpers are missing instead of starting detached", async () => {
   const f = await fixture();
   try {

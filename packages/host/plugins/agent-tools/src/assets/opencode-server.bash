@@ -17,6 +17,7 @@ require_command() {
 foreground=false
 direct=false
 password_no_restart=false
+nonblocking_status=false
 operation="start"
 json_output=false
 operation_selected=false
@@ -25,6 +26,7 @@ for argument in "$@"; do
     start|status|stop|credentials|password) [[ "$operation_selected" = false ]] || fail 'specify one operation'; operation="$argument"; operation_selected=true ;;
     __serve) [[ "$operation_selected" = false ]] || fail 'specify one operation'; operation=start; operation_selected=true; foreground=true; direct=true ;;
     __password) [[ "$operation_selected" = false ]] || fail 'specify one operation'; operation=password; operation_selected=true; password_no_restart=true; direct=true ;;
+    __probe) [[ "$operation_selected" = false ]] || fail 'specify one operation'; operation=status; operation_selected=true; nonblocking_status=true; direct=true ;;
     --direct) direct=true ;;
     --json) json_output=true ;;
     *) fail 'usage: opencode-server.bash [start|status|stop|credentials|password] [--json]' ;;
@@ -133,7 +135,12 @@ fi
 chmod 0700 "$state_dir"
 
 exec {lock_fd}>"$lock_file"
-flock --wait 5 "$lock_fd" || fail 'timed out waiting for the launch lock'
+if [[ "$nonblocking_status" = true ]]; then
+  # Closed private sentinel: only known kernel lock contention is retryable.
+  flock --nonblock --conflict-exit-code 75 "$lock_fd" || exit "$?"
+else
+  flock --wait 5 "$lock_fd" || fail 'timed out waiting for the launch lock'
+fi
 
 if [[ "$operation" = start && ! -e "$credentials_file" ]]; then
   temporary_credentials="$(mktemp "$state_dir/.credentials.XXXXXX")"

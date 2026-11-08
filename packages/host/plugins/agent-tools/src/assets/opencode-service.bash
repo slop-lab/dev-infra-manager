@@ -103,24 +103,32 @@ if [[ "$operation" = password ]]; then
   registered=absent
 fi
 same_settings="$(configuration_action equal)" || fail 'invalid OpenCode launch settings'
+reuse_registration=false
 if [[ "$same_settings" = true && "$registered" = present ]]; then
-  current="$(load_settings; direct status --json)"
-  if [[ "$(jq -r .state <<<"$current")" = running ]]; then
+  probe_exit=0
+  current="$(load_settings; direct __probe --json)" || probe_exit=$?
+  [[ "$probe_exit" = 0 || "$probe_exit" = 75 ]] || exit "$probe_exit"
+  if dim-workspace service list | jq -e --arg name "$service_name" '.[] | select(.name == $name and .running == true)' >/dev/null; then reuse_registration=true; fi
+  if [[ "$probe_exit" = 0 && "$reuse_registration" = true && "$(jq -r .state <<<"$current")" = running ]]; then
     if [[ "$json_output" = true ]]; then printf '%s\n' "$current"; else load_settings; direct status; fi
     exit 0
   fi
 fi
-[[ "$registered" = absent ]] || dim-workspace service remove "$service_name"
-# Stop only an existing helper-owned listener before transferring to supervision.
-(load_settings; direct stop --json) >/dev/null
-configuration_action write || fail 'could not persist OpenCode launch settings'
-load_settings
-dim-workspace service register --name "$service_name" -- bash "$service_helper" __run >/dev/null
+if [[ "$reuse_registration" = false ]]; then
+  [[ "$registered" = absent ]] || dim-workspace service remove "$service_name"
+  # Stop only an existing helper-owned listener before transferring to supervision.
+  (load_settings; direct stop --json) >/dev/null
+  configuration_action write || fail 'could not persist OpenCode launch settings'
+  load_settings
+  dim-workspace service register --name "$service_name" -- bash "$service_helper" __run >/dev/null
+fi
 dim-workspace service resume "$service_name"
 ready_deadline=$((SECONDS + 60))
 while (( SECONDS < ready_deadline )); do
-  current="$(direct status --json)"
-  if [[ "$(jq -r .state <<<"$current")" = running ]]; then
+  probe_exit=0
+  current="$(direct __probe --json)" || probe_exit=$?
+  [[ "$probe_exit" = 0 || "$probe_exit" = 75 ]] || exit "$probe_exit"
+  if [[ "$probe_exit" = 0 && "$(jq -r .state <<<"$current")" = running ]]; then
     if [[ "$json_output" = true ]]; then printf '%s\n' "$current"; else direct status; fi
     exit 0
   fi
