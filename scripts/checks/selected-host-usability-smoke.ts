@@ -60,7 +60,8 @@ async function main(): Promise<void> {
     if (!input.json) process.stdout.write(`progress\t${profile.name}\tstarting selected-host usability smoke\n`);
     const observedCommands: CommandEvidence[] = [];
     let observedRuntimeVersions: OrdinaryRuntimeVersions | undefined;
-    const smokeOptions = { writeFixtureFailure, onCommand: (evidence: CommandEvidence) => observedCommands.push(evidence),
+    const smokeOptions = { ...(writeFixtureFailure === undefined ? {} : { writeFixtureFailure }),
+      onCommand: (evidence: CommandEvidence) => observedCommands.push(evidence),
       onRuntimeVersions: (versions: OrdinaryRuntimeVersions): void => {
         observedRuntimeVersions = versions;
         if (!input.json) process.stdout.write(`runtime-versions\t${profile.name}\tnode=${versions.node}\tkernel=${versions.kernel}\tnested-docker=${versions.nestedDocker}\n`);
