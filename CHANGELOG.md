@@ -31,8 +31,10 @@ is implied by these source changes.
   the default DIM workflow remains source-only. VM workspaces and auxiliary VMs
   share one operator-controlled startup budget across admission, guest agent,
   Docker and helper readiness, cancelling overdue probes and independently
-  cleaning up failed new starts. Prepared example images select a single Incus
-  guest agent instead of competing with the stock LXD agent. External provider
+  cleaning up failed new starts. Reconnect only the exact observed Incus TLS
+  record failure during read-only readiness probes within that same budget,
+  retaining the failure in deadline diagnostics without weakening TLS. Prepared
+  example images select a single Incus guest agent instead of competing with the stock LXD agent. External provider
   qualification remains separate. Fresh local installation validates paired CI
   credentials through the matching installed admin package without requiring dependencies in the
   original source checkout. Compose separate example control planes by exact

@@ -56,8 +56,8 @@ export class IncusMachines {
     try {
       started = !(await scoped.require(record)).running;
       await scoped.start(record); admitted = true;
-      deadline.at("guest agent"); await scoped.waitForAgent(record, deadline);
-      deadline.at("guest Docker"); await scoped.waitForDocker(record, deadline);
+      deadline.at("guest agent"); await scoped.waitForReadinessProbe(record, deadline, "agent");
+      deadline.at("guest Docker"); await scoped.waitForReadinessProbe(record, deadline, "Docker");
       deadline.at("guest readiness"); if (finish) await finish(scoped);
       deadline.check();
     } catch (error) {
@@ -135,21 +135,28 @@ export class IncusMachines {
       "--cwd", `/workspace${record.source?.workingDirectory ? `/${record.source.workingDirectory}` : ""}`, "--env", "HOME=/home/dim", "--env", "TMPDIR=/mnt/dim-tmp", "--env", "DIM_WORKSPACE_TMPDIR=/mnt/dim-tmp",
       "--mode", options.terminal ? "interactive" : "non-interactive", "--", "runuser", "--user", "dim", "--preserve-environment", "--", ...command]), options);
   }
-  private async waitForAgent(record: VmIdentity, deadline: VmStartupDeadline): Promise<void> {
-    for (;;) {
-      const result = await this.runner.run("incus", this.args(["exec", this.name(record), "--", "true"]));
-      if (result.exitCode === 0) return;
-      if (!/VM agent isn.t currently running|connection refused|not connected|Instance is not running/i.test(result.stderr)) throw new UserError(`VM guest readiness failed: ${result.stderr.trim()}`);
-      await deadline.retry();
-    }
-  }
-  private async waitForDocker(record: VmIdentity, deadline: VmStartupDeadline): Promise<void> {
-    for (;;) {
-      const result = await this.runner.run("incus", this.args(["exec", this.name(record), "--", "docker", "info", "--format", "{{.ServerVersion}}"]));
-      if (result.exitCode === 0) return;
-      if (!/Cannot connect|failed to connect|connection refused|no such file or directory|VM agent isn.t currently running|Instance is not running/i.test(result.stderr)
-        || /Command not found|executable file not found/.test(result.stderr)) throw new UserError(`VM guest Docker readiness failed: ${result.stderr.trim()}`);
-      await deadline.retry();
+  private async waitForReadinessProbe(record: VmIdentity, deadline: VmStartupDeadline, probe: "agent" | "Docker"): Promise<void> {
+    let lastTransportFailure = false;
+    try {
+      for (;;) {
+        // Only these read-only probes may reconnect; lifecycle and guest mutations never do.
+        const command = probe === "agent" ? ["true"] : ["docker", "info", "--format", "{{.ServerVersion}}"];
+        const result = await this.runner.run("incus", this.args(["exec", this.name(record), "--", ...command]));
+        if (result.exitCode === 0) return;
+        lastTransportFailure = result.exitCode === 1 && result.stderr.trim() === "Error: local error: tls: bad record MAC";
+        const unavailable = probe === "agent"
+          ? /VM agent isn.t currently running|connection refused|not connected|Instance is not running/i.test(result.stderr)
+          : /Cannot connect|failed to connect|connection refused|no such file or directory|VM agent isn.t currently running|Instance is not running/i.test(result.stderr)
+            && !/Command not found|executable file not found/.test(result.stderr);
+        const securityFailure = /\btls\b|\bx509\b|certificate|authenticat|authori[sz]|permission denied|access denied|invalid credentials/i.test(result.stderr);
+        if (!lastTransportFailure && (securityFailure || !unavailable)) throw new UserError(`VM guest ${probe === "agent" ? "readiness" : "Docker readiness"} failed: Incus exit ${result.exitCode}: ${result.stderr.trim()}`);
+        await deadline.retry();
+      }
+    } catch (error) {
+      if (lastTransportFailure && error instanceof UserError && error.message.startsWith("VM startup deadline exceeded")) {
+        throw new UserError(`${error.message}; last Incus readiness probe failed (exit 1): Error: local error: tls: bad record MAC`);
+      }
+      throw error;
     }
   }
   async rootExec(record: VmIdentity, command: string[], options: RunOptions = {}): Promise<void> {

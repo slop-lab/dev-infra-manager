@@ -51,6 +51,11 @@ cleanup budget. Readiness failure preserves an already-running VM; failure to
 confirm host resource ceilings still stops it. Agent tools and other callers
 must allow the configured startup budget plus bounded cleanup in their own
 execution timeout; the practical fixture allows another 60 seconds.
+Only the read-only agent and Docker readiness probes reconnect after the exact
+Incus exit-1 `Error: local error: tls: bad record MAC` transport failure. Each
+reconnect uses normal TLS verification within that same startup budget. Other
+TLS/authentication failures remain fatal; lifecycle and guest mutations are never
+retried. Deadline diagnostics retain the last known transport failure.
 
 The normal host CLI does not need to run as root. Install the matching plugin's
 root budget helper once on that selected host, using a reviewed root-owned

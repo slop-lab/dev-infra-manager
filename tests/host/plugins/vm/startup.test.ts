@@ -129,3 +129,82 @@ it("combines per-budget caller cancellation and rejects a late successful privil
     expect(apply).toHaveBeenCalledOnce();
   } finally { deadline.close(); }
 });
+
+it("reconnects only the exact TLS transport failure for agent and Docker probes without restarting the VM", async () => {
+  const runner = new FakeIncus(); runner.exists = true;
+  const run = runner.run.bind(runner), failed = new Set<string>();
+  vi.spyOn(runner, "run").mockImplementation(async (command, args, options) => {
+    if (args.includes("exec")) {
+      const probe = args.includes("docker") ? "docker" : args.at(-1) === "true" ? "agent" : undefined;
+      if (probe && !failed.has(probe)) {
+        failed.add(probe);
+        return { command, args, stdout: "", stderr: "Error: local error: tls: bad record MAC\n", exitCode: 1 };
+      }
+    }
+    return run(command, args, options);
+  });
+  const prepare = vi.fn(async () => {}), apply = vi.fn(async () => {}), finish = vi.fn(async () => {});
+  await new IncusMachines(config, runner, { prepare, apply, verify: async () => {} }).startReady(workspace(), finish);
+  expect([...failed]).toEqual(["agent", "docker"]); expect(finish).toHaveBeenCalledOnce();
+  expect(prepare).toHaveBeenCalledOnce(); expect(apply).toHaveBeenCalledOnce();
+  expect(runner.calls.filter(args => args[0] === "start")).toHaveLength(1);
+  expect(runner.calls.some(args => args[0] === "stop")).toBe(false);
+});
+
+it("retains the last exact TLS failure on shared-budget expiry and independently rolls back", async () => {
+  let now = 0, probes = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => now);
+  const runner = new FakeIncus(); runner.exists = true;
+  const run = runner.run.bind(runner);
+  vi.spyOn(runner, "run").mockImplementation(async (command, args, options) => {
+    if (args.includes("docker")) {
+      probes++; now += 350;
+      return { command, args, stdout: "", stderr: "Error: local error: tls: bad record MAC\n", exitCode: 1 };
+    }
+    if (args.includes("stop")) expect(options?.signal?.aborted).toBe(false);
+    return run(command, args, options);
+  });
+  const release = vi.fn(async () => {}), finish = vi.fn();
+  const machines = new IncusMachines({ ...config, startupTimeoutMilliseconds: 1000 }, runner, { apply: async () => {}, verify: async () => {}, release });
+  await expect(machines.startReady(workspace(), finish)).rejects.toThrow(/deadline.*guest Docker; last Incus readiness probe failed \(exit 1\): Error: local error: tls: bad record MAC/);
+  expect(probes).toBe(3); expect(finish).not.toHaveBeenCalled(); expect(runner.running).toBe(false);
+  expect(release).toHaveBeenCalledOnce();
+});
+
+it("does not turn a cancelled reconnect's late zero into readiness success", async () => {
+  const abort = new AbortController(), runner = new FakeIncus(); runner.exists = true;
+  const run = runner.run.bind(runner); let probes = 0;
+  vi.spyOn(runner, "run").mockImplementation(async (command, args, options) => {
+    if (args.includes("docker")) {
+      probes++;
+      if (probes === 1) return { command, args, stdout: "", stderr: "Error: local error: tls: bad record MAC", exitCode: 1 };
+      abort.abort(new Error("cancelled reconnect"));
+    }
+    if (args.includes("stop")) expect(options?.signal?.aborted).toBe(false);
+    return run(command, args, options);
+  });
+  const finish = vi.fn();
+  await expect(new IncusMachines(config, runner, { apply: async () => {}, verify: async () => {} }, runner, undefined, abort.signal)
+    .startReady(workspace(), finish)).rejects.toThrow("cancelled reconnect");
+  expect(probes).toBe(2); expect(finish).not.toHaveBeenCalled(); expect(runner.running).toBe(false);
+});
+
+it.each([
+  { exitCode: 255, stderr: "Error: local error: tls: bad record MAC" },
+  { exitCode: 1, stderr: "Error: local error: tls: bad record MAC\nunknown detail" },
+  { exitCode: 1, stderr: "Error: remote error: tls: bad record MAC" },
+  { exitCode: 1, stderr: "Error: tls: failed to verify certificate: x509: certificate signed by unknown authority" },
+  { exitCode: 1, stderr: "Error: Failed to connect to agent: tls: failed to verify certificate: x509: certificate signed by unknown authority" },
+  { exitCode: 1, stderr: "Error: Failed to connect to agent: authentication failed" },
+  { exitCode: 1, stderr: "Error: agent not connected: permission denied" }
+])("rejects an unrecognized readiness failure without retry: $exitCode / $stderr", async failure => {
+  const runner = new FakeIncus(); runner.exists = true;
+  const run = runner.run.bind(runner); let probes = 0;
+  vi.spyOn(runner, "run").mockImplementation(async (command, args, options) => {
+    if (args.includes("docker")) { probes++; return { command, args, stdout: "", ...failure }; }
+    return run(command, args, options);
+  });
+  await expect(new IncusMachines(config, runner, { apply: async () => {}, verify: async () => {} }).startReady(workspace()))
+    .rejects.toThrow(`VM guest Docker readiness failed: Incus exit ${failure.exitCode}: ${failure.stderr}`);
+  expect(probes).toBe(1); expect(runner.running).toBe(false);
+});
