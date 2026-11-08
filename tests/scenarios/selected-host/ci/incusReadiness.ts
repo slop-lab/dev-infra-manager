@@ -19,8 +19,12 @@ export async function waitForIncusCloudInit(deadline: number, operations: {
     const result = await run("sudo", args, { acceptFailure: true, timeoutMs: remaining });
     if (now() >= deadline) throw new Error("pinned CI VM cloud-init readiness deadline expired");
     if (result.exitCode === 0) return;
-    if (result.exitCode !== 255 || !/^(?:Error: )?local error: tls: bad record MAC$/.test(result.stderr.trim())) throw new CommandFailure("sudo", args, result);
-    report(`[practical-ci] cloud-init status attempt=${attempt} transport=tls-bad-record-mac; reconnecting read-only status`);
+    const transport = /^(?:Error: )?local error: tls: bad record MAC$/.test(result.stderr.trim()) ? "tls-bad-record-mac"
+      : result.stdout === "" && result.stderr.trim() === "Error: Failed to connect to the agent" ? "agent-unavailable" : undefined;
+    if (result.exitCode !== 255 || transport === undefined) throw new CommandFailure("sudo", args, result);
+    // The generic agent error can hide its underlying cause. Reconnect normally;
+    // only a real successful status response may establish cloud-init readiness.
+    report(`[practical-ci] cloud-init status attempt=${attempt} transport=${transport}; reconnecting read-only status`);
     await pause(Math.min(1000, Math.max(0, deadline - now())));
   }
 }
