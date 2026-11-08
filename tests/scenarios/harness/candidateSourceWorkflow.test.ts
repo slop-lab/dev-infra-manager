@@ -20,6 +20,7 @@ type WorkflowJob = {
   readonly name?: string;
   readonly "runs-on"?: string;
   readonly env?: Readonly<Record<string, string>>;
+  readonly strategy?: { readonly matrix?: { readonly node?: readonly string[] } };
   readonly steps: readonly WorkflowStep[];
 };
 
@@ -60,7 +61,7 @@ function expectEvidenceArtifact(job: WorkflowJob, expectedCommit: string): void 
 }
 
 describe("candidate source workflows", () => {
-  it("binds source verification to the event commit and retains source evidence and check logs", async () => {
+  it("binds portable verification to the event commit and retains source evidence and check logs", async () => {
     // Given
     const { workflow } = await readWorkflow("verify");
     const sourceJob = workflow.jobs.source;
@@ -71,12 +72,29 @@ describe("candidate source workflows", () => {
     expectExactCheckout(sourceJob, "${{ github.sha }}");
     expectEvidenceArtifact(sourceJob, "${{ github.sha }}");
     expect(sourceJob.steps).toEqual(expect.arrayContaining([
-      expect.objectContaining({ run: "bash scripts/checks/source-gate-container.bash" }),
+      expect.objectContaining({
+        uses: "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
+        with: { "node-version": "${{ matrix.node }}" },
+      }),
+      expect.objectContaining({ run: "node scripts/checks/check-portable-source.ts" }),
     ]));
+    expect(sourceJob.strategy?.matrix?.node).toEqual(["24.19.0", "26.5.0"]);
     expect(sourceJob.steps).toContainEqual(expect.objectContaining({
       if: "always()",
-      with: expect.objectContaining({ path: "${{ runner.temp }}/dim-source-checks", "retention-days": 7 }),
+      with: expect.objectContaining({ path: "${{ runner.temp }}/dim-portable-checks", "retention-days": 7 }),
     }));
+    const portable = await readFile(resolve(workspaceRoot, "scripts/checks/check-portable-source.ts"), "utf8");
+    for (const stage of ["dependencies", "cli-host-types", "cli-host-build", "cli-host-pack", "portable-contracts", "cli-host-transport"]) {
+      expect(portable).toContain(`["${stage}", [`);
+    }
+    const dimWorkflow = parse(await readFile(resolve(workspaceRoot, ".dim/ci/runner.yml"), "utf8"));
+    expect(dimWorkflow).toEqual({ jobs: { source: { script: "scripts/ci/source.bash" } } });
+    const policy = parse(await readFile(resolve(workspaceRoot, ".dim/repos.yml"), "utf8"));
+    expect(policy.policy["git-ci"].requiredJobs).toContainEqual({ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" });
+    const fullSource = await readFile(resolve(workspaceRoot, "scripts/ci/source.bash"), "utf8");
+    for (const command of ["pnpm run workspace:build", "pnpm run workspace:check", "pnpm run workspace:test"]) {
+      expect(fullSource.split("\n")).toContain(command);
+    }
   });
 
   it("dispatches native ordinary and trusted real-KVM integration lanes", async () => {
@@ -134,10 +152,10 @@ describe("candidate source workflows", () => {
   });
 
   it("uses only reviewed existing action commits with supported Node runtimes", async () => {
-    // Reviewed upstream action.yml runtimes: checkout v4, upload-artifact
-    // v4.6.2, and pnpm/action-setup v4.1.0 all use node20. The artifact v3
-    // commit and the nonexistent pnpm commit must not return to either workflow.
+    // Keep the exact reviewed action commits, including the Node toolchain
+    // selector already used by the repository's browser and Pages workflows.
     const approved = new Set([
+      "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
       "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
       "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
       "pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d",
