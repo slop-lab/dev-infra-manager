@@ -28,7 +28,7 @@ it.each([20, 32])("reserves hardware supervisor headroom separately from the %s 
   expect(args).not.toContain("--memory-swap");
 });
 
-it("retains failed trusted acquisition diagnostics without starting QEMU or changing cleanup", async () => {
+it.each([true, false])("prepares each distinct pinned image once and retains failed acquisition (same reference: %s)", async same => {
   const { mkdtemp, readFile, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
@@ -40,14 +40,22 @@ it("retains failed trusted acquisition diagnostics without starting QEMU or chan
     ? { command, args, stdout: "null", stderr: "", exitCode: 0 } : original(command, args, options);
   const root = await mkdtemp(join(tmpdir(), "dim-qemu-acquisition-"));
   try {
-    const selected = grant({ ...assignment(), event: event("practical", "qemu") });
+    const originalGrant = grant({ ...assignment(), event: event("practical", "qemu") });
+    const selected = { ...originalGrant, descriptor: { ...originalGrant.descriptor,
+      jobImage: same ? originalGrant.descriptor.runnerBaseImage : `node@sha256:${"d".repeat(64)}` } };
     const result = await qemuBackend.run({ grant: selected, root, runner, signal: new AbortController().signal,
       acquireCandidate: () => acquisitionOperation("source-context-fetch", async () => {
         throw new NativeGitProcessError("private token URL stderr", "timeout");
       }) });
     expect(result.completion).toEqual({ kind: "executor-failure", code: "candidate-read-timeout" });
     expect(result.cleanupComplete).toBe(true);
-    expect(JSON.parse(await readFile(join(root, "output", "stderr"), "utf8"))).toEqual({ component: "candidate-acquisition", phase: "source-context-fetch", code: "candidate-read-timeout" });
+    const references = [...new Set([selected.descriptor.runnerBaseImage, selected.descriptor.jobImage])];
+    expect(runner.calls.filter(call => call.args[0] === "pull").map(call => call.args[1])).toEqual(references);
+    expect(runner.calls.filter(call => call.args[0] === "image" && call.args.at(-1)?.includes("RepoDigests")).map(call => call.args[2])).toEqual(references);
+    const diagnostics = (await readFile(join(root, "output", "stderr"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    expect(diagnostics.at(-1)).toEqual({ component: "candidate-acquisition", phase: "source-context-fetch", code: "candidate-read-timeout" });
+    expect(diagnostics).toContainEqual(expect.objectContaining({ phase: "runner-image", event: "finish", status: "success", elapsedMilliseconds: expect.any(Number) }));
+    expect(diagnostics).toContainEqual(expect.objectContaining({ phase: "candidate-acquisition", event: "finish", status: "failure", elapsedMilliseconds: expect.any(Number) }));
     expect(JSON.stringify(result)).not.toContain("private token");
     expect(runner.calls.some(({ args }) => args[0] === "run" || args[0] === "wait")).toBe(false);
   } finally { await rm(root, { recursive: true, force: true }); }

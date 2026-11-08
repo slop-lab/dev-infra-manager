@@ -76,10 +76,11 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
       const credentialProvider = executionCandidateCredential((signal) => options.client.candidate(assignment, signal));
       const result = await backend.run({ grant, root: root.path, runner, signal,
         acquireCandidate: async (paths) => {
-          const credential = await acquisitionOperation("credential-acquisition", () => credentialProvider(paths.signal));
+          const credential = await acquisitionOperation("credential-acquisition", () => credentialProvider(paths.signal), paths.diagnostics);
           return withNativeGitExecutionReadAuthority({ gitExecutable: options.gitExecutable!,
           serviceEndpoint: options.gitEndpoint!, temporaryRoot: root.path,
-          credential: { username: credential.username, password: credential.password }, credentialProvider, descriptor: grant.descriptor },
+          credential: { username: credential.username, password: credential.password }, credentialProvider, descriptor: grant.descriptor,
+          ...(paths.diagnostics === undefined ? {} : { diagnostics: paths.diagnostics }) },
         paths.signal, (authority) => verifyAndMaterializeCandidate({ ...paths, authority,
           descriptor: grant.descriptor, descriptorDigest: grant.descriptorDigest })); } });
       const pending = join(options.directory,"artifacts-"+assignment.id);

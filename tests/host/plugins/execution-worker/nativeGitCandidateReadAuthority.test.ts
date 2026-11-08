@@ -2,6 +2,7 @@ import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { openNativeGitCandidateReadAuthority } from "../../../../packages/host/plugins/execution-worker/src/nativeGitCandidateReadAuthority.js";
+import { NativeOutputCollector } from "../../../../packages/host/plugins/execution-worker/src/output.js";
 import {
   gitHttpFixture,
   type GitHttpFixture,
@@ -49,11 +50,13 @@ describe("native Git candidate read authority", () => {
     const destinationParent = join(fixture.root, "materialized");
     await mkdir(temporaryRoot, { mode: 0o700 });
     await mkdir(destinationParent, { mode: 0o700 });
+    const diagnostics = new NativeOutputCollector(64 * 1024, () => { throw new Error("unexpected diagnostic overflow"); });
     const authority = openReader({
       gitExecutable: fixture.config.gitExecutable,
       serviceEndpoint: fixture.baseUrl,
       credential: { username: "reader-a", password: "reader-a-secret-1" },
       temporaryRoot,
+      diagnostics: diagnostics.stderr,
       claim: {
         projectId: "project-a",
         repositoryId: "source",
@@ -98,6 +101,12 @@ describe("native Git candidate read authority", () => {
     await expect(readFile(join(destination, "src", "candidate.txt"), "utf8")).resolves.toBe("candidate one\n");
     expect((await stat(join(destination, "run.bash"))).mode & 0o777).toBe(0o755);
     await expect(readFile(join(destination, "src", "later.txt"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    const recorded = diagnostics.result().stderr.toString(), events = recorded.trim().split("\n").map(line => JSON.parse(line));
+    expect(events.filter(event => event.phase === "materialize" && event.event === "finish")).toEqual([
+      expect.objectContaining({ status: "success", elapsedMilliseconds: expect.any(Number) })
+    ]);
+    expect(events.filter(event => event.phase === "object-verification" && event.event === "finish")).toHaveLength(1);
+    expect(recorded).not.toContain("reader-a-secret-1"); expect(recorded).not.toContain(fixture.baseUrl);
     }
   );
 });

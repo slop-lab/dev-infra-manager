@@ -1,4 +1,5 @@
-import { acquisitionOperation } from "./acquisitionDiagnostics.js";
+import { acquisitionOperation, type AcquisitionProcessMetrics } from "./acquisitionDiagnostics.js";
+import type { Writable } from "node:stream";
 import { spawn } from "node:child_process";
 import { lstat, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -18,6 +19,7 @@ export type GitProcessOptions = {
   readonly username: string;
   readonly password: string;
   readonly timeoutMilliseconds: number;
+  readonly diagnostics?: Writable;
   readonly credentialProvider?: (signal: AbortSignal) => Promise<{ readonly username: string; readonly password: string }>;
 };
 
@@ -39,6 +41,7 @@ type GitInvocation = {
   readonly timeoutMilliseconds: number;
   readonly signal: AbortSignal;
   readonly authenticated?: boolean;
+  readonly metrics?: AcquisitionProcessMetrics;
 };
 
 export async function openDisposableGit(options: GitProcessOptions, signal: AbortSignal): Promise<DisposableGit> {
@@ -61,11 +64,12 @@ export async function openDisposableGit(options: GitProcessOptions, signal: Abor
         timeoutMilliseconds: options.timeoutMilliseconds, signal: operationSignal
       })),
     runAuthenticated: async (args: readonly string[], maximumOutputBytes: number, operationSignal: AbortSignal) => {
-      const credential = await acquisitionOperation("credential-acquisition", async () => await options.credentialProvider?.(operationSignal) ?? options);
+      const credential = await acquisitionOperation("credential-acquisition", async () => await options.credentialProvider?.(operationSignal) ?? options, options.diagnostics);
+      const metrics: AcquisitionProcessMetrics = { stdoutBytes: 0, stderrBytes: 0, exitCode: null, timeoutMilliseconds: options.timeoutMilliseconds };
       return acquisitionOperation(args.includes("ls-remote") ? "protected-head" : args.includes("--depth=2") ? "source-context-fetch" : "candidate-fetch", () => runGit({ executable: options.executable, args,
         environment: { ...environment, GIT_ASKPASS: askpass, DIM_NATIVE_GIT_READER_USERNAME: credential.username,
           DIM_NATIVE_GIT_READER_PASSWORD: credential.password }, maximumOutputBytes,
-        timeoutMilliseconds: options.timeoutMilliseconds, signal: operationSignal, authenticated: true }));
+        timeoutMilliseconds: options.timeoutMilliseconds, signal: operationSignal, authenticated: true, metrics }), options.diagnostics, metrics);
     },
     close: () => rm(root, { recursive: true, force: true })
   } satisfies DisposableGit;
@@ -112,6 +116,7 @@ function gitEnvironment(): NodeJS.ProcessEnv {
 function runGit(input: GitInvocation): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     if (input.signal.aborted) {
+      if (input.metrics !== undefined) input.metrics.termination = "aborted";
       reject(new NativeGitProcessError("native Git operation was aborted", "aborted"));
       return;
     }
@@ -136,6 +141,7 @@ function runGit(input: GitInvocation): Promise<Buffer> {
     const terminate = (message: string, code: NativeGitProcessFailure): void => {
       if (settled || failure !== undefined) return;
       failure = new NativeGitProcessError(message, code);
+      if (input.metrics !== undefined && (code === "timeout" || code === "aborted" || code === "output-limit" || code === "process-unavailable")) input.metrics.termination = code;
       stop();
     };
     const aborted = (): void => terminate("native Git operation was aborted", "aborted");
@@ -144,11 +150,13 @@ function runGit(input: GitInvocation): Promise<Buffer> {
     input.signal.addEventListener("abort", aborted, { once: true });
     child.stdout.on("data", (chunk: Buffer) => {
       outputBytes += chunk.length;
+      if (input.metrics !== undefined) input.metrics.stdoutBytes = outputBytes;
       if (outputBytes > input.maximumOutputBytes) terminate("native Git output exceeded its limit", "output-limit");
       else output.push(chunk);
     });
     child.stderr.on("data", (chunk: Buffer) => {
       errorBytes += chunk.length;
+      if (input.metrics !== undefined) input.metrics.stderrBytes = errorBytes;
       if (errorBytes > 64 * 1024) terminate("native Git error output exceeded its limit", "output-limit");
       else if (input.authenticated === true) errors.push(chunk);
     });
@@ -156,6 +164,7 @@ function runGit(input: GitInvocation): Promise<Buffer> {
     child.on("close", (code) => {
       if (settled) return;
       settled = true;
+      if (input.metrics !== undefined) input.metrics.exitCode = code;
       clearTimeout(timer);
       input.signal.removeEventListener("abort", aborted);
       if (failure !== undefined) reject(failure);

@@ -1,4 +1,6 @@
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { NativeOutputCollector } from "../../../../packages/host/plugins/execution-worker/src/output.js";
 import { createServer, request as httpRequest, type Server } from "node:http";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -8,6 +10,31 @@ import { gitHttpFixture } from "../../../support/gitHttpFixture.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
+
+it.each(["success", "exit", "timeout"] as const)("reports authenticated Git duration/byte counts without private output (%s)", async mode => {
+  const root = await mkdtemp(join(tmpdir(), "dim-git-timing-")), executable = join(root, "git-fixture");
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const diagnostic = "PRIVATE_URL_AND_PASSWORD";
+  await writeFile(executable, `#!${process.execPath}\nif(process.argv[2]==='init')process.exit(0);process.stdout.write('data');process.stderr.write(${JSON.stringify(diagnostic)});${mode === "timeout" ? "setInterval(()=>{},1000);" : `process.exitCode=${mode === "exit" ? 23 : 0};`}\n`, { mode: 0o700 });
+  const output = new NativeOutputCollector(8192, () => {}), git = await openDisposableGit({ executable, temporaryRoot: root,
+    objectFormat: "sha1", username: "PRIVATE_USER", password: "PRIVATE_PASSWORD", timeoutMilliseconds: 1000, diagnostics: output.stderr }, new AbortController().signal);
+  try {
+    const pending = git.runAuthenticated(["fetch", "--depth=1", "PRIVATE_URL"], 64 * 1024, new AbortController().signal);
+    if (mode === "success") {
+      expect((await pending).toString()).toBe("data");
+      // Local per-object inspections never emit one diagnostic per blob.
+      await git.run(["cat-file", "PRIVATE_OBJECT"], 64 * 1024, new AbortController().signal);
+    }
+    else await expect(pending).rejects.toMatchObject({ name: "NativeGitProcessError", code: mode === "timeout" ? "timeout" : "failed" });
+    const bytes = output.result().stderr.toString(), events = bytes.trim().split("\n").map(line => JSON.parse(line));
+    expect(events).toHaveLength(4); // Credential + authenticated subprocess, never per-object lines.
+    expect(events.at(-1)).toMatchObject({ phase: "candidate-fetch", event: "finish", status: mode === "success" ? "success" : "failure",
+      stdoutBytes: 4, stderrBytes: Buffer.byteLength(diagnostic), exitCode: mode === "timeout" ? null : mode === "exit" ? 23 : 0,
+      timeoutMilliseconds: 1000, elapsedMilliseconds: expect.any(Number) });
+    if (mode === "timeout") { expect(events.at(-1).termination).toBe("timeout"); expect(events.at(-1).elapsedMilliseconds).toBeGreaterThanOrEqual(1000); }
+    expect(bytes).not.toContain("PRIVATE");
+  } finally { await git.close(); }
+});
 
 async function listening(server: Server) {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

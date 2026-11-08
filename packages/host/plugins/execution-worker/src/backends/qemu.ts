@@ -21,8 +21,11 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
     const output = new NativeOutputCollector(Number(descriptor.bounds.outputBytes), () => stop.abort(), join(input.root, "output"));
     let completion: ExecutionResult["completion"] = { kind: "executor-failure", code: "execution-failed" };
     try {
-      await prepareExecutionImage(input.runner, descriptor.runnerBaseImage, signal);
-      await prepareExecutionImage(input.runner, descriptor.jobImage, signal);
+      await acquisitionOperation("runner-image", () => prepareExecutionImage(input.runner, descriptor.runnerBaseImage, signal), output.stderr);
+      // One exact digest needs one normal pull/RepoDigest validation per attempt.
+      if (descriptor.jobImage !== descriptor.runnerBaseImage) {
+        await acquisitionOperation("job-image", () => prepareExecutionImage(input.runner, descriptor.jobImage, signal), output.stderr);
+      }
       const profileInfo = await input.runner.run("docker", ["image", "inspect", descriptor.runnerBaseImage, "--format", `{{json (index .Config.Labels "${hardwareRunnerLabel}")}}`], { signal });
       if (profileInfo.exitCode !== 0) throw new Error("trusted QEMU profile inspection failed");
       const hardware = requireHardwareProfile(JSON.parse(profileInfo.stdout), descriptor);
@@ -34,7 +37,8 @@ export function createQemuBackend(routing?: HostExecutionRouting): ExecutionBack
       }
       const job = join(input.root, "job"), workspace = join(input.root, "workspace"), script = join(job, "script");
       await mkdir(job, { mode: 0o700 });
-      await acquisitionOperation("candidate-acquisition", () => input.acquireCandidate({ workspace, scriptFile: script, signal, ...(hardware ? { sourceContextDirectory: join(job, "source-context") } : {}) }));
+      await acquisitionOperation("candidate-acquisition", () => input.acquireCandidate({ workspace, scriptFile: script, signal, diagnostics: output.stderr,
+        ...(hardware ? { sourceContextDirectory: join(job, "source-context") } : {}) }), output.stderr);
       await writeFile(join(job, "working-directory"), `/workspace/${descriptor.repositoryId}`, { mode: 0o444, flag: "wx" });
       await writeFile(join(job, "descriptor.json"), JSON.stringify(descriptor), { mode: 0o444, flag: "wx" });
       const files = routing?.jobFiles ?? [];

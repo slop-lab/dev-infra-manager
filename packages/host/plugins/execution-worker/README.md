@@ -132,7 +132,16 @@ Trusted acquisition failures retain a bounded JSON stderr diagnostic with an enu
 phase and failure code (credentials, protected-head checks, fetch, object verification
 or materialization). Initial credential failure follows the same failed-result and
 artifact cleanup path. Raw error messages, URLs, arguments and credentials are never
-written by this diagnostic; ordinary guest output retains its existing bounds.
+written by this diagnostic; ordinary guest output retains its existing bounds. Hardware
+acquisition also emits closed phase start/finish records with monotonic duration
+and success/failure, including image preparation and credential admission.
+Authenticated Git operations add subprocess stdout/stderr byte counts, numeric
+exit, configured deadline and closed termination reason. These are process-output
+counts, not network transfer measurements. Blob/tree/context work is aggregated,
+not logged once per file. Presentation failure never replaces the operation's
+result. Each distinct pinned QEMU image is pulled and its RepoDigest validated
+once per attempt; identical runner/job references share that preparation, while
+profile validation and fresh attempt authority remain required.
 
 `dim execution capacity /absolute/private/provider.json` optionally starts
 pre-enrolled worker loops on demand using a dedicated scoped capacity connection.

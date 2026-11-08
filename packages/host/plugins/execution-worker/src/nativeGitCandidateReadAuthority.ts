@@ -1,4 +1,5 @@
 import { acquisitionOperation } from "./acquisitionDiagnostics.js";
+import type { Writable } from "node:stream";
 import type { ExecutionDescriptor } from "@slop-lab/dim-contracts-ci/execution";
 import type { NativeCandidateReadAuthority } from "./candidate.js";
 import { mkdir, chmod, writeFile } from "node:fs/promises";
@@ -18,8 +19,8 @@ import {
   type GitObjectFormat
 } from "./nativeGitCandidateProcess.js";
 
-const materializeVerifiedTree = (input: Parameters<typeof materializeVerifiedTreeInternal>[0]) =>
-  acquisitionOperation("materialize", () => materializeVerifiedTreeInternal(input));
+const materializeVerifiedTree = (input: Parameters<typeof materializeVerifiedTreeInternal>[0], diagnostics?: Writable) =>
+  acquisitionOperation("materialize", () => materializeVerifiedTreeInternal(input), diagnostics);
 
 export type NativeGitCandidateClaim = {
   readonly projectId: string;
@@ -47,6 +48,7 @@ export type NativeGitCandidateReadOptions = {
     readonly password: string;
   };
   readonly credentialProvider?: (signal: AbortSignal) => Promise<{ readonly username: string; readonly password: string }>;
+  readonly diagnostics?: Writable;
   readonly temporaryRoot: string;
   readonly claim: NativeGitCandidateClaim;
   readonly limits?: Partial<NativeGitReaderLimits>;
@@ -68,16 +70,19 @@ export function openNativeGitCandidateReadAuthority(
     opened ??= openDisposableGit({ executable: parsed.gitExecutable, temporaryRoot: parsed.temporaryRoot,
       objectFormat: parsed.objectFormat, username: parsed.credential.username, password: parsed.credential.password,
       ...(parsed.credentialProvider === undefined ? {} : { credentialProvider: parsed.credentialProvider }),
-      timeoutMilliseconds: parsed.limits.processTimeoutMilliseconds }, signal);
+      timeoutMilliseconds: parsed.limits.processTimeoutMilliseconds,
+      ...(parsed.diagnostics === undefined ? {} : { diagnostics: parsed.diagnostics }) }, signal);
     return opened;
   }
   async function candidate(signal: AbortSignal) {
     const session = await git(signal);
     fetched ??= (async () => {
       await fetchCandidate(session, parsed, signal);
-      const commit = await readVerifiedCommit(session, parsed.claim.candidateCommit, signal);
-      if (commit.treeObjectId !== parsed.claim.candidateTree) throw new NativeGitCandidateReadError("candidate commit tree does not match the claim");
-      return commit;
+      return acquisitionOperation("candidate-verification", async () => {
+        const commit = await readVerifiedCommit(session, parsed.claim.candidateCommit, signal);
+        if (commit.treeObjectId !== parsed.claim.candidateTree) throw new NativeGitCandidateReadError("candidate commit tree does not match the claim");
+        return commit;
+      }, parsed.diagnostics);
     })();
     const commit = await fetched;
     return { git: session, commit };
@@ -91,37 +96,39 @@ export function openNativeGitCandidateReadAuthority(
   }
   return {
     async exportSourceContext(input) {
-      assertScope(parsed.claim, input);
-      if (input.mode !== "candidate-and-immediate-parents") throw new NativeGitCandidateReadError("unsupported source context mode");
-      await current(input.signal);
-      const selected = await candidate(input.signal);
-      const commit = await readVerifiedCommitObject(selected.git, parsed.claim.candidateCommit, input.signal);
-      if (commit.parents.length > 8 || new Set(commit.parents).size !== commit.parents.length) throw new NativeGitCandidateReadError("source context exceeds eight distinct immediate parents");
-      budget.bytes += commit.bytes.length;
-      if (budget.bytes > parsed.limits.maximumMaterializedBytes) throw new NativeGitCandidateReadError("source context exceeds the shared materialization budget");
-      // This lease already authorizes this repository's upload-pack. Only this
-      // operator-selected mode deepens acquisition; no credential reaches jobs.
-      await selected.git.runAuthenticated(["--git-dir", selected.git.repository, "fetch", "--depth=2", "--no-tags", "--no-write-fetch-head", "--force",
-        parsed.repositoryUrl, `${parsed.claim.candidateCommit}:refs/dim/candidate`], 64 * 1024, input.signal);
-      await selected.git.run(["--git-dir", selected.git.repository, "fsck", "--strict", "--full", "--no-reflogs", "--no-progress"], 64 * 1024, input.signal);
-      await mkdir(input.destination, { mode: 0o700 });
-      const parentsDirectory = join(input.destination, "parents"); await mkdir(parentsDirectory, { mode: 0o700 });
-      await writeFile(join(input.destination, "candidate.commit"), commit.bytes, { mode: 0o444, flag: "wx" });
-      const parents: { commit: string; tree: string }[] = [];
-      for (const objectId of commit.parents) {
-        const parent = await readVerifiedCommitObject(selected.git, objectId, input.signal);
-        budget.bytes += parent.bytes.length;
+      return acquisitionOperation("source-context", async () => {
+        assertScope(parsed.claim, input);
+        if (input.mode !== "candidate-and-immediate-parents") throw new NativeGitCandidateReadError("unsupported source context mode");
+        await current(input.signal);
+        const selected = await candidate(input.signal);
+        const commit = await readVerifiedCommitObject(selected.git, parsed.claim.candidateCommit, input.signal);
+        if (commit.parents.length > 8 || new Set(commit.parents).size !== commit.parents.length) throw new NativeGitCandidateReadError("source context exceeds eight distinct immediate parents");
+        budget.bytes += commit.bytes.length;
         if (budget.bytes > parsed.limits.maximumMaterializedBytes) throw new NativeGitCandidateReadError("source context exceeds the shared materialization budget");
-        await materializeVerifiedTree({ git: selected.git, treeObjectId: parent.treeObjectId, destination: join(parentsDirectory, objectId),
-          limits: parsed.limits, budget, signal: input.signal });
-        await chmod(join(parentsDirectory, objectId), 0o755);
-        await writeFile(join(input.destination, `${objectId}.commit`), parent.bytes, { mode: 0o444, flag: "wx" });
-        parents.push({ commit: objectId, tree: parent.treeObjectId });
-      }
-      await writeFile(join(input.destination, "context.json"), JSON.stringify({ schemaVersion: 1, mode: input.mode,
-        candidate: { commit: commit.objectId, tree: commit.treeObjectId }, parents }) + "\n", { mode: 0o444, flag: "wx" });
-      await publishPublicJobFiles(input.destination);
-      await current(input.signal);
+        // This lease already authorizes this repository's upload-pack. Only this
+        // operator-selected mode deepens acquisition; no credential reaches jobs.
+        await selected.git.runAuthenticated(["--git-dir", selected.git.repository, "fetch", "--depth=2", "--no-tags", "--no-write-fetch-head", "--force",
+          parsed.repositoryUrl, `${parsed.claim.candidateCommit}:refs/dim/candidate`], 64 * 1024, input.signal);
+        await selected.git.run(["--git-dir", selected.git.repository, "fsck", "--strict", "--full", "--no-reflogs", "--no-progress"], 64 * 1024, input.signal);
+        await mkdir(input.destination, { mode: 0o700 });
+        const parentsDirectory = join(input.destination, "parents"); await mkdir(parentsDirectory, { mode: 0o700 });
+        await writeFile(join(input.destination, "candidate.commit"), commit.bytes, { mode: 0o444, flag: "wx" });
+        const parents: { commit: string; tree: string }[] = [];
+        for (const objectId of commit.parents) {
+          const parent = await readVerifiedCommitObject(selected.git, objectId, input.signal);
+          budget.bytes += parent.bytes.length;
+          if (budget.bytes > parsed.limits.maximumMaterializedBytes) throw new NativeGitCandidateReadError("source context exceeds the shared materialization budget");
+          await materializeVerifiedTree({ git: selected.git, treeObjectId: parent.treeObjectId, destination: join(parentsDirectory, objectId),
+            limits: parsed.limits, budget, signal: input.signal }, parsed.diagnostics);
+          await chmod(join(parentsDirectory, objectId), 0o755);
+          await writeFile(join(input.destination, `${objectId}.commit`), parent.bytes, { mode: 0o444, flag: "wx" });
+          parents.push({ commit: objectId, tree: parent.treeObjectId });
+        }
+        await writeFile(join(input.destination, "context.json"), JSON.stringify({ schemaVersion: 1, mode: input.mode,
+          candidate: { commit: commit.objectId, tree: commit.treeObjectId }, parents }) + "\n", { mode: 0o444, flag: "wx" });
+        await publishPublicJobFiles(input.destination);
+        await current(input.signal);
+      }, parsed.diagnostics);
     },
     async close() {
       if (closed) return; closed = true;
@@ -158,7 +165,7 @@ export function openNativeGitCandidateReadAuthority(
       await current(input.signal);
       const selected = await candidate(input.signal);
       await materializeVerifiedTree({ git: selected.git, treeObjectId: input.treeObjectId, destination: input.destination,
-        limits: parsed.limits, budget, signal: input.signal });
+        limits: parsed.limits, budget, signal: input.signal }, parsed.diagnostics);
       await current(input.signal);
       return { commitObjectId: input.commitObjectId, treeObjectId: input.treeObjectId };
     }
@@ -229,13 +236,15 @@ async function fetchCandidate(git: DisposableGit, options: ParsedOptions, signal
       "--git-dir", git.repository, "fetch", "--depth=1", "--no-tags", "--no-write-fetch-head", "--force",
       options.repositoryUrl, `${options.claim.candidateCommit}:refs/dim/candidate`
     ], 64 * 1024, signal);
-    await git.run([
-      "--git-dir", git.repository, "fsck", "--strict", "--full", "--no-reflogs", "--no-progress"
-    ], 64 * 1024, signal);
-    const fetched = (await git.run([
-      "--git-dir", git.repository, "rev-parse", "--verify", "refs/dim/candidate^{commit}"
-    ], 128, signal)).toString("ascii").trim();
-    if (fetched !== options.claim.candidateCommit) throw new NativeGitCandidateReadError("native Git returned a different candidate commit");
+    await acquisitionOperation("object-verification", async () => {
+      await git.run([
+        "--git-dir", git.repository, "fsck", "--strict", "--full", "--no-reflogs", "--no-progress"
+      ], 64 * 1024, signal);
+      const fetched = (await git.run([
+        "--git-dir", git.repository, "rev-parse", "--verify", "refs/dim/candidate^{commit}"
+      ], 128, signal)).toString("ascii").trim();
+      if (fetched !== options.claim.candidateCommit) throw new NativeGitCandidateReadError("native Git returned a different candidate commit");
+    }, options.diagnostics);
 }
 
 async function resolveProtectedHead(git: DisposableGit, options: ParsedOptions, signal: AbortSignal): Promise<string> {

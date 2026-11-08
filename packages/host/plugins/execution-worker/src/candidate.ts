@@ -3,6 +3,8 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { UserError } from "@slop-lab/dim-host-core";
 import { executionDescriptorSchema, executionDescriptorDigest, type ExecutionDescriptor } from "@slop-lab/dim-contracts-ci/execution";
+import type { Writable } from "node:stream";
+import { acquisitionOperation } from "./acquisitionDiagnostics.js";
 
 export type NativeCandidateBlob = {
   readonly objectId: string;
@@ -26,6 +28,7 @@ export type NativeCandidateVerificationInput = {
   readonly scriptFile: string;
   readonly sourceContextDirectory?: string;
   readonly signal: AbortSignal;
+  readonly diagnostics?: Writable;
 };
 
 export async function verifyAndMaterializeCandidate(input: NativeCandidateVerificationInput): Promise<void> {
@@ -48,16 +51,19 @@ export async function verifyAndMaterializeCandidate(input: NativeCandidateVerifi
   if (commit.objectId !== descriptor.candidateCommit || commit.treeObjectId !== descriptor.candidateTree) {
     throw new NativeHostVerificationError("candidate commit does not identify the descriptor tree");
   }
-  const config = await input.authority.readBlob({
-    ...identity, treeObjectId: descriptor.candidateTree, path: descriptor.configBlob.path, maximumBytes: 64 * 1024,
-    signal: input.signal
-  });
-  assertBlob(config, descriptor.configBlob, 64 * 1024, "config");
-  const script = await input.authority.readBlob({
-    ...identity, treeObjectId: descriptor.candidateTree, path: descriptor.script.path, maximumBytes: 1024 * 1024,
-    signal: input.signal
-  });
-  assertBlob(script, descriptor.script, 1024 * 1024, "script");
+  const script = await acquisitionOperation("source-blobs", async () => {
+    const config = await input.authority.readBlob({
+      ...identity, treeObjectId: descriptor.candidateTree, path: descriptor.configBlob.path, maximumBytes: 64 * 1024,
+      signal: input.signal
+    });
+    assertBlob(config, descriptor.configBlob, 64 * 1024, "config");
+    const script = await input.authority.readBlob({
+      ...identity, treeObjectId: descriptor.candidateTree, path: descriptor.script.path, maximumBytes: 1024 * 1024,
+      signal: input.signal
+    });
+    assertBlob(script, descriptor.script, 1024 * 1024, "script");
+    return script;
+  }, input.diagnostics);
   const primary = descriptor.inputs[descriptor.repositoryId];
   if (!Object.hasOwn(descriptor.inputs, descriptor.repositoryId) || primary?.commit !== descriptor.candidateCommit || primary.tree !== descriptor.candidateTree) {
     throw new NativeHostVerificationError("primary repository is missing from execution inputs");

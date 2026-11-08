@@ -1,3 +1,4 @@
+import { Writable } from "node:stream";
 import { expect, it } from "vitest";
 import { NativeOutputCollector } from "../../../../packages/host/plugins/execution-worker/src/output.js";
 import { acquisitionOperation, writeAcquisitionDiagnostic } from "../../../../packages/host/plugins/execution-worker/src/acquisitionDiagnostics.js";
@@ -17,4 +18,21 @@ it("does not log arbitrary errors that did not pass through the trusted acquisit
   const output = new NativeOutputCollector(1024, () => {});
   writeAcquisitionDiagnostic(output.stderr, Object.assign(new Error("private"), { phase: "candidate-fetch" }), "candidate-read-timeout");
   expect(output.result().stderr.length).toBe(0);
+});
+
+it("emits bounded phase success/failure timing and preserves the original error even if presentation fails", async () => {
+  let captured = "";
+  const output = new Writable({ write(chunk, _encoding, done) { captured += chunk.toString(); done(); } }), before = performance.now();
+  let finish!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const pending = acquisitionOperation("materialize", () => gate, output);
+  expect(JSON.parse(captured)).toEqual({ component: "candidate-acquisition", phase: "materialize", event: "start" });
+  finish(); await pending;
+  const events = captured.trim().split("\n").map(line => JSON.parse(line));
+  expect(events[1]).toMatchObject({ phase: "materialize", event: "finish", status: "success", elapsedMilliseconds: expect.any(Number) });
+  expect(events[1].elapsedMilliseconds).toBeGreaterThanOrEqual(0);
+  expect(events[1].elapsedMilliseconds).toBeLessThanOrEqual(Math.ceil(performance.now() - before));
+  const error = new NativeGitProcessError("PRIVATE_TOKEN_URL", "timeout");
+  const brokenSink = { write() { throw new Error("PRIVATE_SINK_FAILURE"); } } as unknown as import("node:stream").Writable;
+  await expect(acquisitionOperation("candidate-fetch", async () => { throw error; }, brokenSink)).rejects.toBe(error);
 });
