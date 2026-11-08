@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   cleanupFinalizeFixtures,
   closeFinalizeService,
@@ -22,14 +22,16 @@ describe("authoritative installed native review creation", () => {
     // Given
     let blockPublication = false;
     let completed = false;
-    let publicationObserved = false;
-    let release: (() => void) | undefined;
-    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const observationAllowed = Promise.withResolvers<void>();
+    const publicationEntered = Promise.withResolvers<void>();
+    const publicationReleased = Promise.withResolvers<void>();
     const fixture = await nativeBundleReviewFixture("bundle-review-response-order", {
       async beforeFinalVerification() {
         if (!blockPublication) return;
-        publicationObserved = true;
-        await blocked;
+        // Hook observation may arrive after the Git response, with no 1s product contract.
+        await observationAllowed.promise;
+        publicationEntered.resolve();
+        await publicationReleased.promise;
       }
     });
     blockPublication = true;
@@ -37,16 +39,24 @@ describe("authoritative installed native review creation", () => {
     const push = runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${reviewProposalRef}`])
       .finally(() => { completed = true; });
 
-    // When
-    await push;
+    try {
+      // When: the real Git client must finish while publication is still blocked.
+      await phase("proposal push before publication release", push);
 
-    // Then
-    expect(completed).toBe(true);
-    await vi.waitFor(() => { expect(publicationObserved).toBe(true); });
-    expect(await publishedReviewNames(fixture.root)).toHaveLength(1);
-    release?.();
-    const candidate = (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD"])).stdout.trim();
-    await waitForPublishedReview(fixture.root, candidate);
+      // Then: observe the actual hook explicitly, never by short polling.
+      expect(completed).toBe(true);
+      observationAllowed.resolve();
+      await phase("durable publication hook entry", publicationEntered.promise);
+      expect(await publishedReviewNames(fixture.root)).toHaveLength(1);
+      publicationReleased.resolve();
+      const candidate = (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD"])).stdout.trim();
+      await waitForPublishedReview(fixture.root, candidate);
+    } finally {
+      // Assertion failure must not strand the raw worker inside its publication hook.
+      observationAllowed.resolve(); publicationReleased.resolve();
+      try { await phase("proposal client settlement during cleanup", push.then(() => {}, () => {})); }
+      finally { await phase("publication worker drain during cleanup", closeFinalizeService(fixture.service)); }
+    }
   });
 
   it("persists the committed proposal after the pushing client disconnects", async () => {
@@ -110,3 +120,13 @@ describe("authoritative installed native review creation", () => {
     expect(await publishedReviewNames(fixture.root)).toHaveLength(2);
   });
 });
+
+/** Named fixture phase within the existing test budget, with no product deadline change. */
+async function phase<T>(name: string, operation: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([operation, new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(`native publication fixture phase exceeded 5s: ${name}`)), 5_000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
