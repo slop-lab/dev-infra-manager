@@ -82,6 +82,43 @@ it("rejects unsupported Just architecture and bad downloaded bytes before changi
   expect(await readFile(join(destination, "just"), "utf8")).toBe("preserve");
 });
 
+it.each([
+  { arch: "amd64", asset: "315676085", checksum: "6a3003f68fa4d86ada8afe33830a88ffdb6c2fcaff4e5a840b1cb90eaf6f46fc", version: "1.43.1", success: true },
+  { arch: "arm64", asset: "315676192", checksum: "e28e1f18cecd45d35f9fb39ef3651dd79c0623cb29a2f375ea7a1a185ac32dc9", version: "1.43.1", success: true },
+  { arch: "amd64", asset: "315676085", checksum: "6a3003f68fa4d86ada8afe33830a88ffdb6c2fcaff4e5a840b1cb90eaf6f46fc", version: "1.43.0", success: false }
+])("downloads the exact public $arch API asset and verifies its pinned digest and executable version $version", async ({ arch, asset, checksum, version, success }) => {
+  const f = await fixture(), destination = join(f.home, "bin"), argumentsFile = join(f.root, "curl-arguments");
+  await writeFile(join(f.tools, "curl"), `#!/bin/bash
+set -euo pipefail
+printf '%s\\n' "$@" > "$DIM_JUST_CURL_ARGS"
+while (( $# )); do if [[ $1 == --output ]]; then printf fixture > "$2"; exit 0; fi; shift; done
+exit 1
+`, { mode: 0o755 });
+  await writeFile(join(f.tools, "sha256sum"), `#!/bin/bash
+set -euo pipefail
+test "$*" = '--check --status'
+IFS= read -r line
+[[ "$line" == '${checksum}  '* ]]
+test "$(cat "\${line#*  }")" = fixture
+`, { mode: 0o755 });
+  await writeFile(join(f.tools, "tar"), `#!/bin/bash
+set -euo pipefail
+while (( $# )); do if [[ $1 == --directory ]]; then directory=$2; break; fi; shift; done
+printf '#!/bin/sh\\nprintf "just ${version}\\n"\\n' > "$directory/just"
+`, { mode: 0o755 });
+  const result = spawnSync("bash", [join(f.source, "scripts/checks/source-gate/install-just.bash"), destination, arch], {
+    encoding: "utf8", env: { PATH: `${f.tools}:/usr/bin:/bin`, DIM_JUST_CURL_ARGS: argumentsFile }
+  });
+  const args = (await readFile(argumentsFile, "utf8")).trim().split("\n");
+  expect(args.at(-1)).toBe(`https://api.github.com/repos/casey/just/releases/assets/${asset}`);
+  expect(args).toContain("Accept: application/octet-stream");
+  expect(args).toContain("X-GitHub-Api-Version: 2022-11-28");
+  expect(args).toEqual(expect.arrayContaining(["--fail", "--location", "--retry", "3", "--connect-timeout", "15", "--max-time", "120"]));
+  expect(args.some(argument => /authorization|token|\?/.test(argument))).toBe(false);
+  if (success) expect(result.status, result.stderr).toBe(0);
+  else expect(result.status).not.toBe(0);
+});
+
 it.skipIf(!process.env.DIM_TEST_SOURCE_CI_IMAGE)("bootstraps source tools and Git metadata in a fresh Node26 container without starting services", { timeout: 360_000 }, async () => {
   const f = await fixture(), image = process.env.DIM_TEST_SOURCE_CI_IMAGE!;
   expect(image).toMatch(/@sha256:[0-9a-f]{64}$/);
