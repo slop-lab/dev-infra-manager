@@ -18,7 +18,7 @@ export interface VmGrantCredential {
 export interface VmAuthorization { readonly vm: PersistentVm; readonly grant: VmGrant; readonly workspace: WorkspaceRecord }
 export interface VmGrantIdentity { readonly workspaceId: string; readonly grantId: string; readonly generation: number }
 export interface VmLifecycleAccess extends VmGrantIdentity {
-  readonly token: string; readonly vmId: string; readonly vmName: string; readonly operation: "start" | "stop";
+  readonly token: string; readonly signal?: AbortSignal; readonly vmId: string; readonly vmName: string; readonly operation: "start" | "stop";
 }
 export interface PersistentVm extends VmIdentity {
   schemaVersion: 1; name: string; createdAt: string; grants: VmGrant[];
@@ -123,7 +123,7 @@ export class PersistentVmService {
       const access = await this.authorizeAccess(input.vmName, input.token, { permission: "lifecycle", vmId: input.vmId,
         workspaceId: input.workspaceId, grantId: input.grantId, generation: input.generation });
       if (!access) throw new UserError("VM access denied or expired");
-      if (input.operation === "start") await this.startReady(access.vm); else await this.machines.stop(access.vm);
+      if (input.operation === "start") await this.startReady(access.vm, input.signal); else await this.machines.stop(access.vm);
     });
   }
   async authorize(name: string, token: string): Promise<PersistentVm | undefined> {
@@ -151,21 +151,12 @@ export class PersistentVmService {
     return undefined;
   }
   private file(name: string): string { return path.join(this.directory, `${validName(name)}.json`); }
-  private async startReady(record: PersistentVm): Promise<void> {
-    const before = await this.machines.inspect(record), started = before?.running !== true;
-    await this.machines.start(record);
-    try {
-      await this.machines.waitForAgent(record);
-      await this.machines.waitForDocker(record);
-      const ready = await this.machines.exec(record, ["sh", "-eu", "-c",
+  private async startReady(record: PersistentVm, signal?: AbortSignal): Promise<void> {
+    await this.machines.startReady(record, async (machines) => {
+      const ready = await machines.exec(record, ["sh", "-eu", "-c",
         'test -d /workspace && test ! -L /workspace && test -w /workspace && test -d /mnt/dim-tmp && test ! -L /mnt/dim-tmp && test -w /mnt/dim-tmp && test "$(stat -c %a /mnt/dim-tmp)" = 700']);
       if (ready !== 0) throw new UserError("auxiliary VM image must provide writable /workspace and private mode-0700 /mnt/dim-tmp for user dim");
-    } catch (error) {
-      if (!started) throw error;
-      try { await this.machines.abortStart(record); }
-      catch (stopError) { throw new AggregateError([error, stopError], "auxiliary VM readiness failed and the started VM could not be stopped"); }
-      throw error;
-    }
+    }, signal);
   }
   private async write(record: PersistentVm): Promise<void> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });

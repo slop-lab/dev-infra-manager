@@ -22,6 +22,7 @@ export interface WorkspaceSourceProviderContext extends WorkspaceRuntimeFactoryC
 
 /** Host composition supplies capabilities; optional integrations own their implementations. */
 export interface WorkspaceRuntimeFactoryContext {
+  readonly signal?: AbortSignal;
   readonly runner: StreamingCommandRunner;
   readonly cleanupRunner: CommandRunner;
   readonly stateRoot: string;

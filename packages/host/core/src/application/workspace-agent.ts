@@ -109,9 +109,9 @@ export async function runWorkspaceAgent(file: string): Promise<void> {
   if (config.generation !== await workspaceAgentGeneration()) throw new UserError("workspace bridge generation changed before startup; run the workspace command again");
   const runner = new ProcessRunner();
   const store = new WorkspaceStore(config.stateRoot);
-  const composition = composeWorkspaceRuntime({ runner, cleanupRunner: runner, stateRoot: store.root });
-  const service = new WorkspaceService(store, composition.runtime, async () => { throw new UserError("agent connections cannot create workspaces"); });
   const abort = new AbortController();
+  const composition = composeWorkspaceRuntime({ runner, cleanupRunner: runner, stateRoot: store.root, signal: abort.signal });
+  const service = new WorkspaceService(store, composition.runtime, async () => { throw new UserError("agent connections cannot create workspaces"); });
   let channelReady = false;
   const context: AgentHostContext = { runner, cleanupRunner: runner, stateRoot: store.root, store, service, signal: abort.signal, runtime: composition.runtime, channelReady: () => channelReady };
   const current = await store.read(config.workspaceName);

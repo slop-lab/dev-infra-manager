@@ -31,6 +31,7 @@ selected by `dim --host`. Configuration is private host state under
   "project": "dim",
   "storagePool": "vm-storage",
   "network": "vmbr0",
+  "startupTimeoutMilliseconds": 300000,
   "guest": { "cpuCount": 4, "memory": "8GiB", "disk": "40GiB" },
   "cgroupRoot": "/sys/fs/cgroup/dim-vm",
   "budgetHelper": "/usr/local/bin/dim-vm-budget",
@@ -39,6 +40,17 @@ selected by `dim --host`. Configuration is private host state under
   "console": { "address": "127.0.0.1", "port": 8089 }
 }
 ```
+
+`startupTimeoutMilliseconds` is the operator's whole startup budget, shared by
+host resource admission, guest agent and Docker readiness, and DIM guest helper
+installation/service resumption. It defaults to 300000 milliseconds and must be
+an integer from 1000 through 900000. Auxiliary VMs and VM workspaces use the same
+policy; workspace grants cannot override it. Expiry or caller cancellation
+rejects late success and rolls back a newly started VM with a separate bounded
+cleanup budget. Readiness failure preserves an already-running VM; failure to
+confirm host resource ceilings still stops it. Agent tools and other callers
+must allow the configured startup budget plus bounded cleanup in their own
+execution timeout; the practical fixture allows another 60 seconds.
 
 The normal host CLI does not need to run as root. Install the matching plugin's
 root budget helper once on that selected host, using a reviewed root-owned

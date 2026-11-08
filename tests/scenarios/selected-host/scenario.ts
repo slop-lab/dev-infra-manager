@@ -139,7 +139,7 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     endpoints.push({ kind: "coding-agent", url, disposition: "verified-then-discarded" });
     lanes.push({ name: "opencode-authenticated-session-ingress", status: "PASS" });
     if (profile.vm !== undefined) {
-      auxiliaryVm = await verifyAuxiliaryVm({ workspace: owned, image: profile.vm.image, challenge: token,
+      auxiliaryVm = await verifyAuxiliaryVm({ workspace: owned, image: profile.vm.image, startupTimeoutMilliseconds: profile.vm.startupTimeoutMilliseconds, challenge: token,
         run: (step, args, timeout) => checked(profile, step, args, timeout),
         rejected: async (step, args) => { const result = await dim(profile.name, args, true); if (result.exitCode === 0) throw new SmokeFailure(profile.name, step, "revoked operation unexpectedly succeeded"); } });
       lanes.push({ name: "auxiliary-kvm-vm", status: "PASS" });

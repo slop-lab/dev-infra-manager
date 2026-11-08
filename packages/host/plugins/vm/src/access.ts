@@ -54,7 +54,7 @@ export class VmAccessService {
     return this.records.machines.exec(access.vm, [...input.command], input.options);
   }
 
-  async lifecycle(input: VmAccessIdentity & { readonly operation: "start" | "stop" }): Promise<void> {
+  async lifecycle(input: VmAccessIdentity & { readonly operation: "start" | "stop"; readonly signal?: AbortSignal }): Promise<void> {
     await this.records.lifecycleAccess({ ...input, operation: input.operation });
   }
 

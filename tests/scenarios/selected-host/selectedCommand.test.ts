@@ -23,9 +23,8 @@ it("retains failed command exit evidence without recording scripts, prompts or r
 });
 
 it.each([
-  { args: ["vm", "start", "owned"], stderr: "dim-host: VM guest agent did not become ready; verify the reviewed image and Incus agent payload before retrying\n", diagnostic: "vm-agent-not-ready" },
+  { args: ["vm", "start", "owned"], stderr: "dim-host: VM startup deadline exceeded while waiting for guest Docker\n", diagnostic: "vm-startup-timeout" },
   { args: ["vm", "start", "owned"], stderr: "dim: VM guest readiness failed: PRIVATE_INCUS_DETAILS\n", diagnostic: "vm-agent-probe-failed" },
-  { args: ["vm", "start", "owned"], stderr: "dim-host: VM guest Docker did not become ready; configure its guest daemon to start at boot before retrying\n", diagnostic: "vm-docker-not-ready" },
   { args: ["vm", "start", "owned"], stderr: "dim-host: VM guest Docker readiness failed: PRIVATE_DOCKER_DETAILS\n", diagnostic: "vm-docker-probe-failed" },
   { args: ["vm", "start", "owned"], stderr: "dim-host: auxiliary VM image must provide writable /workspace and private mode-0700 /mnt/dim-tmp for user dim\n", diagnostic: "vm-guest-layout-invalid" },
   { args: ["vm", "start", "owned"], stderr: "dim-host: PRIVATE_UNKNOWN_FAILURE\n", diagnostic: undefined },

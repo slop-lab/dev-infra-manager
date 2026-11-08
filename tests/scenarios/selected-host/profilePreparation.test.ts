@@ -20,7 +20,7 @@ it("rejects privileged or derived host fields rather than silently overriding th
 });
 
 it("derives the VM capability requirement only from an explicit reviewed image binding", () => {
-  const profile = prepareSmokeProfile({ bindings: { schemaVersion: 1, hosts: [{ ...host, vm: { image: "b".repeat(64) } }] }, artifacts, sourceSha, sshPublicKey });
+  const profile = prepareSmokeProfile({ bindings: { schemaVersion: 1, hosts: [{ ...host, vm: { image: "b".repeat(64), startupTimeoutMilliseconds: 420_000 } }] }, artifacts, sourceSha, sshPublicKey });
   expect(profile.hosts[0]?.requiredPlugins).toContain("vm");
   expect(profile.hosts[0]?.vm?.image).toBe("b".repeat(64));
 });
@@ -30,4 +30,11 @@ it("executes the public VM recipe and refuses to count preflight as acceptance",
   await expect(promisify(execFile)(process.execPath, ["scripts/examples/run.ts", "examples/features/ordinary-workspace", "verify-vm"], {
     cwd: root, env: { ...process.env, DIM_SMOKE_PREFLIGHT_ONLY: "1" }
   })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining("VM acceptance cannot use preflight-only mode") });
+});
+
+it("rejects absent or malformed operator VM budget metadata", () => {
+  for (const startupTimeoutMilliseconds of [undefined, null, "420000", 999, 900001, 1000.5]) {
+    expect(() => prepareSmokeProfile({ bindings: { schemaVersion: 1, hosts: [{ ...host, vm: { image: "b".repeat(64), startupTimeoutMilliseconds } }] }, artifacts, sourceSha, sshPublicKey }))
+      .toThrow(/startupTimeoutMilliseconds/);
+  }
 });

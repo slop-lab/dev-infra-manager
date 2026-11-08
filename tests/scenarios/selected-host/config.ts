@@ -39,7 +39,7 @@ export type HostProfile = {
   readonly sshPublicKey: string;
   readonly image?: string;
   readonly llm: { readonly configFile: string; readonly project: string; readonly route: string; readonly provider: "dim-responses" | "dim-chat"; readonly model: string; readonly operatorConnectionFile: string };
-  readonly vm?: { readonly image: string };
+  readonly vm?: { readonly image: string; readonly startupTimeoutMilliseconds: number };
   readonly monitor?: OwnedMonitorProfile;
 };
 export type OwnedMonitorProfile = Omit<MonitorProfile, "parentSessionId" | "directory">;
@@ -171,10 +171,13 @@ function parseHostProfile(value: unknown, index: number): HostProfile {
   if (!path.isAbsolute(configFile) || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(project) || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(route)) throw new OperatorInputError("invalid explicit LLM attachment selection");
   let vm: HostProfile["vm"];
   if (entry["vm"] !== undefined) {
-    const selection = object(entry["vm"], `${label}.vm`); exactKeys(selection, ["image"], `${label}.vm`);
+    const selection = object(entry["vm"], `${label}.vm`); exactKeys(selection, ["image", "startupTimeoutMilliseconds"], `${label}.vm`);
     const image = string(selection["image"], `${label}.vm.image`);
     if (!/^[a-f0-9]{64}$/.test(image) || !requiredPlugins.includes("vm")) throw new OperatorInputError("VM lane requires the vm plugin and a reviewed exact Incus image fingerprint");
-    vm = { image };
+    const startupTimeoutMilliseconds = selection["startupTimeoutMilliseconds"];
+    if (typeof startupTimeoutMilliseconds !== "number" || !Number.isSafeInteger(startupTimeoutMilliseconds)
+      || startupTimeoutMilliseconds < 1_000 || startupTimeoutMilliseconds > 900_000) throw new OperatorInputError("VM lane requires the operator host startupTimeoutMilliseconds (integer 1000..900000)");
+    vm = { image, startupTimeoutMilliseconds };
   }
   return { name, workspace, source, workspaceSourceSha, expectedHostVersion, requiredPlugins, ingress, sshPublicKey,
     llm: { configFile, project, route, provider, model, operatorConnectionFile }, ...(monitor === undefined ? {} : { monitor }), ...(vm === undefined ? {} : { vm }), ...(image === undefined ? {} : { image }) };

@@ -1,12 +1,12 @@
 import { mkdir, readFile, realpath, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
+import type { RunOptions, WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 
 export interface VmBudget {
-  prepare?(identity: { instance: string }, resources: WorkspaceResources): Promise<void>;
-  apply(identity: { instance: string; pid: number }, resources: WorkspaceResources): Promise<void>;
-  verify(identity: { instance: string; pid: number }, resources: WorkspaceResources): Promise<void>;
-  release?(instance: string): Promise<void>;
+  prepare?(identity: { instance: string }, resources: WorkspaceResources, options?: Pick<RunOptions, "signal">): Promise<void>;
+  apply(identity: { instance: string; pid: number }, resources: WorkspaceResources, options?: Pick<RunOptions, "signal">): Promise<void>;
+  verify(identity: { instance: string; pid: number }, resources: WorkspaceResources, options?: Pick<RunOptions, "signal">): Promise<void>;
+  release?(instance: string, options?: Pick<RunOptions, "signal">): Promise<void>;
 }
 
 /** QEMU joins a UUID child of an explicitly delegated subtree; guests never see this authority. */

@@ -26,10 +26,10 @@ describe("Incus VM workspace runtime", () => {
   it("retains disks across recreate and rejects missing initialized storage", async () => {
     const { runner, machines } = fixture();
     const record = workspace();
-    await machines.create(record); await machines.start(record);
+    await machines.create(record); await machines.startReady(record);
     const initialized = { ...record, initialized: true };
     await machines.remove(initialized, { keepData: true });
-    await machines.create(initialized); await machines.start(initialized);
+    await machines.create(initialized); await machines.startReady(initialized);
     expect(runner.calls.filter((call) => call[0] === "init")).toHaveLength(1);
     expect(runner.calls.filter((call) => call[0] === "delete")).toHaveLength(0);
     runner.exists = false;
@@ -37,7 +37,7 @@ describe("Incus VM workspace runtime", () => {
   });
   it("fails closed on foreign identities before start or delete", async () => {
     const { runner, machines } = fixture(); runner.exists = true; runner.foreign = true;
-    await expect(machines.start(workspace())).rejects.toThrow("not owned");
+    await expect(machines.startReady(workspace())).rejects.toThrow("not owned");
     await expect(machines.abortStart(workspace())).rejects.toThrow("not owned");
     await expect(machines.remove(workspace(), { keepData: false })).rejects.toThrow("not owned");
     expect(runner.calls.every((call) => call[0] === "query")).toBe(true);
@@ -46,8 +46,8 @@ describe("Incus VM workspace runtime", () => {
     const calls: unknown[] = [];
     const { runner, machines } = fixture({ verify: async () => {}, apply: async (...args) => { calls.push(args); throw new Error("cgroup delegation denied"); } });
     await machines.create(workspace());
-    await expect(machines.start(workspace())).rejects.toThrow("cgroup delegation denied");
-    expect(calls).toEqual([[{ instance: `dim-${id}`, pid: 123 }, workspace().resources]]);
+    await expect(machines.startReady(workspace())).rejects.toThrow("cgroup delegation denied");
+    expect(calls).toEqual([[{ instance: `dim-${id}`, pid: 123 }, workspace().resources, expect.objectContaining({ signal: expect.any(AbortSignal) })]]);
     expect(runner.running).toBe(false);
     expect(runner.calls).toContainEqual(["stop", `dim-${id}`, "--force"]);
   });
@@ -88,12 +88,12 @@ describe("Incus VM workspace runtime", () => {
     expect(released).toBe(false);
   });
   it("rejects live guest allocation changes before Incus can partially apply unsupported memory hotplug", async () => {
-    const { runner, machines } = fixture(); await machines.create(workspace()); await machines.start(workspace());
+    const { runner, machines } = fixture(); await machines.create(workspace()); await machines.startReady(workspace());
     await expect(machines.updateAllocation(workspace(), { cpuCount: 8, memory: "16GiB" })).rejects.toThrow("stop the VM");
     expect(runner.calls.some((call) => call[0] === "config")).toBe(false);
   });
   it("uses one exec path for streams and does not wrap arbitrary commands in a shell", async () => {
-    const { runner, machines } = fixture(); await machines.create(workspace()); await machines.start(workspace());
+    const { runner, machines } = fixture(); await machines.create(workspace()); await machines.startReady(workspace());
     const runtime = new IncusWorkspaceRuntime(machines);
     expect(await runtime.exec(workspace(), ["printf", "%s", "$(dangerous)"])).toBe(0);
     expect(runner.calls.at(-1)?.slice(-4)).toEqual(["--", "printf", "%s", "$(dangerous)"]);

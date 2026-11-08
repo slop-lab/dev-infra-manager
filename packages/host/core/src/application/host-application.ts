@@ -39,7 +39,7 @@ async function dispatchHostOperation(request: HostOperationRequest, signal: Abor
       processRunner.runStreaming(command, args, { ...options, signal: options.signal ? AbortSignal.any([signal, options.signal]) : signal })
   };
   const store = new WorkspaceStore(path.resolve(process.env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")), { signal });
-  const composition = composeWorkspaceRuntime({ runner, cleanupRunner: processRunner, stateRoot: store.root });
+  const composition = composeWorkspaceRuntime({ runner, cleanupRunner: processRunner, stateRoot: store.root, signal });
   const cleanupWorkspace = async (name: string, workspaceId?: string) => {
     const cleanupSignal = AbortSignal.timeout(30_000);
     const cleanupRunner = {
@@ -48,7 +48,7 @@ async function dispatchHostOperation(request: HostOperationRequest, signal: Abor
       runStreaming: (command: string, args: string[], options: RunOptions = {}) =>
         processRunner.runStreaming(command, args, { ...options, signal: options.signal ? AbortSignal.any([cleanupSignal, options.signal]) : cleanupSignal })
     };
-    const cleanupRuntime = composeWorkspaceRuntime({ runner: cleanupRunner, cleanupRunner: processRunner, stateRoot: store.root });
+    const cleanupRuntime = composeWorkspaceRuntime({ runner: cleanupRunner, cleanupRunner: processRunner, stateRoot: store.root, signal: cleanupSignal });
     const cleanup = new WorkspaceService(new WorkspaceStore(store.root, { signal: cleanupSignal }), cleanupRuntime.runtime,
       async () => { throw new UserError("cleanup cannot acquire source"); });
     await cleanup.discard(name, workspaceId);

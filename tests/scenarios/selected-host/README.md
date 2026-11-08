@@ -116,7 +116,10 @@ operation or claims host delegation. Actual VM-fd effect belongs only to a
 separately authorized `container-kvm` workspace.
 
 The separate auxiliary VM lane is selected with the `vm` plugin and optional
-host field `vm: {image: "FULL_REVIEWED_INCUS_IMAGE_FINGERPRINT"}`. It provisions
+host field `vm: {image: "FULL_REVIEWED_INCUS_IMAGE_FINGERPRINT",
+startupTimeoutMilliseconds: 420000}`. Supply the actual operator host startup
+policy as expected metadata; it is not a guest override. Start callers allow
+that policy plus 60000 ms for independent cleanup. It provisions
 one reviewed exact-image VM through the operator CLI, grants only the new owned
 workspace, and verifies agent discovery, code syntax/test execution, artifact
 return, lifecycle readiness, revocation and UUID-pinned cleanup. This lane does

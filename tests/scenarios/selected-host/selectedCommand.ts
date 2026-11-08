@@ -1,16 +1,15 @@
 import { CommandFailure, runCommand, type CommandResult } from "../web-lifecycle/process.js";
 import { OperatorInputError, SmokeFailure, type HostProfile } from "./config.js";
 
-type VmReadinessDiagnostic = "vm-agent-not-ready" | "vm-agent-probe-failed" | "vm-docker-not-ready" | "vm-docker-probe-failed" | "vm-guest-layout-invalid";
+type VmReadinessDiagnostic = "vm-startup-timeout" | "vm-agent-probe-failed" | "vm-docker-probe-failed" | "vm-guest-layout-invalid";
 export type CommandEvidence = { readonly step: string; readonly surface: readonly string[]; readonly exitCode: number | null; readonly durationMilliseconds: number; readonly diagnostic?: VmReadinessDiagnostic };
 
 /** Classify only VM-owned start failures; never publish arbitrary command output. */
 function vmReadinessDiagnostic(args: readonly string[], stderr: string): VmReadinessDiagnostic | undefined {
   if (args[0] !== "vm" || args[1] !== "start") return;
   const message = stderr.trim().replace(/^dim(?:-host)?: /, "");
-  if (message === "VM guest agent did not become ready; verify the reviewed image and Incus agent payload before retrying") return "vm-agent-not-ready";
+  if (/^VM startup deadline exceeded while waiting for (host admission|guest agent|guest Docker|guest readiness)$/.test(message)) return "vm-startup-timeout";
   if (/^VM guest readiness failed: [^\r\n]+$/.test(message)) return "vm-agent-probe-failed";
-  if (message === "VM guest Docker did not become ready; configure its guest daemon to start at boot before retrying") return "vm-docker-not-ready";
   if (/^VM guest Docker readiness failed: [^\r\n]+$/.test(message)) return "vm-docker-probe-failed";
   if (message === "auxiliary VM image must provide writable /workspace and private mode-0700 /mnt/dim-tmp for user dim") return "vm-guest-layout-invalid";
 }

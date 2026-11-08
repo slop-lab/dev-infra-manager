@@ -156,3 +156,10 @@ and file output/catalogue HTTP alone cannot prove DIM-routed inference.
 Actual workflow dispatch status, runtime results and repository required-check
 enforcement must accompany acceptance. A source-only implementation or local
 fixture test is not a successful expensive CI run.
+
+The nested practical host explicitly configures a 420000 ms whole VM startup
+budget. The smoke profile reads that value from the prepared operator host
+configuration; owner and granted start callers allow it plus 60000 ms for
+bounded cleanup. This metadata does not override host policy. Manual profiles
+with a VM lane must supply its actual `vm.startupTimeoutMilliseconds` alongside
+the exact image fingerprint. CPU, RAM and baseline recipe inputs are unchanged.

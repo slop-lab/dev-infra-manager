@@ -1,8 +1,9 @@
+import { request as httpRequest } from "node:http";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceStore } from "../../../../packages/host/core/src/workspace/store.js";
 import { VmAccessService } from "../../../../packages/host/plugins/vm/src/access.js";
 import { serveVmAccess } from "../../../../packages/host/plugins/vm/src/accessServer.js";
@@ -87,6 +88,52 @@ describe("workspace VM access service", () => {
       expect(Buffer.from(await pulled.arrayBuffer()).toString("utf8")).toContain("DIMCP1");
       expect((await fetch(`${f.endpoint}/v1/vms/${f.vm.id}/lifecycle/stop`, { method: "POST", headers: headers(f) })).status).toBe(204);
       expect((await f.records.machines.inspect(f.vm))?.running).toBe(false);
+    } finally { f.server.close(); await once(f.server, "close"); }
+  });
+
+  it("does not begin lifecycle when the client disconnects during initial authorization", async () => {
+    const f = await fixture();
+    let authorize!: () => void, entered!: () => void;
+    const gate = new Promise<void>((resolve) => { authorize = resolve; });
+    const checking = new Promise<void>((resolve) => { entered = resolve; });
+    const original = f.access.isAuthorized.bind(f.access);
+    vi.spyOn(f.access, "isAuthorized").mockImplementation(async (...args) => { const allowed = await original(...args); entered(); await gate; return allowed; });
+    const lifecycle = vi.spyOn(f.access, "lifecycle");
+    try {
+      const connected = once(f.server, "connection");
+      const client = httpRequest(`${f.endpoint}/v1/vms/${f.vm.id}/lifecycle/stop`, { method: "POST", headers: headers(f) });
+      client.on("error", () => {}); client.end(); await checking;
+      const [socket] = await connected as [import("node:net").Socket];
+      const closed = once(socket, "close"); client.destroy(); await closed;
+      authorize();
+      // The guarded action settles before the next request on this same service.
+      await fetch(`${f.endpoint}/v1/vms/${f.vm.id}/status`, { headers: headers(f) });
+      expect(lifecycle).not.toHaveBeenCalled();
+      expect((await f.records.machines.inspect(f.vm))?.running).toBe(true);
+    } finally { authorize(); f.server.close(); await once(f.server, "close"); }
+  });
+
+  it("cancels an active lifecycle probe on disconnect even when it returns zero and rolls back independently", async () => {
+    const f = await fixture(); await f.records.stop(f.vm.name);
+    let entered!: () => void, finished!: () => void;
+    const probing = new Promise<void>((resolve) => { entered = resolve; });
+    const settled = new Promise<void>((resolve) => { finished = resolve; });
+    const run = f.runner.run.bind(f.runner), lifecycle = f.access.lifecycle.bind(f.access);
+    vi.spyOn(f.access, "lifecycle").mockImplementation(async (input) => { try { await lifecycle(input); } finally { finished(); } });
+    vi.spyOn(f.runner, "run").mockImplementation(async (command, args, options) => {
+      if (args.includes("exec") && args.at(-1) === "true") {
+        entered();
+        await new Promise<void>((resolve) => options?.signal?.addEventListener("abort", () => resolve(), { once: true }));
+      }
+      if (args.includes("stop")) expect(options?.signal?.aborted).toBe(false);
+      return run(command, args, options);
+    });
+    try {
+      const abort = new AbortController();
+      const pending = fetch(`${f.endpoint}/v1/vms/${f.vm.id}/lifecycle/start`, { method: "POST", headers: headers(f), signal: abort.signal }).catch(() => undefined);
+      await probing; abort.abort(); await pending; await settled;
+      expect((await f.records.machines.inspect(f.vm))?.running).toBe(false);
+      expect(f.runner.calls.some((args) => args[0] === "stop" && args.includes("--force"))).toBe(true);
     } finally { f.server.close(); await once(f.server, "close"); }
   });
 

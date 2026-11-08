@@ -24,6 +24,11 @@ const prepared: unknown = JSON.parse(await readFile("/home/dim/dim/practical-hos
 if (!prepared || typeof prepared !== "object" || !("sourceSha" in prepared) || prepared.sourceSha !== sourceSha || !("imageFingerprint" in prepared)
   || typeof prepared.imageFingerprint !== "string" || !("hostMachineId" in prepared) || prepared.hostMachineId !== (await readFile("/etc/machine-id", "utf8")).trim()
   || !("imageType" in prepared) || prepared.imageType !== "virtual-machine" || !("kvmProbe" in prepared) || prepared.kvmProbe !== "KVM_CREATE_VM") throw new Error("practical CI lacks exact real Incus/KVM preparation");
+// Expected policy metadata is read from the configured host file, never sent as a guest override.
+const hostPolicy: unknown = JSON.parse(await readFile("/home/dim/dim/practical-host/host.json", "utf8"));
+if (!hostPolicy || typeof hostPolicy !== "object" || !("startupTimeoutMilliseconds" in hostPolicy)
+  || typeof hostPolicy.startupTimeoutMilliseconds !== "number" || !Number.isSafeInteger(hostPolicy.startupTimeoutMilliseconds)
+  || hostPolicy.startupTimeoutMilliseconds < 1_000 || hostPolicy.startupTimeoutMilliseconds > 900_000) throw new Error("practical CI lacks explicit bounded VM startup policy");
 const addresses = await lookup("probe.ci.localhost", { all: true });
 if (!addresses.some(({ address }) => address === "127.0.0.1")) throw new Error("Ubuntu fixture must resolve its private ci.localhost wildcard");
 const artifacts = await readExampleArtifacts(bundle), version = artifacts.find(({ name }) => name === "@slop-lab/dim-cli")?.version;
@@ -66,7 +71,7 @@ try {
   const config = join(root, "hosts.json"), beforeBundle = "/home/dim/dim/practical-before-packages", beforeFacade = "/home/dim/dim/practical-before-facade/package/dim";
   await writeFile(config, JSON.stringify({ schemaVersion: 1, installedSourceSha: sourceSha, hosts: ["local", "practical-ssh"].map((name) => ({ name, workspace: `dim-smoke-ci-${name}`, source, workspaceSourceSha: seedSha,
     expectedHostVersion: version, image, requiredPlugins: ["agent-tools", "host-llm-router", "external-urls", "vm"], ingress: "practical", sshPublicKey: publicKey, llm: {
-      configFile: join(gateway, "gateway.json"), project: "practical-ci", route: "ci", provider: "dim-chat", model: fixtureModel, operatorConnectionFile: join(directory, "reader.json") }, vm: { image: prepared.imageFingerprint } })),
+      configFile: join(gateway, "gateway.json"), project: "practical-ci", route: "ci", provider: "dim-chat", model: fixtureModel, operatorConnectionFile: join(directory, "reader.json") }, vm: { image: prepared.imageFingerprint, startupTimeoutMilliseconds: hostPolicy.startupTimeoutMilliseconds } })),
     isolatedUpdate: { beforeFacade, beforeBundle, afterFacade: facade, afterBundle: bundle, image } }), { mode: 0o600, flag: "wx" });
   const reportTarget = process.env.DIM_PRACTICAL_CI_REPORT;
   if (!reportTarget?.startsWith("/")) throw new Error("required practical report output is missing");

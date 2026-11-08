@@ -1,9 +1,9 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import { setTimeout } from "node:timers/promises";
 import { UserError, type CommandRunner, type StreamingCommandRunner, type RunOptions, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 import { fingerprint, object, uuid, parseVmHostConfig, type VmHostConfig } from "./config.js";
 import type { VmBudget } from "./budget.js";
+import { VmStartupDeadline } from "./startup.js";
 
 export interface VmIdentity { source?: { workingDirectory?: string; checkouts?: readonly { directory: string }[] }; id: string; image: string; initialized: boolean; resources: WorkspaceResources }
 export interface VmInspection { running: boolean; pid: number }
@@ -11,7 +11,7 @@ export interface VmInspection { running: boolean; pid: number }
 /** Incus owns the durable root disk and machine definition; DIM owns the UUID labels and admission. */
 export class IncusMachines {
   constructor(readonly config: VmHostConfig, readonly runner: StreamingCommandRunner, private readonly budget: VmBudget,
-    private readonly cleanupRunner: CommandRunner = runner, private readonly cleanupBudget: VmBudget = budget) {}
+    private readonly cleanupRunner: CommandRunner = runner, private readonly cleanupBudget: VmBudget = budget, private readonly parentSignal?: AbortSignal) {}
 
   name(record: Pick<VmIdentity, "id">): string { return `dim-${uuid(record.id)}`; }
   async inspect(record: VmIdentity, runner: CommandRunner = this.runner, options?: RunOptions): Promise<VmInspection | undefined> {
@@ -49,7 +49,26 @@ export class IncusMachines {
     if (await this.inspect(record) === undefined) throw new UserError("created Incus VM is unavailable");
   }
 
-  async start(record: VmIdentity): Promise<void> {
+  async startReady(record: VmIdentity, finish?: (machines: IncusMachines) => Promise<void>, signal?: AbortSignal): Promise<void> {
+    const deadline = new VmStartupDeadline(this.config.startupTimeoutMilliseconds, signal && this.parentSignal ? AbortSignal.any([signal, this.parentSignal]) : signal ?? this.parentSignal);
+    const scoped = new IncusMachines(this.config, deadline.runner(this.runner), deadline.budget(this.budget), this.cleanupRunner, this.cleanupBudget);
+    let started = false, admitted = false;
+    try {
+      started = !(await scoped.require(record)).running;
+      await scoped.start(record); admitted = true;
+      deadline.at("guest agent"); await scoped.waitForAgent(record, deadline);
+      deadline.at("guest Docker"); await scoped.waitForDocker(record, deadline);
+      deadline.at("guest readiness"); if (finish) await finish(scoped);
+      deadline.check();
+    } catch (error) {
+      if (started && admitted) {
+        try { await this.abortStart(record); }
+        catch (stopError) { throw new AggregateError([error, stopError], "VM startup failed and stopping the started VM could not be confirmed"); }
+      }
+      throw error;
+    } finally { deadline.close(); }
+  }
+  private async start(record: VmIdentity): Promise<void> {
     const actual = await this.require(record);
     try {
       await this.budget.prepare?.({ instance: this.name(record) }, record.resources);
@@ -70,7 +89,7 @@ export class IncusMachines {
     if (actual?.running) await this.checked(["stop", this.name(record), "--force"], this.cleanupRunner, options);
     const stopped = await this.inspect(record, this.cleanupRunner, options);
     if (stopped?.running) throw new UserError("force-stopped VM is still running");
-    await this.cleanupBudget.release?.(this.name(record));
+    await this.cleanupBudget.release?.(this.name(record), options);
   }
   async stop(record: VmIdentity): Promise<void> {
     const actual = await this.inspect(record);
@@ -116,25 +135,21 @@ export class IncusMachines {
       "--cwd", `/workspace${record.source?.workingDirectory ? `/${record.source.workingDirectory}` : ""}`, "--env", "HOME=/home/dim", "--env", "TMPDIR=/mnt/dim-tmp", "--env", "DIM_WORKSPACE_TMPDIR=/mnt/dim-tmp",
       "--mode", options.terminal ? "interactive" : "non-interactive", "--", "runuser", "--user", "dim", "--preserve-environment", "--", ...command]), options);
   }
-  async waitForAgent(record: VmIdentity, timeoutMilliseconds = 120_000): Promise<void> {
-    const deadline = Date.now() + timeoutMilliseconds;
+  private async waitForAgent(record: VmIdentity, deadline: VmStartupDeadline): Promise<void> {
     for (;;) {
       const result = await this.runner.run("incus", this.args(["exec", this.name(record), "--", "true"]));
       if (result.exitCode === 0) return;
       if (!/VM agent isn.t currently running|connection refused|not connected|Instance is not running/i.test(result.stderr)) throw new UserError(`VM guest readiness failed: ${result.stderr.trim()}`);
-      if (Date.now() >= deadline) throw new UserError("VM guest agent did not become ready; verify the reviewed image and Incus agent payload before retrying");
-      await setTimeout(250);
+      await deadline.retry();
     }
   }
-  async waitForDocker(record: VmIdentity, timeoutMilliseconds = 120_000): Promise<void> {
-    const deadline = Date.now() + timeoutMilliseconds;
+  private async waitForDocker(record: VmIdentity, deadline: VmStartupDeadline): Promise<void> {
     for (;;) {
       const result = await this.runner.run("incus", this.args(["exec", this.name(record), "--", "docker", "info", "--format", "{{.ServerVersion}}"]));
       if (result.exitCode === 0) return;
       if (!/Cannot connect|failed to connect|connection refused|no such file or directory|VM agent isn.t currently running|Instance is not running/i.test(result.stderr)
         || /Command not found|executable file not found/.test(result.stderr)) throw new UserError(`VM guest Docker readiness failed: ${result.stderr.trim()}`);
-      if (Date.now() >= deadline) throw new UserError("VM guest Docker did not become ready; configure its guest daemon to start at boot before retrying");
-      await setTimeout(250);
+      await deadline.retry();
     }
   }
   async rootExec(record: VmIdentity, command: string[], options: RunOptions = {}): Promise<void> {

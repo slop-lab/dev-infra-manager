@@ -56,7 +56,11 @@ export async function serveVmAccess(access: VmAccessService, options: VmAccessSe
     if (request.method === "POST" && lifecycle?.[1]) {
       const operation = lifecycle[1];
       if (operation !== "start" && operation !== "stop") throw new UserError("invalid VM lifecycle operation");
-      await access.lifecycle({ ...identity, operation }); response.writeHead(204); response.end(); return;
+      await streamAuthorization({ access, identity, permission: "lifecycle",
+        ...(options.recheckMilliseconds === undefined ? {} : { recheckMilliseconds: options.recheckMilliseconds }) },
+        { request, response }, async (signal) => {
+          await access.lifecycle({ ...identity, operation, signal }); response.writeHead(204); response.end();
+        }); return;
     }
     json(response, 404, { error: "unknown VM access operation" });
   }
@@ -79,7 +83,8 @@ async function streamAuthorization(watch: AuthorizationWatch, exchange: HttpExch
   exchange.request.once("aborted", stop); exchange.response.once("close", stop);
   const timer = setInterval(() => { void watch.access.isAuthorized(watch.identity, watch.permission)
     .then((allowed) => { if (!allowed) abort.abort(); }, stop); }, watch.recheckMilliseconds ?? 1_000);
-  try { await action(abort.signal); }
+  if (exchange.request.aborted || exchange.response.destroyed) stop();
+  try { abort.signal.throwIfAborted(); await action(abort.signal); }
   finally { clearInterval(timer); exchange.request.off("aborted", stop); exchange.response.off("close", stop); }
 }
 

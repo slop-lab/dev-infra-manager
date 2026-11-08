@@ -56,7 +56,19 @@ workspace. Discovery is grant-filtered. Host-owned transport checks the current
 workspace and VM UUIDs, grant ID/generation, permission, exact Incus ownership
 and running state. Exec runs as the VM's `dim` user; copy is limited to
 home-relative paths and the shared bounded DIMCP1 protocol. Lifecycle permission
-allows only start and stop. Start waits for guest-agent readiness and verifies
+allows only start and stop. The VM plugin owns one operator-only
+`startupTimeoutMilliseconds` policy (default 300000, integer 1000..900000),
+shared by auxiliary and workspace VM startup. Its monotonic budget covers
+resource admission, guest agent, Docker readiness and required guest helper/unit
+installation and service resumption; source acquisition and seeding are separate.
+Every startup subprocess/probe receives cancellation bounded by the remaining
+budget, and success after expiry or caller cancellation is rejected. A newly
+started VM is rolled back through exact ownership checks and an independent
+bounded cleanup budget. Readiness failure preserves an already-running VM;
+unconfirmed host resource enforcement retains fail-closed stopping. Grants and
+workspace input cannot override host policy. Callers must allow that startup
+budget plus bounded cleanup time in their own execution limits.
+Start waits for guest-agent and Docker readiness and verifies
 the reviewed auxiliary image provides writable non-symlink `/workspace` and a
 mode-0700, `dim`-owned `/mnt/dim-tmp`. Home-relative copy holds no-follow
 directory descriptors while resolving existing ancestors and publishing data;

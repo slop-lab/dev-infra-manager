@@ -88,7 +88,7 @@ const budget = join(output, "budget-root.json"); await writeFile(budget, JSON.st
 await run("sudo", ["bash", join(repository, "packages/host/plugins/vm/scripts/install-budget-helper.bash"), await realpath(process.execPath), budget, "dim"]);
 await run("sudo", ["systemctl", "daemon-reload"]); await run("sudo", ["systemctl", "restart", "incus"]);
 await writeFile(join(output, "host.json"), JSON.stringify({ schemaVersion: 1, project: "practical-ci", storagePool: "practical-ci", network: "practical-ci", guest: { cpuCount: 2, memory: "2GiB", disk: "16GiB" },
-  cgroupRoot, budgetHelper: "/usr/local/bin/dim-vm-budget", incusSocket: "/var/lib/incus/unix.socket" }), { mode: 0o600, flag: "wx" });
+  startupTimeoutMilliseconds: 420_000, cgroupRoot, budgetHelper: "/usr/local/bin/dim-vm-budget", incusSocket: "/var/lib/incus/unix.socket" }), { mode: 0o600, flag: "wx" });
 await writeFile(join(output, "image.json"), JSON.stringify({ schemaVersion: 1, sourceSha, hostMachineId: machine, baseImageSha256: imageSha, imageFingerprint: published.fingerprint, imageType: published.type, nodeSha256: nodeSha,
   kvmProbe: "KVM_CREATE_VM", incusVersion: await run("incus", ["--version"]), nodeVersion: process.versions.node, fixture: "real-incus-kvm", forwarding }), { mode: 0o600, flag: "wx" });
 const manager = await runCommand("systemctl", ["is-active", "--quiet", "user@1001.service"], { acceptFailure: true });

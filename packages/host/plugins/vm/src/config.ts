@@ -6,6 +6,7 @@ import { UserError } from "@slop-lab/dim-host-core/workspace";
 /** Host-reviewed settings. Neither guest code nor image metadata can add devices. */
 export interface VmHostConfig {
   schemaVersion: 1;
+  startupTimeoutMilliseconds: number;
   project: string;
   storagePool: string;
   network: string;
@@ -27,10 +28,14 @@ export function readVmHostConfig(stateRoot: string): VmHostConfig {
 export function parseVmHostConfig(value: unknown): VmHostConfig {
   const config = object(value);
   const guest = object(config.guest);
-  exact(config, ["schemaVersion", "project", "storagePool", "network", "guest", "cgroupRoot", "incusSocket"], ["spiceAssets", "console", "budgetHelper"]);
+  exact(config, ["schemaVersion", "project", "storagePool", "network", "guest", "cgroupRoot", "incusSocket"], ["spiceAssets", "console", "budgetHelper", "startupTimeoutMilliseconds"]);
   exact(guest, ["cpuCount", "memory", "disk"]);
   if (config.schemaVersion !== 1 || !Number.isSafeInteger(guest.cpuCount) || typeof guest.cpuCount !== "number" || guest.cpuCount < 1 || guest.cpuCount > 64) throw new UserError("invalid VM guest allocation");
+  const startupTimeoutMilliseconds = config.startupTimeoutMilliseconds === undefined ? 300_000 : config.startupTimeoutMilliseconds;
+  if (typeof startupTimeoutMilliseconds !== "number" || !Number.isSafeInteger(startupTimeoutMilliseconds)
+    || startupTimeoutMilliseconds < 1_000 || startupTimeoutMilliseconds > 900_000) throw new UserError("VM startupTimeoutMilliseconds must be an integer from 1000 to 900000");
   return {
+    startupTimeoutMilliseconds,
     schemaVersion: 1, project: name(config.project), storagePool: name(config.storagePool), network: name(config.network),
     guest: { cpuCount: guest.cpuCount, memory: bytes(guest.memory), disk: bytes(guest.disk) },
     cgroupRoot: absolute(config.cgroupRoot), incusSocket: absolute(config.incusSocket),

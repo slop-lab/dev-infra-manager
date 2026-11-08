@@ -7,7 +7,7 @@ import { IncusMachines } from "./incus.js";
 
 export class IncusWorkspaceRuntime implements WorkspaceRuntime {
   constructor(readonly machines: IncusMachines) {}
-  private async installGuestBoot(record: WorkspaceRecord): Promise<void> {
+  private async installGuestBoot(record: WorkspaceRecord, machines: IncusMachines): Promise<void> {
     const boot = `[Unit]
 Description=Resume explicitly registered DIM workspace services
 After=docker.service network-online.target
@@ -40,29 +40,28 @@ ExecStart=/usr/local/bin/dim-workspace session resume
 WantedBy=multi-user.target
 `;
     // Only these DIM-owned units are installed. Repository code never becomes an implicit root boot hook.
-    await this.machines.rootExec(record, ["node", "--input-type=commonjs", "-e",
+    await machines.rootExec(record, ["node", "--input-type=commonjs", "-e",
       'const fs=require("node:fs"); for(const [name,text] of Object.entries(JSON.parse(process.argv[1]))) { const target="/etc/systemd/system/"+name; fs.writeFileSync(target+".new",text,{mode:0o644}); fs.renameSync(target+".new",target); }',
       JSON.stringify({ "dim-workspace-boot.service": boot, "dim-workspace-session.service": session })]);
-    await this.machines.rootExec(record, ["systemctl", "daemon-reload"]);
-    await this.machines.rootExec(record, ["systemctl", "enable", "dim-workspace-boot.service", "dim-workspace-session.service"]);
+    await machines.rootExec(record, ["systemctl", "daemon-reload"]);
+    await machines.rootExec(record, ["systemctl", "enable", "dim-workspace-boot.service", "dim-workspace-session.service"]);
   }
-  private async resumeGuestServices(record: WorkspaceRecord): Promise<void> {
-    await this.machines.rootExec(record, ["systemctl", "start", "dim-workspace-boot.service", "dim-workspace-session.service"]);
+  private async resumeGuestServices(record: WorkspaceRecord, machines: IncusMachines): Promise<void> {
+    await machines.rootExec(record, ["systemctl", "start", "dim-workspace-boot.service", "dim-workspace-session.service"]);
   }
   inspect(record: WorkspaceRecord) { return this.machines.inspect(record); }
   create(record: WorkspaceRecord) { return this.machines.create(record); }
   async start(record: WorkspaceRecord): Promise<void> {
-    await this.machines.start(record);
-    await this.machines.waitForAgent(record);
-    await this.machines.waitForDocker(record);
-    await this.machines.rootExec(record, ["node", "-e",
-      'if (![24,26].includes(Number(process.versions.node.split(".")[0]))) { console.error("DIM VM guest requires reviewed Node.js 24 or 26"); process.exit(1); }']);
-    await this.machines.rootExec(record, ["install", "-d", "-m", "0755", "/usr/local/bin"]);
-    await this.machines.rootExec(record, ["sh", "-eu", "-c",
-      "test ! -L /mnt && test ! -L /mnt/dim-tmp; install -d -o dim -g dim -m 0700 /mnt/dim-tmp"]);
-    for (const asset of workspaceGuestAssets()) await this.machines.installGuestAsset(record, asset);
-    await this.installGuestBoot(record);
-    if (record.initialized) await this.resumeGuestServices(record);
+    await this.machines.startReady(record, async (machines) => {
+      await machines.rootExec(record, ["node", "-e",
+        'if (![24,26].includes(Number(process.versions.node.split(".")[0]))) { console.error("DIM VM guest requires reviewed Node.js 24 or 26"); process.exit(1); }']);
+      await machines.rootExec(record, ["install", "-d", "-m", "0755", "/usr/local/bin"]);
+      await machines.rootExec(record, ["sh", "-eu", "-c",
+        "test ! -L /mnt && test ! -L /mnt/dim-tmp; install -d -o dim -g dim -m 0700 /mnt/dim-tmp"]);
+      for (const asset of workspaceGuestAssets()) await machines.installGuestAsset(record, asset);
+      await this.installGuestBoot(record, machines);
+      if (record.initialized) await this.resumeGuestServices(record, machines);
+    });
   }
   stop(record: WorkspaceRecord) { return this.machines.stop(record); }
   remove(record: WorkspaceRecord, options: { keepData: boolean }) { return this.machines.remove(record, options); }
