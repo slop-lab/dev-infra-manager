@@ -46,7 +46,7 @@ function assertFixtureTarget(profile: HostProfile, step: string, args: readonly 
 function vmReadinessDiagnostic(args: readonly string[], stderr: string): VmReadinessDiagnostic | undefined {
   if (args[0] !== "vm" || args[1] !== "start") return;
   const message = stderr.trim().replace(/^dim(?:-host)?: /, "");
-  if (/^VM startup deadline exceeded while waiting for (host admission|guest agent|guest Docker|guest readiness)(?:; last Incus readiness probe failed \(exit 1\): Error: local error: tls: bad record MAC)?$/.test(message)) return "vm-startup-timeout";
+  if (/^VM startup deadline exceeded while waiting for (host admission|guest agent|guest Docker|guest readiness)(?:; last Incus readiness probe failed \(exit (?:1|255)\): Error: local error: tls: bad record MAC|; last Incus readiness probe failed \(exit 1\): Error: Get "http:\/\/unix\.socket\/1\.0\/operations\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\?project=[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}": EOF)?$/.test(message)) return "vm-startup-timeout";
   if (/^VM guest readiness failed: [^\r\n]+$/.test(message)) return "vm-agent-probe-failed";
   if (/^VM guest Docker readiness failed: [^\r\n]+$/.test(message)) return "vm-docker-probe-failed";
   if (message === "auxiliary VM image must provide writable /workspace and private mode-0700 /mnt/dim-tmp for user dim") return "vm-guest-layout-invalid";

@@ -23,6 +23,10 @@ it("retains failed command exit evidence without recording scripts, prompts or r
 });
 
 it.each([
+  { args: ["vm", "start", "owned"], stderr: 'dim-host: VM startup deadline exceeded while waiting for guest Docker; last Incus readiness probe failed (exit 255): Error: local error: tls: bad record MAC\n', diagnostic: "vm-startup-timeout" },
+  { args: ["vm", "start", "owned"], stderr: 'dim-host: VM startup deadline exceeded while waiting for guest agent; last Incus readiness probe failed (exit 1): Error: Get "http://unix.socket/1.0/operations/b547f1ed-7abd-46ab-8b2f-337d0d4d3203?project=practical-ci": EOF\n', diagnostic: "vm-startup-timeout" },
+  { args: ["vm", "start", "owned"], stderr: 'dim-host: VM startup deadline exceeded while waiting for guest agent; last Incus readiness probe failed (exit 255): Error: Get "http://unix.socket/1.0/operations/b547f1ed-7abd-46ab-8b2f-337d0d4d3203?project=practical-ci": EOF\n', diagnostic: undefined },
+  { args: ["vm", "start", "owned"], stderr: 'dim-host: VM startup deadline exceeded while waiting for guest agent; last Incus readiness probe failed (exit 1): Error: Get "http://example.test/1.0/operations/b547f1ed-7abd-46ab-8b2f-337d0d4d3203?project=practical-ci": EOF\n', diagnostic: undefined },
   { args: ["vm", "start", "owned"], stderr: "dim-host: VM startup deadline exceeded while waiting for guest Docker; last Incus readiness probe failed (exit 1): Error: local error: tls: bad record MAC\n", diagnostic: "vm-startup-timeout" },
   { args: ["vm", "start", "owned"], stderr: "dim-host: VM startup deadline exceeded while waiting for guest Docker\n", diagnostic: "vm-startup-timeout" },
   { args: ["vm", "start", "owned"], stderr: "dim: VM guest readiness failed: PRIVATE_INCUS_DETAILS\n", diagnostic: "vm-agent-probe-failed" },

@@ -51,11 +51,17 @@ cleanup budget. Readiness failure preserves an already-running VM; failure to
 confirm host resource ceilings still stops it. Agent tools and other callers
 must allow the configured startup budget plus bounded cleanup in their own
 execution timeout; the practical fixture allows another 60 seconds.
-Only the read-only agent and Docker readiness probes reconnect after the exact
-Incus exit-1 `Error: local error: tls: bad record MAC` transport failure. Each
-reconnect uses normal TLS verification within that same startup budget. Other
-TLS/authentication failures remain fatal; lifecycle and guest mutations are never
-retried. Deadline diagnostics retain the last known transport failure.
+Only the read-only agent (`true`) and Docker (`docker info`) readiness probes
+reconnect after closed Incus transport failures with empty stdout: the exact
+`Error: local error: tls: bad record MAC` line with exit 1 or 255, or exit 1
+with a whole `Get` operation-UUID URL at `http://unix.socket/1.0/operations/`
+for the configured project ending in `: EOF`. No other endpoint, project,
+additional error line or partial guest output qualifies. Each reconnect uses
+normal TLS verification within that same startup budget. Other TLS,
+authentication and application failures remain fatal; lifecycle and guest
+mutations are never retried. Deadline diagnostics retain the actual last known
+transport exit and line. Neither reconnect nor cancellation extends the budget;
+cleanup retains its independent bound.
 
 The normal host CLI does not need to run as root. Install the matching plugin's
 root budget helper once on that selected host, using a reviewed root-owned

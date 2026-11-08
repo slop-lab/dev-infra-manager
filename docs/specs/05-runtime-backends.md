@@ -68,6 +68,14 @@ bounded cleanup budget. Readiness failure preserves an already-running VM;
 unconfirmed host resource enforcement retains fail-closed stopping. Grants and
 workspace input cannot override host policy. Callers must allow that startup
 budget plus bounded cleanup time in their own execution limits.
+Only the owned idempotent agent and Docker readiness probes may reconnect after
+closed Incus transport errors: an empty-output exact local TLS bad-record-MAC
+line with exit 1 or 255, or exit 1 with an exact local Unix-socket operation-UUID
+GET ending in EOF for the configured project. Additional output, different
+endpoints/projects, authentication, certificate and other application failures
+remain fatal. Reconnects consume the original monotonic startup budget and
+retain the last transport exit and line on exhaustion; lifecycle and guest
+mutation operations are never replayed.
 Start waits for guest-agent and Docker readiness and verifies
 the reviewed auxiliary image provides writable non-symlink `/workspace` and a
 mode-0700, `dim`-owned `/mnt/dim-tmp`. Home-relative copy holds no-follow

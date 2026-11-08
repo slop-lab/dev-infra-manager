@@ -8,6 +8,23 @@ import { VmStartupDeadline } from "./startup.js";
 export interface VmIdentity { source?: { workingDirectory?: string; checkouts?: readonly { directory: string }[] }; id: string; image: string; initialized: boolean; resources: WorkspaceResources }
 export interface VmInspection { running: boolean; pid: number }
 
+type ReadinessTransportFailure = { kind: "tls-record" | "operation-eof"; exitCode: number; stderr: string };
+
+/** Closed Incus transport failures, usable only by the two idempotent readiness probes. */
+function readinessTransportFailure(result: { exitCode: number; stdout: string; stderr: string }, project: string): ReadinessTransportFailure | undefined {
+  if (result.stdout !== "") return undefined;
+  const stderr = result.stderr.trim();
+  if ((result.exitCode === 1 || result.exitCode === 255) && stderr === "Error: local error: tls: bad record MAC") {
+    return { kind: "tls-record", exitCode: result.exitCode, stderr };
+  }
+  if (result.exitCode !== 1) return undefined;
+  const match = /^Error: Get "(http:\/\/unix\.socket\/1\.0\/operations\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\?project=[^"\s]+)": EOF$/.exec(stderr);
+  if (!match?.[1]) return undefined;
+  const url = new URL(match[1]);
+  if (url.search !== `?project=${encodeURIComponent(project)}` || url.hash !== "") return undefined;
+  return { kind: "operation-eof", exitCode: result.exitCode, stderr };
+}
+
 /** Incus owns the durable root disk and machine definition; DIM owns the UUID labels and admission. */
 export class IncusMachines {
   constructor(readonly config: VmHostConfig, readonly runner: StreamingCommandRunner, private readonly budget: VmBudget,
@@ -136,14 +153,14 @@ export class IncusMachines {
       "--mode", options.terminal ? "interactive" : "non-interactive", "--", "runuser", "--user", "dim", "--preserve-environment", "--", ...command]), options);
   }
   private async waitForReadinessProbe(record: VmIdentity, deadline: VmStartupDeadline, probe: "agent" | "Docker"): Promise<void> {
-    let lastTransportFailure = false;
+    let lastTransportFailure: ReadinessTransportFailure | undefined;
     try {
       for (;;) {
         // Only these read-only probes may reconnect; lifecycle and guest mutations never do.
         const command = probe === "agent" ? ["true"] : ["docker", "info", "--format", "{{.ServerVersion}}"];
         const result = await this.runner.run("incus", this.args(["exec", this.name(record), "--", ...command]));
         if (result.exitCode === 0) return;
-        lastTransportFailure = result.exitCode === 1 && result.stderr.trim() === "Error: local error: tls: bad record MAC";
+        lastTransportFailure = readinessTransportFailure(result, this.config.project);
         const unavailable = probe === "agent"
           ? /VM agent isn.t currently running|connection refused|not connected|Instance is not running/i.test(result.stderr)
           : /Cannot connect|failed to connect|connection refused|no such file or directory|VM agent isn.t currently running|Instance is not running/i.test(result.stderr)
@@ -154,7 +171,7 @@ export class IncusMachines {
       }
     } catch (error) {
       if (lastTransportFailure && error instanceof UserError && error.message.startsWith("VM startup deadline exceeded")) {
-        throw new UserError(`${error.message}; last Incus readiness probe failed (exit 1): Error: local error: tls: bad record MAC`);
+        throw new UserError(`${error.message}; last Incus readiness probe failed (exit ${lastTransportFailure.exitCode}): ${lastTransportFailure.stderr}`);
       }
       throw error;
     }
