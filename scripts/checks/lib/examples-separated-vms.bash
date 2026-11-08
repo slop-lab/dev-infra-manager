@@ -2,6 +2,7 @@
 examples_collect_smoke_report() {
   local recipe_status="$1" report_status=0
   timeout 60s "${BOOTSTRAP_SCP[@]}" dim@127.0.0.1:/home/dim/dim/selected-host-report.json "$BOOTSTRAP_EVIDENCE_ROOT/selected-host-report.json" || report_status=$?
+  timeout 60s "${BOOTSTRAP_SCP[@]}" dim@127.0.0.1:/home/dim/dim/selected-command-diagnostics.jsonl "$BOOTSTRAP_EVIDENCE_ROOT/selected-command-diagnostics.jsonl" || report_status=$?
   if (( report_status != 0 )); then printf '%s\n' '[examples] structured selected-host report unavailable' >&2; fi
   if (( recipe_status != 0 )); then return "$recipe_status"; fi
   return "$report_status"

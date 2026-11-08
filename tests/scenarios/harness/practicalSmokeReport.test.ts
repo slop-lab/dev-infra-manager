@@ -40,6 +40,7 @@ for pair in '23 0' '23 7' '0 7' '0 0'; do
 done
 `, "test", helper]);
   expect(stdout.match(/result:\d+/g)).toEqual(["result:23", "result:23", "result:7", "result:0"]);
-  expect(stdout.match(/copy:/g)).toHaveLength(4);
+  expect(stdout.match(/copy:/g)).toHaveLength(8);
+  expect(stdout).toContain("/home/dim/dim/selected-command-diagnostics.jsonl /private/evidence/selected-command-diagnostics.jsonl");
   expect(stdout).toContain("/home/dim/dim/selected-host-report.json /private/evidence/selected-host-report.json");
 });

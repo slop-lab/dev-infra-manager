@@ -34,6 +34,7 @@ export async function exportPracticalArtifacts(root: string, output: string, exi
   await copy("source.json", true); await copy("roles.txt", false); await copy("practical-runtime.json", true); await copy("selected-host-report.json", true);
   await copy("input.txt", false); await copy("dependency-baseline.json", true); await copy("clone-identities.json", true);
   await copy("qualification.json", true);
+  await copy("selected-command-diagnostics.jsonl", false);
   await copy("separate-control-plane.log", false);
   try {
     const stages = join(root, "stages"), stageInfo = await lstat(stages); assert(stageInfo.isDirectory() && !stageInfo.isSymbolicLink());

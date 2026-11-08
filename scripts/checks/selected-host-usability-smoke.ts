@@ -1,13 +1,20 @@
 #!/usr/bin/env -S node --import tsx
 import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { helpText, OperatorInputError, SmokeFailure, parseOperatorArguments, parseSmokeConfiguration } from "../../tests/scenarios/selected-host/config.js";
 import { preflightHost, runHostSmoke } from "../../tests/scenarios/selected-host/scenario.js";
 import { monitorInspection } from "../../tests/scenarios/selected-host/monitorCommand.ts";
 import { verifyIsolatedInstallationUpdate } from "../../tests/scenarios/selected-host/isolatedUpdate.js";
 import { runCommand } from "../../tests/scenarios/web-lifecycle/process.js";
-import type { CommandEvidence } from "../../tests/scenarios/selected-host/selectedCommand.js";
+import { fixtureFailureWriter, type CommandEvidence } from "../../tests/scenarios/selected-host/selectedCommand.js";
 import type { OrdinaryRuntimeVersions } from "../../tests/scenarios/selected-host/ordinaryLifecycle.js";
+
+function configurationReportPath(): string {
+  const target = process.env.DIM_PRACTICAL_CI_REPORT;
+  if (!target?.startsWith("/")) throw new OperatorInputError("generated practical fixture report path is required for private diagnostics");
+  return target;
+}
 
 async function main(): Promise<void> {
   const values = process.argv.slice(2);
@@ -46,12 +53,14 @@ async function main(): Promise<void> {
   const sourceStatus = await runCommand("git", ["-C", sourceRoot, "status", "--porcelain=v1"]);
   if (sourceStatus.stdout.trim()) throw new OperatorInputError("real selected-host acceptance requires a clean committed DIM driver source");
   const driverSourceSha = (await runCommand("git", ["-C", sourceRoot, "rev-parse", "HEAD"])).stdout.trim();
+  const writeFixtureFailure = process.env.DIM_PRACTICAL_CI_REQUIRED === "1"
+    ? fixtureFailureWriter(join(dirname(configurationReportPath()), "selected-command-diagnostics.jsonl")) : undefined;
   const results = [];
   for (const profile of selected) {
     if (!input.json) process.stdout.write(`progress\t${profile.name}\tstarting selected-host usability smoke\n`);
     const observedCommands: CommandEvidence[] = [];
     let observedRuntimeVersions: OrdinaryRuntimeVersions | undefined;
-    const smokeOptions = { onCommand: (evidence: CommandEvidence) => observedCommands.push(evidence),
+    const smokeOptions = { writeFixtureFailure, onCommand: (evidence: CommandEvidence) => observedCommands.push(evidence),
       onRuntimeVersions: (versions: OrdinaryRuntimeVersions): void => {
         observedRuntimeVersions = versions;
         if (!input.json) process.stdout.write(`runtime-versions\t${profile.name}\tnode=${versions.node}\tkernel=${versions.kernel}\tnested-docker=${versions.nestedDocker}\n`);

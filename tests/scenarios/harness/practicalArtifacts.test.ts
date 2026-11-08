@@ -12,13 +12,15 @@ it("exports explicit failure diagnostics while excluding operator state and reda
     await writeFile(join(evidence, "operator.json"), '{"password":"DO-NOT-EXPORT"}');
     await writeFile(join(evidence, "login-key"), "PRIVATE FILE");
     await writeFile(join(evidence, "stages/run.test/02-host-build-images-artifacts.log"), 'Error: meaningful failure\npassword="secret words" token=opaque\nAuthorization: Bearer token.bytes\n');
+    await writeFile(join(evidence, "selected-command-diagnostics.jsonl"), JSON.stringify({ stderr: "npm error code ECONNRESET" }) + "\n");
     await exportPracticalArtifacts(evidence, output, 23);
+    expect(await readFile(join(output, "practical/selected-command-diagnostics.jsonl"), "utf8")).toContain("ECONNRESET");
     expect(await readdir(join(output, "practical"))).not.toContain("operator.json");
     expect(await readdir(join(output, "practical"))).not.toContain("login-key");
     const log = await readFile(join(output, "practical/stages/run.test/02-host-build-images-artifacts.log"), "utf8");
     expect(log).toContain("meaningful failure"); expect(log).not.toMatch(/secret words|opaque|token\.bytes/);
     const manifest = JSON.parse(await readFile(join(output, "practical/export.json"), "utf8"));
-    expect(manifest.status).toBe("FAIL"); expect(manifest.exitCode).toBe(23); expect(manifest.entries).toHaveLength(2);
+    expect(manifest.status).toBe("FAIL"); expect(manifest.exitCode).toBe(23); expect(manifest.entries).toHaveLength(3);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 it("does not follow an allowlisted diagnostic symlink", async () => {

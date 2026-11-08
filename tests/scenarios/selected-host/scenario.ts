@@ -11,20 +11,20 @@ import { verifyOrdinaryLifecycle, type OrdinaryRuntimeVersions } from "./ordinar
 import { expectSmokeApplication, startSmokeApplication } from "./applicationEndpoint.js";
 import { verifyAuxiliaryVm } from "./auxiliaryVm.js";
 import { inspectConfiguredMonitor } from "./monitorScenario.js";
-import { dim, selectedCommandTracker, type CommandEvidence } from "./selectedCommand.js";
+import { dim, selectedCommandTracker, type CommandEvidence, type FixtureFailureWriter } from "./selectedCommand.js";
 import { selectExposureUrl } from "./exposure.js";
 import { array, json, parsePlugins, record, text } from "./scenarioValues.js";
 import { executeOwnedInference, verifyOwnedSessionModel } from "./ownedInference.js";
 import { configureCiConsumer } from "./ci/consumer.js";
 export { preflightHost } from "./preflight.js";
 
-type SmokeOptions = { readonly onProgress?: (step: string, phase: "pass" | "progress" | "incomplete") => void; readonly onCommand?: (evidence: CommandEvidence) => void; readonly onRuntimeVersions?: (versions: OrdinaryRuntimeVersions) => void };
+type SmokeOptions = { readonly writeFixtureFailure?: FixtureFailureWriter; readonly onProgress?: (step: string, phase: "pass" | "progress" | "incomplete") => void; readonly onCommand?: (evidence: CommandEvidence) => void; readonly onRuntimeVersions?: (versions: OrdinaryRuntimeVersions) => void };
 type EndpointEvidence = { readonly kind: "application" | "coding-agent"; readonly url: string; readonly disposition: "verified-then-discarded" };
 export type SmokeResult = { readonly workspace: OwnedWorkspace; readonly runtimeVersions: OrdinaryRuntimeVersions; readonly auxiliaryVm: Awaited<ReturnType<typeof verifyAuxiliaryVm>> | null; readonly inference: Awaited<ReturnType<typeof executeOwnedInference>>; readonly sessionModel: Awaited<ReturnType<typeof verifyOwnedSessionModel>>; readonly monitor: MonitorEvidence | null; readonly commands: readonly CommandEvidence[]; readonly endpoints: readonly EndpointEvidence[]; readonly lanes: readonly { readonly name: string; readonly status: "PASS" | "BLOCKED"; readonly reason?: string }[] };
 
 export async function runHostSmoke(selected: HostProfile, options: SmokeOptions = {}): Promise<SmokeResult> {
   const profile = { ...selected, workspace: smokeWorkspaceName(selected.workspace) };
-  const { checked, commands } = selectedCommandTracker(options.onCommand);
+  const { checked, commands } = selectedCommandTracker(options.onCommand, options.writeFixtureFailure);
   const endpoints: EndpointEvidence[] = [];
   let owned: OwnedWorkspace | undefined;
   let attemptedCreate = false, branchAttempted = false, candidateCommit: string | undefined;
@@ -86,7 +86,7 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     }
 
     await checked(profile, "owned workspace LLM attachment", ["llm", "attach", owned.name, "--config", profile.llm.configFile, "--project", profile.llm.project, "--route", profile.llm.route]);
-    await checked(profile, "owned workspace OpenCode setup", ["tools", "setup", owned.name, "opencode"], 10 * 60_000);
+    await checked(profile, "owned workspace OpenCode setup", ["tools", "setup", owned.name, "opencode"], 10 * 60_000, { kind: "opencode-setup", ...owned });
     if (process.env.DIM_PRACTICAL_CI_REQUIRED === "1") await configureCiConsumer({ workspace: owned, profile, run: (step, args) => checked(profile, step, args) });
 
     const guestPlugins = parsePlugins((await checked(profile, "guest plugin discovery", ["exec", owned.name, "--", "dim-workspace", "plugins"])).stdout);
@@ -140,7 +140,7 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
     lanes.push({ name: "opencode-authenticated-session-ingress", status: "PASS" });
     if (profile.vm !== undefined) {
       auxiliaryVm = await verifyAuxiliaryVm({ workspace: owned, image: profile.vm.image, startupTimeoutMilliseconds: profile.vm.startupTimeoutMilliseconds, challenge: token,
-        run: (step, args, timeout) => checked(profile, step, args, timeout),
+        run: (step, args, timeout) => checked(profile, step, args, timeout, step === "auxiliary VM readiness" ? { kind: "auxiliary-readiness", name: args[2]!, id: args[4]! } : undefined),
         rejected: async (step, args) => { const result = await dim(profile.name, args, true); if (result.exitCode === 0) throw new SmokeFailure(profile.name, step, "revoked operation unexpectedly succeeded"); } });
       lanes.push({ name: "auxiliary-kvm-vm", status: "PASS" });
     } else lanes.push({ name: "auxiliary-kvm-vm", status: "BLOCKED", reason: "Profile requires vm plugin, reviewed Incus host/image and explicit operator provisioning authority" });
