@@ -1,3 +1,22 @@
+# Time fixed preparation steps without putting multi-command functions in an
+# errexit-suppressing conditional. The owning command keeps its output and exit.
+examples_timed_preparation() (
+  set -euo pipefail
+  local name="$1" started ended status
+  shift
+  case "$name" in
+    host-cold-bootstrap|host-source-install|host-source-build|host-service-images|host-installer-checks|host-current-pack|host-operator-prepare|host-service-prepare|host-before-pack|host-fixture-prepare) ;;
+    *) return 2 ;;
+  esac
+  started="$(check_output_read_uptime)" || started=null
+  printf '[examples-timing] %s start utc=%s\n' "$name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2 || :
+  trap 'status=$?; trap - EXIT
+    ended="$(check_output_read_uptime)" || ended=null
+    printf "[examples-timing] %s finish utc=%s elapsedSeconds=%s exit=%s\n" "$name" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(check_output_elapsed_seconds "$ended" "$started")" "$status" >&2 || :
+    exit "$status"' EXIT
+  "$@"
+)
+
 # Collect the structured report even when recipes fail, without replacing their exit status.
 examples_collect_smoke_report() {
   local recipe_status="$1" report_status=0
@@ -63,6 +82,7 @@ REMOTE
 
 bootstrap_examples_run() {
   local cp_machine host_machine cp_key_type cp_key cp_instance host_instance cp_fingerprint host_fingerprint
+  local host_preparation_started host_preparation_ended
   source "$script_dir/lib/check-output.bash"
   check_output_init "$BOOTSTRAP_EVIDENCE_ROOT/stages"
   node "$script_dir/../examples/vm-cache.ts" prepare "$BOOTSTRAP_WORK_ROOT/cache.json" "$BOOTSTRAP_WORK_ROOT/cache-cloud-init.yml" "$BOOTSTRAP_EVIDENCE_ROOT/cache-routing.json"
@@ -95,6 +115,10 @@ REMOTE
   cp_machine="$("${BOOTSTRAP_SSH[@]}" cat /etc/machine-id)"
   cp_instance="$("${BOOTSTRAP_SSH[@]}" cloud-init query v1.instance_id)"
   cp_fingerprint="$("${BOOTSTRAP_SSH[@]}" 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256' | awk '{print $2}')"
+  # Keep stateful boot/source selection in this shell; time its full gap as well
+  # as the cold bootstrap command below, without conditional errexit suppression.
+  host_preparation_started="$(check_output_read_uptime)" || host_preparation_started=null
+  printf '[examples-timing] host-guest-preparation start utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2 || :
   printf '[examples] phase=boot-workspace-host log=%s/examples-workspace-host-console.log\n' "$BOOTSTRAP_EVIDENCE_ROOT"
   bootstrap_guest_start examples-workspace-host 8192; examples_vm_save host
   examples_prepare_private_guest_root
@@ -131,8 +155,10 @@ bash scripts/lib/install-candidate-facade.bash "$PWD/.local/dim-packages" "$vers
 [[ "$(git rev-parse HEAD)" == "$1" ]]
 REMOTE
   else
-    bootstrap_guest_run_acceptance ordinary
+    examples_timed_preparation host-cold-bootstrap bootstrap_guest_run_acceptance ordinary
   fi
+  host_preparation_ended="$(check_output_read_uptime)" || host_preparation_ended=null
+  printf '[examples-timing] host-guest-preparation finish utc=%s elapsedSeconds=%s exit=0\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(check_output_elapsed_seconds "$host_preparation_ended" "$host_preparation_started")" >&2 || :
   host_machine="$("${BOOTSTRAP_SSH[@]}" cat /etc/machine-id)"
   host_instance="$("${BOOTSTRAP_SSH[@]}" cloud-init query v1.instance_id)"
   host_fingerprint="$("${BOOTSTRAP_SSH[@]}" 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256' | awk '{print $2}')"
@@ -150,21 +176,23 @@ IDENTITY
 set -euo pipefail
 export PATH=/usr/local/lib/dim-source-tools-24.19.0-10.13.1-1.43.1/bin:/usr/local/lib/dim-qemu-node-24.19.0/bin:/usr/sbin:/usr/bin:/sbin:/bin
 cd /home/dim/dim/workbench
-pnpm install --frozen-lockfile
-pnpm run workspace:build
-DIM_VERIFY_SKIP_BUILD=1 bash scripts/checks/native-idle-service-images-smoke.bash
-just verify installer-artifacts
+source scripts/checks/lib/check-output.bash
+source scripts/checks/lib/examples-separated-vms.bash
+examples_timed_preparation host-source-install pnpm install --frozen-lockfile
+examples_timed_preparation host-source-build pnpm run workspace:build
+DIM_VERIFY_SKIP_BUILD=1 examples_timed_preparation host-service-images bash scripts/checks/native-idle-service-images-smoke.bash
+examples_timed_preparation host-installer-checks just verify installer-artifacts
 mkdir -m 0700 /home/dim/dim/example-packages
-node scripts/pack-local-packages.ts "$PWD" /home/dim/dim/example-packages
+examples_timed_preparation host-current-pack node scripts/pack-local-packages.ts "$PWD" /home/dim/dim/example-packages
 printf 'root=%s\n' "$(git rev-parse --verify HEAD)" >/home/dim/dim/example-packages/.dim-source-state
-node scripts/examples/prepare-separated.ts /home/dim/dim/example-operator
-node tests/scenarios/selected-host/ci/prepareServices.ts /home/dim/dim/example-operator
+examples_timed_preparation host-operator-prepare node scripts/examples/prepare-separated.ts /home/dim/dim/example-operator
+examples_timed_preparation host-service-prepare node tests/scenarios/selected-host/ci/prepareServices.ts /home/dim/dim/example-operator
 parent="$(git rev-parse --verify 'HEAD^')"
-DIM_SOURCE_ROOT_COMMIT="$parent" bash scripts/pack-source-build.bash /home/dim/dim/practical-before-packages
+DIM_SOURCE_ROOT_COMMIT="$parent" examples_timed_preparation host-before-pack bash scripts/pack-source-build.bash /home/dim/dim/practical-before-packages
 mkdir -m 0700 /home/dim/dim/practical-before-facade
 before_installer="$(node scripts/examples/installer-artifact.ts /home/dim/dim/practical-before-packages)"
 tar -xzf "$before_installer" -C /home/dim/dim/practical-before-facade
-node tests/scenarios/selected-host/ci/prepareHost.ts /home/dim/dim/practical-host /home/dim/dim/bootstrap-base.qcow2 "$2" "$3"
+examples_timed_preparation host-fixture-prepare node tests/scenarios/selected-host/ci/prepareHost.ts /home/dim/dim/practical-host /home/dim/dim/bootstrap-base.qcow2 "$2" "$3"
 REMOTE
   mkdir -m 0700 "$BOOTSTRAP_WORK_ROOT/transfer"
   timeout 300s "${BOOTSTRAP_SCP[@]}" -r dim@127.0.0.1:/home/dim/dim/example-packages dim@127.0.0.1:/home/dim/dim/example-operator "$BOOTSTRAP_WORK_ROOT/transfer/"

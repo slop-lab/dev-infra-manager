@@ -3,6 +3,39 @@ import { promisify } from "node:util";
 import { resolve } from "node:path";
 import { expect, it } from "vitest";
 const run = promisify(execFile), helper = resolve(import.meta.dirname, "../../../scripts/checks/lib/examples-separated-vms.bash");
+const clock = resolve(import.meta.dirname, "../../../scripts/checks/lib/check-output.bash");
+it("times preparation with fixed labels while retaining command output and hiding argv", async () => {
+  const { stdout, stderr } = await run("bash", ["-c", `set -euo pipefail
+source "$1"; source "$2"
+examples_timed_preparation host-source-build bash -c 'printf work' private-argument
+`, "test", clock, helper]);
+  expect(stdout).toBe("work");
+  expect(stderr).toMatch(/\[examples-timing\] host-source-build start utc=[0-9TZ:.-]+/);
+  expect(stderr).toMatch(/\[examples-timing\] host-source-build finish utc=[0-9TZ:.-]+ elapsedSeconds=(?:[0-9]+|null) exit=0/);
+  expect(stderr).not.toContain("private-argument");
+});
+it("retains errexit inside timed multi-step bootstrap and records the original failure", async () => {
+  const result = await run("bash", ["-c", `set -euo pipefail
+source "$1"; source "$2"
+bootstrap() { printf before; false; printf swallowed-failure; }
+examples_timed_preparation host-cold-bootstrap bootstrap
+printf wrongly-continued
+`, "test", clock, helper]).then(() => { throw new Error("failure was swallowed"); }, (error: { code: number; stdout: string; stderr: string }) => error);
+  expect(result.code).toBe(1);
+  expect(result.stdout).toBe("before");
+  expect(result.stderr).toMatch(/host-cold-bootstrap finish .* elapsedSeconds=(?:[0-9]+|null) exit=1/);
+});
+it("loses timing honestly without changing a failed command's exit status", async () => {
+  const result = await run("bash", ["-c", `set -euo pipefail
+source "$1"; source "$2"
+check_output_read_uptime() { return 1; }
+examples_timed_preparation host-current-pack bash -c 'exit 23'
+printf wrongly-continued
+`, "test", clock, helper]).then(() => { throw new Error("failure was swallowed"); }, (error: { code: number; stdout: string; stderr: string }) => error);
+  expect(result.code).toBe(23);
+  expect(result.stdout).toBe("");
+  expect(result.stderr).toMatch(/host-current-pack finish .* elapsedSeconds=null exit=23/);
+});
 it("retains separate VM ownership and pinned SSH selection while switching roles", async () => {
   const { stdout } = await run("bash", ["-c", `set -euo pipefail
 source "$1"
