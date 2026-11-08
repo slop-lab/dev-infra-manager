@@ -169,17 +169,19 @@ metadata and a nonce joined to exact workspace/project/principal/route admission
 and settled accounting. Historical real-provider receipts remain tied to their
 old sources and are not new-candidate provider qualification.
 
-The existing trusted `examples-vm` lane now derives its normal local/public-CLI
-SSH, shared-ingress, deterministic routed model/tool/session, real Incus and
-isolated-update bindings from disposable provisioning. Its completion receipt
-is mandatory, as is the existing `vm-runtime-acceptance` receipt. The contract is
-`.github/required-runtime-checks.json`; no development-push hardware jobs are
-added. Fixture code/providers live under `tests/`, not production packages.
+The canonical practical lane derives its normal local/public-CLI SSH, shared
+ingress, deterministic routed model/tool/session, real Incus and isolated-update
+bindings from disposable provisioning. Its exact-source completion receipt and
+the low-level VM runtime receipt are mandatory before main/release under the
+[normative verification contract](../specs/12-verification.md#main-and-release-qualification).
+Run them through DIM or on an authorized disposable local host. GitHub hardware
+workflows are optional manual entrypoints, not required check contexts. Fixture
+code/providers live under `tests/`, not production packages.
 
-Workflow configuration and local source checks do not mean those required CI
-jobs executed or branch rules were configured. Exact dispatched CI status and
-runtime receipts must be supplied by the coordinator/hardware runner. Until
-then the new full required runtime gate is unqualified, not a passing skip.
+Workflow configuration and hosted portable checks do not establish real runtime
+acceptance. The coordinator must retain actual execution status and validated
+completion receipts. Until then runtime qualification is pending or failed,
+never a passing skip.
 
 ## Recovery rollback follow-up
 

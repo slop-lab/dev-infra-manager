@@ -81,33 +81,35 @@ just verify native-idle-service-images
 just verify installer-artifacts
 ```
 
-The heavy examples gate is also required before merging into `main` and before
-release. `.github/workflows/examples.yml` runs `examples-vm` for `main` pushes,
-`main` merge groups and `v*` tags; dispatch it explicitly for the frozen release
-candidate. It does not run on every `development` push. Configure the
-`examples-vm` and `vm-runtime-acceptance` required checks in the repository's `main` rules separately;
-workflow source does not configure branch protection.
-
-The required-check contract is `.github/required-runtime-checks.json`. A release
-CI pass requires the practical runtime completion receipt, not merely workflow
-configuration or source tests. Its deterministic test-only provider exercises
-normal routed request accounting and real tools, but is not external account
-qualification. Missing hardware/bindings/evidence remain pending or failed.
-
-Use a disposable `dim-native-qemu` runner with real readable/writable `/dev/kvm`
-and the [fresh VM prerequisites](../development/bootstrap-ubuntu-vm.md#disposable-fresh-vm-acceptance-profile).
-The exact candidate gate can also be invoked directly:
+Real practical and low-level VM runtime qualification is required before
+merging into `main` and before release. The
+[normative verification contract](../specs/12-verification.md#main-and-release-qualification)
+defines exact-source receipts and coverage. Use DIM scheduler jobs or run the
+canonical commands on an authorized disposable local host; GitHub self-hosted
+runners are not required. Retain both validated receipts and successful owned
+cleanup. Hosted portable checks do not replace these runtime gates.
 
 ```bash
 DIM_EXAMPLES_VM_LOG_ROOT=/absolute/private/examples-evidence \
   bash scripts/checks/examples-vm-smoke.bash
+node tests/scenarios/selected-host/ci/verifyEvidence.ts \
+  /absolute/private/examples-evidence "$(git rev-parse HEAD)" "$(git rev-parse 'HEAD^{tree}')"
+just verify vm-runtime-prepare --run
 ```
 
-Retain its successful outer result, guest example results, source manifest and
-commit/tree evidence. A missing runner is pending; missing KVM is unavailable
-and fails the gate. Neither is a successful skip. PR/merge-queue candidates can
-be synthetic commits, so compare the uploaded commit/tree with the candidate
-being accepted. A different release commit/tree requires new evidence.
+The deterministic test-only provider exercises normal routed accounting and
+real tools; it does not qualify an external provider/account. Missing hardware,
+bindings or evidence is pending or failed, never a successful skip. The frozen
+candidate SHA/tree must match the receipts; a different candidate requires new
+exact-source qualification.
+
+The GitHub examples/native workflows are optional manual dispatches for
+explicitly configured disposable `dim-native-qemu`/`dim-native-ordinary` runners.
+They never automatically queue hardware on main, tags, pull requests or merge
+groups and must not be required GitHub check contexts. If GitHub status checks
+are required, use its hosted `portable (Node 24.19.0)` and
+`portable (Node 26.5.0)` checks. External repository rules are configured
+separately; workflow files do not attest their installation.
 
 Review every package dry-run listing and confirm it contains its README,
 license, runtime files, declarations, and publishable manifest. Installer
@@ -141,15 +143,16 @@ tests through `scripts/ci/source.bash`, using its actual digest-pinned Node imag
 and worker resource profile. Retain that exact-candidate result independently;
 do not infer a full dual-Node DIM matrix from the hosted portable checks.
 
-The GitHub workflows `.github/workflows/verify.yml`,
-`.github/workflows/integration.yml`, and `.github/workflows/examples.yml` must run against the canonical candidate
-SHA. Dispatch ordinary and `qemu-kvm` integration lanes on fresh matching
-self-hosted runners and require their recorded `headSha` to equal
-`candidate_root_sha`.
+GitHub hosted portable verification must run against the canonical candidate.
+If optional GitHub hardware workflows are selected, dispatch only on fresh
+matching self-hosted runners and require every recorded `headSha` to equal
+`candidate_root_sha`. Otherwise retain the required DIM/local runtime receipts.
 
-### GitHub manual triggers
+### Optional GitHub hardware dispatch
 
-Manual dispatch does not install or register a runner. Before dispatching:
+This section applies only when disposable GitHub runners are explicitly
+configured. Required runtime qualification can run through DIM/local commands
+instead. Manual dispatch does not install or register a runner. Before dispatching:
 
 - The workflow file must be present on the repository's **default branch**,
   and must declare `workflow_dispatch`. A file present only on `development`
@@ -160,7 +163,7 @@ Manual dispatch does not install or register a runner. Before dispatching:
   `gh repo view --json defaultBranchRef` and `gh workflow list --all`.
 - The selected branch or tag must point at the reviewed clean candidate.
   Dispatch uses a branch/tag ref, not a promise that a moving branch will
-  remain at the SHA inspected earlier. Freeze the ref for all five dispatches
+  remain at the SHA inspected earlier. Freeze the ref for the selected dispatch
   and reject any run whose `headSha` differs from the candidate.
 - The source workflow uses fresh `ubuntu-24.04` hosted runners. Integration
   requires fresh, disposable Linux self-hosted runners with labels
@@ -185,18 +188,16 @@ Manual dispatch does not install or register a runner. Before dispatching:
   Missing/offline runners leave a job queued, not passed. Use only disposable
   test hosts; do not expose production DIM state, credentials, or protected
   host verification services to GitHub jobs.
-- The privileged `vm-runtime-acceptance` job runs automatically only for the
-  reviewed merge queue, `main` pushes and release tags. Pull-request source does
-  not execute automatically on the KVM/Docker runner; manual dispatch requires
-  the same reviewed candidate and disposable runner prerequisites.
-- The separate `examples-vm` workflow follows the same trust boundary: merge
-  queue, `main`/release pushes and manual dispatch only, never pull-request code.
+- The privileged integration and examples jobs run only on explicit manual
+  dispatch. No push, tag, pull request or merge-group event queues self-hosted
+  hardware. Select the reviewed candidate and disposable runner prerequisites;
+  missing runner capacity remains pending rather than being skipped as success.
 
 See GitHub's [manual workflow documentation](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
 for the default-branch requirement. In the UI, select **Actions → workflow →
 Run workflow**, choose the reviewed branch/tag, and select the integration
-lane. Repeat for all three integration lanes. CLI equivalent, after the prerequisites
-and reviewed candidate publication are complete:
+lane. Run only the selected optional lane. For example, after its runner
+prerequisites and reviewed candidate publication are complete:
 
 ```bash
 repository=slop-lab/dev-infra-manager
@@ -207,15 +208,8 @@ candidate_root_sha="$(git rev-parse HEAD)"
   test -z "$(git status --porcelain)"
   test "$(gh api "repos/$repository/commits/$candidate_ref" --jq .sha)" = "$candidate_root_sha"
   default_branch="$(gh repo view "$repository" --json defaultBranchRef --jq .defaultBranchRef.name)"
-  for workflow in verify.yml integration.yml examples.yml; do
-    gh api --method GET "repos/$repository/contents/.github/workflows/$workflow" \
-      -f ref="$default_branch" --jq .sha >/dev/null
-  done
-
-  gh workflow run verify.yml --repo "$repository" --ref "$candidate_ref"
-  gh workflow run examples.yml --repo "$repository" --ref "$candidate_ref"
-  gh workflow run integration.yml --repo "$repository" --ref "$candidate_ref" -f lane=ordinary
-  gh workflow run integration.yml --repo "$repository" --ref "$candidate_ref" -f lane=qemu-kvm
+  gh api --method GET "repos/$repository/contents/.github/workflows/integration.yml" \
+    -f ref="$default_branch" --jq .sha >/dev/null
   gh workflow run integration.yml --repo "$repository" --ref "$candidate_ref" -f lane=vm-runtime
 
   gh run list --repo "$repository" --commit "$candidate_root_sha" \
@@ -237,12 +231,13 @@ run_id=REPLACE_WITH_NEW_RUN_ID
 )
 ```
 
-Require both source matrix jobs, `examples-vm`, and the selected job of each of
-the three integration runs to succeed. The unselected integration jobs are skipped by design; a skipped
-selected job, queued job, cancellation, failure, or timeout is not success.
-Retain the exact run URLs and source artifacts
-`native-candidate-source-node-{24,26}-<SHA>` and `examples-vm-source-<SHA>`
-outside tracked source; retain the corresponding examples VM logs as well. Old failed
+Require both automatic hosted portable jobs independently. For each optional
+hardware dispatch actually selected, require its selected job and exact-source
+receipt to pass; unselected manual lanes are not required contexts. A skipped
+selected job, queued job, cancellation, failure or timeout is not success.
+Use `examples.yml` without a lane input for optional practical qualification, or
+select another integration lane only when its runner is configured. Retain the
+exact run URLs, source artifacts and logs outside tracked source. Old failed
 runs retain their old workflow/action revisions: re-running their failed jobs
 does not test a newly fixed workflow. Dispatch a new run on the corrected ref.
 

@@ -1,30 +1,26 @@
-# Required practical runtime CI
+# Required practical runtime qualification
 
-The existing `examples-vm` job is the practical runtime gate. Its existing
-main merge-group, main push, `v*` tag and manual triggers remain unchanged;
-development pushes keep the ordinary source gate. The existing
-`vm-runtime-acceptance` integration job remains a distinct required low-level
-hardware check. Required names/coverage are in
-`.github/required-runtime-checks.json`; repository enforcement is configured
-externally and cannot be inferred from workflow source.
+Before merging into `main` or releasing, complete real VM runtime and practical
+qualification through DIM scheduler jobs or the canonical local commands.
+The [normative verification contract](../specs/12-verification.md#main-and-release-qualification)
+owns the required exact-source receipts and coverage. GitHub hosted portable
+checks do not replace the full DIM source job or these runtime receipts.
 
-Before the Examples workflow is registered on default main, the already registered
-Native integration workflow can be dispatched at a reviewed candidate with
-`lane=practical`. Its distinct `practical-runtime-manual` check runs the unchanged
-canonical `bash scripts/checks/examples-vm-smoke.bash` and then the same mandatory
-exact-SHA/tree `verifyEvidence.ts` receipt validator. Source evidence and logs are
-uploaded even on failure. It requires the same real KVM and 16 GiB prerequisites;
-an approximately 10 GiB runner is not ready. This manual lane neither renames nor
-substitutes for required `examples-vm` or low-level `vm-runtime-acceptance` checks.
-On ordinary main/merge-group/tag events the unselected manual job has only its
-distinct non-required name, never a duplicate skipped `examples-vm` context.
-No new development-push hardware trigger or repository-rule change is implied.
+The GitHub `integration.yml` and `examples.yml` workflows are optional manual
+entrypoints for operators who configure disposable self-hosted runners. Neither
+automatically runs on pushes, tags, pull requests or merge groups; neither is a
+required GitHub check context. `lane=practical` runs the same canonical
+`bash scripts/checks/examples-vm-smoke.bash` and mandatory exact-SHA/tree
+`verifyEvidence.ts` validator. Its source evidence and logs are uploaded even on
+failure. It requires real KVM and the same documented memory prerequisites.
+Unavailable GitHub runners do not block the DIM/local qualification path; a
+chosen run without required capabilities or receipts is still unsuccessful.
 
 ## Provisioned path
 
 ### Reusing dependency baselines
 
-The canonical `examples-vm` main/release/manual commands remain cold: they call
+Main/release cold qualification and the optional GitHub examples workflow call
 `examples-vm-smoke.bash` without a baseline. The opt-in
 `.dim/ci/practical.example.yml` uses `practical-cold.bash` for the same reason.
 Recurring scheduler runtime checks may instead select
@@ -145,7 +141,7 @@ The outer gate requires `practical-runtime.json`, distinct real role identities,
 matching source SHA/tree, both complete artifact-closure hashes and immutable
 image bindings before reporting success. Missing hardware is pending/failure;
 missing bindings, receipt, lane, uncertain cleanup or preflight-only execution
-cannot produce a green required runtime check.
+cannot produce successful runtime qualification.
 
 ## Qualification boundary
 
@@ -153,9 +149,10 @@ Deterministic CI is protocol/tool/containment acceptance, **not external
 provider/account qualification**. Optional authorized account checks are
 separate. Old file-tool or real-provider receipts cannot qualify changed source,
 and file output/catalogue HTTP alone cannot prove DIM-routed inference.
-Actual workflow dispatch status, runtime results and repository required-check
-enforcement must accompany acceptance. A source-only implementation or local
-fixture test is not a successful expensive CI run.
+Actual DIM/local execution status and validated exact-source runtime receipts
+must accompany main/release acceptance. When optional GitHub hardware dispatch
+is selected, also retain its exact run SHA and outcome. Hosted portable checks,
+workflow configuration and local fixture tests are separate evidence.
 
 The nested practical host explicitly configures a 420000 ms whole VM startup
 budget. The smoke profile reads that value from the prepared operator host

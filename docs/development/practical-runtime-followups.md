@@ -54,17 +54,18 @@ post-run monitor was complete/idle with no pending question/permission. That is
 local deterministic protocol/tool evidence, not Sysbox/Incus/hardware or external
 provider/account qualification. No paid provider calls were made by this source task.
 
-## Required CI, not private receipts alone
+## Required runtime qualification
 
-The existing separate-VM `examples-vm` gate now provisions and requires practical
-local/public-SSH, routed deterministic OpenCode/accounting/owned-monitor, shared
-HTTP, real Incus and isolated update coverage. The existing integration hardware
-receipt remains separately required. Workflows retain trusted main/merge-group,
-tag and manual frequency; development pushes do not gain heavy hardware jobs.
-See [the required CI contract](practical-runtime-ci.md).
+The canonical separate-VM gate provisions and requires practical local/public-SSH,
+routed deterministic OpenCode/accounting/owned-monitor, shared HTTP, real Incus
+and isolated update coverage. Its validated exact-source receipt and the
+low-level VM runtime receipt remain required before main/release through DIM or
+local execution. GitHub hardware workflows are optional manual entrypoints for
+configured runners, with no push/tag/merge-group queue or required context.
+See [required runtime qualification](practical-runtime-ci.md).
 
-Actual expensive CI dispatch, new-candidate hardware replay and repository rule
-enforcement are coordinator-owned and **not established by these source checks**.
+Actual runtime execution and validated new-candidate receipts are
+coordinator-owned and **not established by these source checks**.
 Missing hardware/bindings/receipt/required lane is pending or failed, never a
 successful skip. Historical real-provider/file-tool receipts do not qualify the
 changed candidate, and the old canonical full-run failure is not relabeled pass.

@@ -45,16 +45,30 @@ multi-host/release acceptance are separate claims. Record what actually ran,
 what was unavailable and any remaining concrete limitation. A script name or
 historical specification is not evidence that the current architecture passed.
 
-Required main/premerge/release runtime coverage is declared in
-`.github/required-runtime-checks.json` and executed by the existing trusted
-`examples-vm` and `vm-runtime-acceptance` jobs. The registered Native integration
-workflow also exposes manual `lane=practical` under the distinct non-required
-`practical-runtime-manual` name. That lane qualifies only its exact-source
-canonical practical receipt and does not replace either required check context.
-A required CI pass means both required jobs ran
-for the exact source and exported validated completion receipts; an absent runner
-is pending, and missing capabilities, bindings, coverage or cleanup fail rather
-than becoming successful skips. Heavy jobs do not run on development pushes.
+## Main and release qualification
+
+Before merging into `main` or releasing, retain successful real VM runtime and
+practical acceptance for the exact reviewed source SHA and tree. Run the owning
+DIM scheduler jobs or the same canonical commands on an authorized disposable
+local host. The low-level runtime receipt is `acceptance.json` from
+`just verify vm-runtime-prepare --run`; it must record `outcome: passed`, the
+exact `sourceSha`/`sourceTree`, and a `passed-in-container-kvm-test` probe. The
+practical receipt is `practical-runtime.json` from
+`bash scripts/checks/examples-vm-smoke.bash`, validated by
+`tests/scenarios/selected-host/ci/verifyEvidence.ts` against the same source and
+tree. Both receipts, complete coverage and successful owned cleanup are required.
+Missing hardware or evidence is pending or failed, never a successful skip.
+Cold bootstrap qualification remains required; cached runtime success does not
+replace it.
+
+GitHub's automatic source verification covers the hosted portable Node 24/26
+workflow. It does not establish full DIM source, Sysbox or KVM acceptance.
+`integration.yml` and `examples.yml` are optional `workflow_dispatch` entrypoints
+for operators who explicitly configure disposable self-hosted runners. They do
+not run on pushes, tags, pull requests or merge groups and must not be configured
+as required GitHub check contexts. Their receipt validators remain mandatory
+when dispatched. No self-hosted GitHub runner is required to complete the
+DIM/local runtime qualification above.
 
 Practical acceptance includes ordinary local and actual normal-installed public
 CLI over pinned SSH, production public `{urls:[...]}` app/OpenCode consumers,

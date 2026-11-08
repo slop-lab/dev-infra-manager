@@ -97,14 +97,14 @@ describe("candidate source workflows", () => {
     }
   });
 
-  it("dispatches native ordinary and trusted real-KVM integration lanes", async () => {
+  it("manually dispatches native ordinary and trusted real-KVM integration lanes", async () => {
     // Given
     const { source, workflow } = await readWorkflow("integration");
 
     // When / Then
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(Object.keys(workflow.jobs).sort()).toEqual(["ordinary", "practical-runtime-manual", "qemu-kvm", "vm-runtime-acceptance"]);
-    expect(source).toContain("workflow_dispatch:");
+    expect(Object.keys(workflow.on ?? {})).toEqual(["workflow_dispatch"]);
     expect(source.match(/ref: \$\{\{ github\.sha \}\}/g)).toHaveLength(4);
     expect(source).toContain("just verify native-ordinary-executor-live");
     expect(source).toContain("just verify native-qemu-guest-mechanics-kvm");
@@ -131,17 +131,16 @@ describe("candidate source workflows", () => {
     }
   });
 
-  it("dispatches practical manually under a distinct non-required name with mandatory canonical exact-tree evidence", async () => {
+  it("dispatches practical only manually with mandatory canonical exact-tree evidence", async () => {
     const { source, workflow } = await readWorkflow("integration"), job = workflow.jobs["practical-runtime-manual"];
     assert(job !== undefined);
     expect(workflow.on?.workflow_dispatch?.inputs?.lane?.options).toEqual(["ordinary", "qemu-kvm", "vm-runtime", "practical"]);
-    expect(job.if).toBe("${{ github.event_name == 'workflow_dispatch' && inputs.lane == 'practical' }}");
+    expect(job.if).toBe("${{ inputs.lane == 'practical' }}");
     expect(job.name ?? "practical-runtime-manual").toBe("practical-runtime-manual");
     expect(workflow.jobs["examples-vm"]).toBeUndefined();
     expect(job["runs-on"]).toBe("dim-native-qemu"); expectExactCheckout(job, "${{ github.sha }}");
-    expect(workflow.on?.push).toEqual({ branches: ["main"], tags: ["v*"] });
-    expect(workflow.on?.merge_group?.branches).toEqual(["main"]); expect(workflow.on?.pull_request).toBeUndefined();
-    expect(workflow.jobs["vm-runtime-acceptance"]?.if).toBe("${{ github.event_name == 'merge_group' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.lane == 'vm-runtime') }}");
+    expect(Object.keys(workflow.on ?? {})).toEqual(["workflow_dispatch"]);
+    expect(workflow.jobs["vm-runtime-acceptance"]?.if).toBe("${{ inputs.lane == 'vm-runtime' }}");
     const runtime = job.steps.findIndex((step) => step.run === "bash scripts/checks/examples-vm-smoke.bash");
     const receipt = job.steps.findIndex((step) => step.run === 'node tests/scenarios/selected-host/ci/verifyEvidence.ts "$DIM_EXAMPLES_VM_LOG_ROOT" "$GITHUB_SHA" "$(git rev-parse \'HEAD^{tree}\')"');
     expect(runtime).toBeGreaterThan(-1); expect(receipt).toBeGreaterThan(runtime);
@@ -172,21 +171,16 @@ describe("candidate source workflows", () => {
     }
   });
 
-  it("requires practical runtime receipts on trusted existing gates without development-push hardware dispatch", async () => {
+  it("requires complete exact-source receipts when the optional examples workflow is manually dispatched", async () => {
     const { workflow } = await readWorkflow("examples"), job = workflow.jobs["examples-vm"];
     assert(job !== undefined);
-    expect(workflow.on?.push?.branches).toEqual(["main"]);
-    expect(workflow.on?.push?.tags).toEqual(["v*"]);
-    expect(workflow.on?.merge_group?.branches).toEqual(["main"]);
-    expect(workflow.on?.pull_request).toBeUndefined();
+    expect(Object.keys(workflow.on ?? {})).toEqual(["workflow_dispatch"]);
     expect(job["runs-on"]).toBe("dim-native-qemu");
     const runtime = job.steps.findIndex((step) => step.run === "bash scripts/checks/examples-vm-smoke.bash");
     const required = job.steps.findIndex((step) => step.run?.startsWith("node tests/scenarios/selected-host/ci/verifyEvidence.ts"));
     expect(runtime).toBeGreaterThan(-1); expect(required).toBeGreaterThan(runtime);
     expect(job.steps[required]?.if).toBeUndefined();
     expect(job.steps.filter((step) => step.uses?.startsWith("actions/upload-artifact@")).every((step) => step.with?.["if-no-files-found"] === "error")).toBe(true);
-    const contract: unknown = JSON.parse(await readFile(resolve(workspaceRoot, ".github/required-runtime-checks.json"), "utf8"));
-    expect(contract).toMatchObject({ requiredChecks: ["examples-vm", "vm-runtime-acceptance"], developmentPushHardwareRuns: false, missingHardwareOrReceipt: "pending-or-failure-never-successful-skip" });
   });
 
   it("has no obsolete candidate assembly entry point in the tracked source layout", async () => {

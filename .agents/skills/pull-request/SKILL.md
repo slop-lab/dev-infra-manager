@@ -67,8 +67,10 @@ Confirm each run's `headSha`. A PR workflow may test a synthetic merge commit;
 distinguish that SHA from the pushed head in the result. Identify the workflows
 relevant to the change: DIM's source verification has Node 24 and 26 lanes;
 OpenCode Pages deploys when its tool/workflow paths change. Hardware integration
-lanes run only for their reviewed merge-queue, main/release or explicit manual
-activation; they are never implied by a green source run. A manual workflow is
+workflows are optional manual dispatches for explicitly configured disposable
+self-hosted runners; do not dispatch them without available runners. Required
+main/release runtime qualification runs through DIM or local exact-source VM
+receipts, independently of GitHub hosted portable checks. A manual workflow is
 unavailable until its workflow file has first reached the default branch.
 
 Report local checks separately from remote CI and live deployment. Monitor with

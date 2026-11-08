@@ -24,19 +24,21 @@ the fixture's temporary HOME/state. It never reuses installed credentials.
 
 ## Examples in fresh VMs
 
-`.github/workflows/examples.yml` runs the `examples-vm` check on merge groups
-targeting `main`, `main` pushes, `v*` tags and explicit manual dispatches such as
-release candidates. It does not run hardware jobs on development pushes.
-The ordinary Node 24/26 source checks in `verify.yml` still run on their existing
-events; passing source checks alone does not establish VM example acceptance.
+The canonical practical and VM runtime receipts are required before main/release
+under the [normative verification contract](../specs/12-verification.md#main-and-release-qualification).
+Run the owning DIM scheduler jobs or the same commands on authorized disposable
+local hosts. GitHub `verify.yml` automatically checks portable Node 24/26
+contracts; those hosted checks do not establish physical-runtime acceptance.
 
-The examples workflow needs a disposable x86-64 self-hosted runner labeled
-`dim-native-qemu`, with the host prerequisites documented in the
-[fresh Ubuntu VM profile](bootstrap-ubuntu-vm.md#disposable-fresh-vm-acceptance-profile).
-It requires readable/writable real `/dev/kvm`; missing KVM fails as unavailable,
-and neither a successful skip nor TCG counts as a pass. An offline runner leaves
-the required check pending. Use test hosts without production DIM state or
-credentials. The workflow does not retain checkout credentials.
+`.github/workflows/examples.yml` and `integration.yml` are optional manual
+entrypoints for configured disposable self-hosted runners. They do not run on
+pushes, tags, pull requests or merge groups and must not be required GitHub check
+contexts. The examples workflow needs an x86-64 runner labeled `dim-native-qemu`
+with the [fresh Ubuntu VM prerequisites](bootstrap-ubuntu-vm.md#disposable-fresh-vm-acceptance-profile).
+Real readable/writable `/dev/kvm` remains required; missing KVM fails unavailable,
+and neither TCG nor successful skips count. An offline optional GitHub runner
+leaves that chosen dispatch pending; use DIM/local execution for required
+qualification. Never expose production DIM state or credentials to test runners.
 
 The same gate runs inside a DIM workspace with an explicit `container-kvm`
 runtime grant. Start with `just verify examples-vm-preflight`; it tests actual
@@ -86,15 +88,14 @@ evidence-export failure is not acceptance. Logs remain under the selected
 evidence directory, and the workflow uploads them even on failure. It uploads
 `examples-vm-source-<SHA>` separately with the exact commit/tree evidence.
 
-A maintainer must configure `examples-vm` and `vm-runtime-acceptance` as required
-`main` checks, following `.github/required-runtime-checks.json`; adding workflow
-source does not configure or attest repository rules. Merge-queue runs test the
-queue's candidate rather
-than the original PR head. Review the recorded commit/tree, not merely the
-branch name or an older green run. Release candidates must repeat this gate
-against their exact frozen commit/tree; see [releasing](../guides/releasing.md#required-verification).
-The workflow event filters follow GitHub's
-[merge-group branch syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onmerge_groupbranchesbranches-ignore).
+GitHub branch protection, if configured, should require only the hosted
+`portable (Node 24.19.0)` and `portable (Node 26.5.0)` contexts. Workflow source
+does not configure external repository rules. Real main/release qualification
+remains a separate DIM/local acceptance decision with validated exact SHA/tree
+receipts. A missing GitHub hardware check is not runtime success and does not
+require creating a nonexistent self-hosted runner queue. Release candidates
+must satisfy the [required verification](../guides/releasing.md#required-verification)
+against their exact frozen source.
 
 The existing separate-VM provisioner now prepares test-owned LLM issuer/read
 authorities and shared ingress, builds an Incus VM image from the reviewed Ubuntu

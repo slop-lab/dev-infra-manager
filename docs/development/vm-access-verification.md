@@ -19,8 +19,9 @@
 - Runtime runner negative preflight: missing exact image bindings fails rather
   than skipping or reporting success.
 - The heavy runner rechecks the deterministic VM-access tests before the three
-  physical runtime tests, and privileged GitHub execution is limited to the
-  reviewed merge queue, `main`/release pushes or explicit manual dispatch.
+  physical runtime tests. Optional privileged GitHub workflows run only by
+  explicit manual dispatch on configured disposable runners; required
+  main/release runtime receipts can instead come from DIM or local execution.
 - The runner forces all three physical tests into required mode so missing
   bindings fail instead of producing skips. The reviewed static KVM ioctl probe
   executes only inside the disposable `container-kvm` workspace test; its
