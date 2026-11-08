@@ -406,7 +406,7 @@ asset_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 [[ ! -L "$tool_launcher" && (! -e "$tool_launcher" || -f "$tool_launcher") ]] || fail 'unsafe agent launcher target'
 install -m 0700 "$asset_dir/agent.mjs" "$tool_launcher"
 mkdir -p "$install_prefix/share/dim-agent-tools"
-for helper in opencode-runtime.bash omo-model-availability.mjs; do
+for helper in opencode-runtime.bash omo-model-availability.mjs opencode-team-metadata.mjs; do
   [[ ! -L "$install_prefix/share/dim-agent-tools/$helper" ]] || fail "unsafe tool helper target: $helper"
   if [[ "$(realpath -m "$asset_dir/$helper")" != "$(realpath -m "$install_prefix/share/dim-agent-tools/$helper")" ]]; then
     install -m 0700 "$asset_dir/$helper" "$install_prefix/share/dim-agent-tools/$helper"

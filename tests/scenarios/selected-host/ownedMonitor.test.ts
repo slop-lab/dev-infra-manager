@@ -17,8 +17,12 @@ it("inspects the same fresh owned session rather than a foreign preconfigured or
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   try {
     const address = server.address(); if (!address || typeof address === "string") throw new Error("fixture has no listener");
-    const evidence = await inspectConfiguredMonitor({ profile: ownedMonitorDefaults, workspace: "dim-smoke-owned", endpoint: `http://127.0.0.1:${address.port}`, sessionId: "ses_OWNED", directory: "/workspace",
-      credentials: { username: "fixture", password: "private-fixture-password" }, async run() { throw new Error("read-only ownership inspection must not execute guest commands without an explicit adapter"); } });
+    const evidence = await inspectConfiguredMonitor({ profile: ownedMonitorDefaults, workspace: "dim-smoke-owned", workspaceId:"11111111-1111-4111-8111-111111111111", endpoint: `http://127.0.0.1:${address.port}`, sessionId: "ses_OWNED", directory: "/workspace",
+      credentials: { username: "fixture", password: "private-fixture-password" }, async run(_step, args) {
+        expect(args.slice(0,4)).toEqual(["tools","console","invoke","server.team-metadata"]);
+        expect(JSON.parse(args[5]!)).toMatchObject({directory:"/workspace"});
+        return {stdout:JSON.stringify({workspace:"dim-smoke-owned",workspaceId:"11111111-1111-4111-8111-111111111111",source:"optional-omo-adapter",enabled:true,teams:[],truncated:false,unreadable:false}),stderr:"",exitCode:0};
+      } });
     expect(evidence.sessions.map(({ sessionId }) => sessionId)).toEqual(["ses_OWNED"]);
     expect(evidence).toMatchObject({ state: "idle", pendingQuestions: 0, discovery: "complete-child-tree", completion: "not-assessed" });
     expect(paths).not.toContain("/session/ses_FOREIGN/message"); expect(JSON.stringify(evidence)).not.toContain("PRIVATE_UNRELATED_QUESTION");

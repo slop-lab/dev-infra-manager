@@ -95,3 +95,17 @@ it("allows explicit stop and setup repair without first resuming an unhealthy se
   expect(execute.mock.calls.some(([, command]) => command.at(-1) === "stop")).toBe(true);
   expect(execute.mock.calls.some(([, command]) => command.includes("dim-tools-setup"))).toBe(true);
 }));
+
+it("reads bounded public team metadata with exact workspace identity without starting or deploying tools", async () => fixture(async (context, workspace) => {
+  const execute = vi.spyOn(context.service,"exec").mockImplementation(async (_name,command,options)=>{
+    expect(command).toEqual(["bash","-c",'exec node "$HOME/.local/share/dim-agent-tools/opencode-team-metadata.mjs"']);
+    expect(options?.workspaceId).toBe(workspace.id);
+    options?.stdout?.write(JSON.stringify({source:"optional-omo-adapter",enabled:true,teams:[{leadSessionId:"ses_parent",status:"active",members:[{sessionId:"ses_child",status:"failed",prompt:"PRIVATE"}],modifiedAt:"2026-11-08T16:00:00.000Z",auth:"PRIVATE"}],truncated:false,unreadable:false,config:"PRIVATE"}));return 0;
+  });
+  const identity={workspace:workspace.name,workspaceId:workspace.id};
+  const result=await invokeToolsConsole("server.team-metadata",{...identity,directory:"/workspace"},context);
+  const stdin=execute.mock.calls[0]?.[2]?.stdin;let payload="";if(stdin)for await(const chunk of stdin)payload+=chunk.toString();expect(JSON.parse(payload)).toEqual({directory:"/workspace"});
+  expect(result).toMatchObject({...identity,enabled:true,teams:[{members:[{sessionId:"ses_child",status:"failed"}]}]});
+  expect(JSON.stringify(result)).not.toContain("PRIVATE");expect(execute).toHaveBeenCalledTimes(1);
+  await expect(invokeToolsConsole("server.team-metadata",{...identity,path:"/private"},context)).rejects.toThrow("Invalid");
+}));

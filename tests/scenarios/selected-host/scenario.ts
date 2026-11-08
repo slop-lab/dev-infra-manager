@@ -147,7 +147,7 @@ export async function runHostSmoke(selected: HostProfile, options: SmokeOptions 
 
     {
       progress("OpenCode monitor: reading bounded public session metadata", "progress");
-      monitorEvidence = await inspectConfiguredMonitor({ profile: profile.monitor ?? ownedMonitorDefaults, workspace: owned.name, endpoint: url, sessionId: inference.sessionId, directory: inference.directory,
+      monitorEvidence = await inspectConfiguredMonitor({ profile: profile.monitor ?? ownedMonitorDefaults, workspace: owned.name, workspaceId: owned.id, endpoint: url, sessionId: inference.sessionId, directory: inference.directory,
         credentials: { username: text(credentials["username"], "server username"), password: text(credentials["password"], "server password") },
         run: (step, args, timeout) => checked(profile, step, args, timeout) });
       progress(`OpenCode monitor: ${monitorEvidence.state}; discovery=${monitorEvidence.discovery}; completion=${monitorEvidence.completion}`, monitorInspection(monitorEvidence) === "inspected" ? "pass" : "incomplete");

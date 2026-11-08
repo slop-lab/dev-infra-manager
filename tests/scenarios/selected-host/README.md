@@ -185,7 +185,18 @@ the smoke report is `incomplete` and exits with code 2, even if its other runtim
 checks passed. Preflight also requires nonempty doctor checks with every `ok`
 strictly true; an exit-zero doctor command alone is insufficient.
 
-`omoMetadataPath`, when present, names an independently installed, guest-owned
+Workspace-backed verification automatically invokes the installed agent-tools
+`server.team-metadata` capability with the immutable workspace ID when no
+explicit adapter is selected. It reads fresh metadata in the actual owned
+server's configuration context, not the operator's HOME. The pinned managed
+default and safe user `base_dir` overrides are supported. Profiles, project
+configuration, unsupported user fields, settings differing from the owned launch hash,
+and unsafe or unreadable runtime state remain unknown. No metadata output file
+is fabricated to satisfy the gate. Standalone endpoint-only monitoring has no
+workspace authority and still requires an explicit adapter for team discovery.
+
+`omoMetadataPath`, when present, deliberately overrides automatic discovery and
+names an independently installed, guest-owned
 adapter output file. The narrow JSON shape is `source`, `enabled`, `truncated`,
 `unreadable`, and `teams[]` with `leadSessionId`, `status`, `modifiedAt` and
 bounded `members[]` session/status pairs. The runner neither installs that

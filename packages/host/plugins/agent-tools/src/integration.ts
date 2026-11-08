@@ -7,6 +7,7 @@ import { type WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-
 export async function deployToolHelpers(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<void> {
   if (!workspace.initialized || workspace.phase !== "running") return;
   const availability = await readFile(new URL("./assets/omo-model-availability.mjs", import.meta.url));
+  const teamMetadata = await readFile(new URL("./assets/opencode-team-metadata.mjs", import.meta.url));
   const setup = await readFile(new URL("./assets/tool-setup.bash", import.meta.url));
   const agent = await readFile(new URL("./assets/agent.mjs", import.meta.url));
   const runtime = await readFile(new URL("./assets/opencode-runtime.bash", import.meta.url));
@@ -15,6 +16,7 @@ export async function deployToolHelpers(workspace: WorkspaceRecord, context: Wor
   await deployGuestIntegration({ service: context.service, workspace, signal: context.signal }, {
     name: "agent-tools", files: [
       { path: ".local/share/dim-agent-tools/omo-model-availability.mjs", contents: availability, mode: 0o700 },
+      { path: ".local/share/dim-agent-tools/opencode-team-metadata.mjs", contents: teamMetadata, mode: 0o700 },
       { path: ".local/share/dim-agent-tools/tool-setup.bash", contents: setup, mode: 0o700 },
       { path: ".local/share/dim-agent-tools/agent.mjs", contents: agent, mode: 0o700 },
       { path: ".local/share/dim-agent-tools/opencode-runtime.bash", contents: runtime, mode: 0o700 },

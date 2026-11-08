@@ -78,7 +78,11 @@ the CI parent forwards only this progress channel, not arbitrary child stderr.
 The outer stage heartbeat forwards newly completed progress and fixed preparation
 timing records from its private log every 30 seconds and flushes them on exit.
 An `incomplete` report is preserved for diagnosis before its nonzero exit is
-rejected; blocked coverage never becomes a passing qualification.
+rejected; blocked coverage never becomes a passing qualification. The normal
+workspace-backed monitor obtains bounded fresh team metadata through the owning
+agent-tools capability by exact workspace ID. No project adapter configuration
+is needed for the supported managed default; ambiguous configuration or
+unreadable state remains incomplete.
 
 The existing QEMU provisioner owns two separate Ubuntu CP/host VMs and pinned
 inter-VM SSH. It prepares exact source/tree and package manifests, a private

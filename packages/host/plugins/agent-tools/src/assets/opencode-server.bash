@@ -476,6 +476,15 @@ if [[ -z "${server_pid:-}" ]]; then
   availability_helper="$HOME/.local/share/dim-agent-tools/omo-model-availability.mjs"
   [[ -f "$availability_helper" ]] || availability_helper="$(dirname -- "${BASH_SOURCE[0]}")/omo-model-availability.mjs"
   LD_PRELOAD="$runtime_preload" node "$availability_helper" --refresh "$(command -v opencode)" || fail 'could not discover available OpenCode models'
+  # A public hash binds read-only team discovery to the actual launch context.
+  # Unsupported configuration disables metadata discovery without blocking launch.
+  team_metadata_helper="$HOME/.local/share/dim-agent-tools/opencode-team-metadata.mjs"
+  [[ -f "$team_metadata_helper" ]] || team_metadata_helper="$(dirname -- "${BASH_SOURCE[0]}")/opencode-team-metadata.mjs"
+  omo_config_sha256=unavailable
+  if [[ -f "$team_metadata_helper" ]]; then
+    omo_config_sha256="$(node "$team_metadata_helper" --launch-fingerprint 2>/dev/null)" || omo_config_sha256=unavailable
+    [[ "$omo_config_sha256" =~ ^[a-f0-9]{64}$ ]] || omo_config_sha256=unavailable
+  fi
   : >"$log_file"
   chmod 0600 "$log_file"
   instance_id="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
@@ -488,6 +497,7 @@ if [[ -z "${server_pid:-}" ]]; then
     export LD_PRELOAD="$runtime_preload" OPENCODE_SERVER_USERNAME="$SERVER_USERNAME" OPENCODE_SERVER_PASSWORD="$password"
     export DIM_OPENCODE_WEB_INSTANCE_ID="$instance_id" DIM_OPENCODE_WEB_CORS_ORIGINS_CANONICAL="$cors_origins_json"
     export DIM_OPENCODE_WEB_CONFIGURATION_FINGERPRINT="$configuration_fingerprint"
+    export DIM_OPENCODE_WEB_OMO_CONFIG_SHA256="$omo_config_sha256"
     flock -u "$lock_fd"
     exec {lock_fd}>&-
     exec opencode serve --hostname 127.0.0.1 --port "$port" "${cors_arguments[@]}" </dev/null >>"$log_file" 2>&1
@@ -498,6 +508,7 @@ if [[ -z "${server_pid:-}" ]]; then
   DIM_OPENCODE_WEB_INSTANCE_ID="$instance_id" \
   DIM_OPENCODE_WEB_CORS_ORIGINS_CANONICAL="$cors_origins_json" \
   DIM_OPENCODE_WEB_CONFIGURATION_FINGERPRINT="$configuration_fingerprint" \
+  DIM_OPENCODE_WEB_OMO_CONFIG_SHA256="$omo_config_sha256" \
     nohup opencode serve --hostname 127.0.0.1 --port "$port" \
       "${cors_arguments[@]}" \
       {lock_fd}>&- </dev/null >>"$log_file" 2>&1 &

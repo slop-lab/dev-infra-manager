@@ -43,6 +43,29 @@ user action. Setup neither logs in nor copies credentials from the DIM host.
 `dim tools setup` works on the selected local or SSH host and streams its
 progress through the normal workspace transport.
 
+Workspace-backed monitoring reads fresh, bounded OMO team metadata through
+`dim tools console invoke server.team-metadata --input '{"workspace":"development","workspaceId":"EXACT_UUID"}' --json`.
+This read-only operation binds the current workspace UUID and helper-owned
+OpenCode PID, birth identity, instance and working directory. It emits only
+session IDs, statuses and modification times, never config, environment,
+authentication, prompts or tool payloads. It installs nothing and does not call
+OMO's cleanup-capable team-list API.
+
+Automatic discovery supports the pinned 4.19.4 DIM-managed user configuration
+and its absolute or `~/` team `base_dir` override. It validates ownership and
+rejects symlinks, oversized or changing files. A missing runtime directory is
+empty evidence only after establishing the owned configured base. Selected
+profiles, project overrides, unsupported user configuration, settings differing
+from the owned server launch hash, or unreadable state remain unavailable.
+Advanced setups can supply the monitor's explicit reviewed metadata adapter.
+Already-running servers launched before this capability have no hash and remain
+unavailable; monitoring does not restart them. The reader does not
+implement a second OMO configuration engine or turn unknown discovery into idle.
+A monitor's optional `directory` input is transported through bounded stdin and
+must equal the actual server directory. Workspace-backed monitoring supplies it
+automatically; nested selections needing a different configuration context
+require the appropriate server or an explicit reviewed adapter.
+
 The optional `@slop-lab/dim-web-plugin-agent-tools` package adds a **Workspace
 tools** section in each DIM Web workspace management row. It discovers this host plugin automatically through
 configured controllers. Open a running workspace's tools to inspect or explicitly

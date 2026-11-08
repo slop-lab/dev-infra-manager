@@ -317,7 +317,10 @@ is implied by these source changes.
 - Inspect explicitly selected existing OpenCode task trees through a standalone
   read-only monitor, with stdin-only server credentials, bounded discovery and
   responses, parent/child activity aggregation, scoped optional OMO metadata and
-  redacted evidence. Incomplete monitoring and failed or absent host-doctor
+  redacted evidence. Workspace-backed monitoring automatically reads fresh
+  metadata from the owned installed OpenCode server for the managed default and
+  safe team-directory overrides; ambiguous or unsafe configuration remains
+  unknown without requiring a fabricated project snapshot. Incomplete monitoring and failed or absent host-doctor
   checks cannot count as successful selected-host verification; task completion
   remains independently unassessed. Verify explicitly selected hosts through
   real disposable workspace Git, LLM, helper, ingress and reconnect flows;

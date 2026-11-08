@@ -4,12 +4,14 @@ import type { WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-
 import { deployToolHelpers } from "./integration.js";
 import { toolStatusScript } from "./toolStatus.js";
 
-const operations = ["tools.status", "tools.setup", "server.start", "server.status", "server.stop", "server.credentials", "server.password"];
+import { projectTeamMetadata } from "./teamMetadata.js";
+
+const operations = ["tools.status", "tools.setup", "server.start", "server.status", "server.stop", "server.credentials", "server.password", "server.team-metadata"];
 
 /** Capture only bounded machine output; guest stderr and installer logs never become Web responses. */
-async function execute(context: WorkspaceHostPluginContext, workspace: WorkspaceRecord, command: string[], json = true, input?: unknown) {
+async function execute(context: WorkspaceHostPluginContext, workspace: WorkspaceRecord, command: string[], json = true, input?: unknown, timeoutMilliseconds = 175_000) {
   const cancellation = new AbortController();
-  const signal = AbortSignal.any([context.signal, cancellation.signal, AbortSignal.timeout(175_000)]);
+  const signal = AbortSignal.any([context.signal, cancellation.signal, AbortSignal.timeout(timeoutMilliseconds)]);
   const chunks: Buffer[] = []; let bytes = 0, overflow = false;
   const stdout = new Writable({ write(chunk: Buffer, _encoding, callback) {
     if (json) { bytes += chunk.length; if (bytes <= 32 * 1024) chunks.push(Buffer.from(chunk)); else { overflow = true; cancellation.abort(); } }
@@ -27,16 +29,21 @@ export async function invokeToolsConsole(operation: string, input: unknown, cont
   if (!operations.includes(operation)) throw new UserError("Unknown tools operation");
   if (typeof input !== "object" || input === null || Array.isArray(input)) throw new UserError("Tools input must be an object");
   const value = input as Record<string, unknown>;
-  const allowed = operation === "tools.setup" ? ["workspace", "workspaceId", "tool"] : operation === "server.password" ? ["workspace", "workspaceId", "password"] : ["workspace", "workspaceId"];
+  const allowed = operation === "server.team-metadata" ? ["workspace", "workspaceId", "directory"] : operation === "tools.setup" ? ["workspace", "workspaceId", "tool"] : operation === "server.password" ? ["workspace", "workspaceId", "password"] : ["workspace", "workspaceId"];
   if (Object.keys(value).some((key) => !allowed.includes(key)) || typeof value.workspace !== "string" || typeof value.workspaceId !== "string"
     || !/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(value.workspace) || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.workspaceId)
     || (operation === "tools.setup" && value.tool !== "opencode" && value.tool !== "codex")) throw new UserError("Invalid tools operation input");
   if (operation === "server.password" && (typeof value.password !== "string" || !/^[\x20-\x7e]{12,128}$/.test(value.password))) throw new UserError("Password must contain 12–128 printable ASCII characters");
+  if (operation === "server.team-metadata" && value.directory !== undefined && (typeof value.directory !== "string" || !value.directory.startsWith("/") || value.directory.length > 4096 || /[\x00-\x1f\x7f]/.test(value.directory))) throw new UserError("Invalid monitor directory");
   const workspace = await context.service.show(value.workspace);
   if (workspace.id !== value.workspaceId) throw new UserError("Workspace was replaced; refresh before running tools");
   if (!workspace.initialized || workspace.phase !== "running" || workspace.runtimeStatus !== "running") throw new UserError("Start the workspace before running tools");
   if (["tools.setup", "server.start", "server.stop", "server.password"].includes(operation)) await deployToolHelpers(workspace, context);
   const identity = { workspace: workspace.name, workspaceId: workspace.id };
+  if (operation === "server.team-metadata") {
+    const response = await execute(context, workspace, ["bash", "-c", 'exec node "$HOME/.local/share/dim-agent-tools/opencode-team-metadata.mjs"'], true, value.directory === undefined ? {} : {directory:value.directory}, 10_000);
+    return { ...identity, ...projectTeamMetadata(response) };
+  }
   if (operation === "tools.setup") {
     await execute(context, workspace, ["bash", "-c", 'exec bash "$HOME/.local/share/dim-agent-tools/tool-setup.bash" "$1"', "dim-tools-setup", value.tool as string], false);
   }
