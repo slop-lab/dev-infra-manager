@@ -1,6 +1,7 @@
 import { InvalidArgumentError, type Command } from "commander";
 import { print, printList, type JsonFlags } from "@slop-lab/dim-host-core/controller/cli";
 import { selectNativeRepository } from "./native-project-selector.js";
+import { printReview, reviewOutputOptions, type ReviewOutputFlags } from "./review-output.js";
 
 export function registerRepositoryOperationCommands(project: Command): void {
   project.command("diff").description("Inspect an immutable comparison in the selected repository")
@@ -30,22 +31,25 @@ export function registerRepositoryOperationCommands(project: Command): void {
       if (!Array.isArray(rows)) throw new InvalidArgumentError("review list is unavailable");
       printList(rows, ["reviewId", "proposalRef", "protectedRef", "status"], flags);
     });
-  review.command("resolve").argument("<project>").argument("<repository>")
+  reviewOutputOptions(review.command("resolve").argument("<project>").argument("<repository>"))
     .requiredOption("--source <ref>", "source branch or refs/tags/TAG").option("--target <ref>", "managed target branch")
     .option("--json", "print machine-readable JSON")
-    .action(async (name: string, repositoryId: string, flags: JsonFlags & { source: string; target?: string }) => {
+    .action(async (name: string, repositoryId: string, flags: ReviewOutputFlags & { source: string; target?: string }) => {
       const selected = await selectNativeRepository(name, repositoryId);
       const ref = (value: string) => value.startsWith("refs/") ? value : `refs/heads/${value}`;
-      print(await selected.invoke("reviews.resolve", { proposalRef: ref(flags.source), ...(flags.target === undefined ? {} : { protectedRef: ref(flags.target) }) }), flags);
+      printReview(await selected.invoke("reviews.resolve", { proposalRef: ref(flags.source), ...(flags.target === undefined ? {} : { protectedRef: ref(flags.target) }) }), flags, { project: name, repository: repositoryId });
     });
   for (const action of ["inspect", "approve", "revoke", "promote"] as const) {
     const command = review.command(action).argument("<project>").argument("<repository>").argument("<review-id>")
       .option("--json", "print machine-readable JSON");
+    if (action !== "promote") reviewOutputOptions(command);
     if (action === "revoke") command.requiredOption("--approval <id>", "this reviewer's approval ID");
-    command.action(async (name: string, repositoryId: string, reviewId: string, flags: JsonFlags & { approval?: string }) => {
+    command.action(async (name: string, repositoryId: string, reviewId: string, flags: ReviewOutputFlags & { approval?: string }) => {
       const selected = await selectNativeRepository(name, repositoryId);
-      print(await selected.invoke(action === "inspect" ? "reviews.detail" : `reviews.${action}`,
-        { reviewId, ...(flags.approval === undefined ? {} : { approvalId: flags.approval }) }), flags);
+      const result = await selected.invoke(action === "inspect" ? "reviews.detail" : `reviews.${action}`,
+        { reviewId, ...(flags.approval === undefined ? {} : { approvalId: flags.approval }) });
+      if (action === "promote") print(result, flags);
+      else printReview(result, flags, { project: name, repository: repositoryId });
     });
   }
 }

@@ -88,7 +88,9 @@ dim project pr show PROJECT REPOSITORY PR_ID --json
 dim project pr diff PROJECT REPOSITORY PR_ID --json
 dim project pr blame PROJECT REPOSITORY PR_ID --path src/app.ts --side head --line 12
 dim project pr review PROJECT REPOSITORY PR_ID --json
-dim project review inspect PROJECT REPOSITORY REVIEW_ID --json
+dim project review inspect PROJECT REPOSITORY REVIEW_ID --agent
+# Request full evidence only when inspecting the patch or complete history.
+dim project review inspect PROJECT REPOSITORY REVIEW_ID --full --json
 ```
 
 Use `--source refs/tags/TAG` for a tag source. A source must resolve to a commit;
@@ -96,6 +98,13 @@ ordinary tags pointing to a blob/tree remain valid Git data but are not review
 candidates. PR revisions pin exact commits. Force-updating or deleting a source
 does not retarget old discussion or preserve stale approval authority. Refresh
 the PR explicitly after another push.
+
+Review `inspect`, `resolve`, `approve` and `revoke` return summaries by default,
+also with `--json`. `--agent` is compact JSON with bounded lists and explicit
+omission counts, while `--full --json` returns the complete review. Human
+approval, stale evidence and required CI remain separate states. Failed or
+unknown CI is retained in the summary. Other commands and the service API keep
+their own output; this is a presentation choice on the selected host.
 
 Review preparation is distinct from human approval. The selected reviewer and
 trusted repository policy determine whether approval is required:

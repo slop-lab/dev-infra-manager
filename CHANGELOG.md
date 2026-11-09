@@ -52,6 +52,10 @@ is implied by these source changes.
   stored hook/evidence identities and prepare an offline source export with
   original history and per-file provenance, without publishing or deploying it.
 
+- Keep review inspection and decision output concise by default. Provide compact
+  `--agent` review status with bounded evidence lists and explicit omission
+  counts; request patches and full history with `--full --json`.
+
 - Repository imports consistently configure `.dim/` review with the connected reviewer, preserve explicit review and CI policies, and report missing review configuration without silently waiving protection. Initial preparation honors the operation deadline, attests the serving generation, and distinguishes explicit rejection from an unconfirmed write without blind retries or discarding immutable import intent.
 - CI source acquisition reports bounded authentication, transport and timeout failure codes, per-phase timing and Git subprocess byte counts without exposing read credentials or raw errors. Hardware attempts prepare each distinct pinned image once; failed acquisition remains failed required evidence.
 - Let workspace agents request exact-candidate DIM CI and inspect job status,

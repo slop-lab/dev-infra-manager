@@ -69,7 +69,17 @@ describe.sequential("ergonomic CLI PR actions against the actual service", () =>
     expect(inspected.status).toBe(200); expect(record(await inspected.json()).approvals).toEqual([]);
     output.mockClear();
     await runNativeGitCli(["project", "review", "inspect", "acme", "public", reviewId, "--json"]);
-    expect(JSON.parse(String(output.mock.calls.at(-1)?.[0]))).toMatchObject({ reviewId, ci: { state: "not-required" } });
+    const summary = JSON.parse(String(output.mock.calls.at(-1)?.[0]));
+    expect(summary).toMatchObject({ reviewId, ci: { state: "not-required" }, changes: { total: 1 } });
+    expect(summary).not.toHaveProperty("patch");
+    expect(summary.fullDetails).toEqual(["dim", "project", "review", "inspect", "acme", "public", reviewId, "--full", "--json"]);
+    output.mockClear();
+    await runNativeGitCli(["project", "review", "inspect", "acme", "public", reviewId, "--agent"]);
+    expect(String(output.mock.calls.at(-1)?.[0])).not.toContain("\n");
+    expect(JSON.parse(String(output.mock.calls.at(-1)?.[0]))).not.toHaveProperty("patch");
+    output.mockClear();
+    await runNativeGitCli(["project", "review", "inspect", "acme", "public", reviewId, "--full", "--json"]);
+    expect(JSON.parse(String(output.mock.calls.at(-1)?.[0])).patch).toContain("CLI candidate");
     output.mockClear();
     await runNativeGitCli(["project", "diff", "acme", "public", "--base", currentRevision(pr).targetCommit, "--head", currentRevision(pr).sourceCommit, "--json"]);
     expect(JSON.parse(String(output.mock.calls.at(-1)?.[0]))).toMatchObject({ baseCommit: currentRevision(pr).targetCommit, headCommit: currentRevision(pr).sourceCommit });

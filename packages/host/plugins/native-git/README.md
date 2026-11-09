@@ -145,6 +145,29 @@ scheduler's explicit operator operation; this helper does not acquire that role.
 
 `dim project console describe --json` discovers the selected control-plane generation, optional reviewer identity, local project catalog and available operations. Only repositories whose readiness the current service proves are advertised; historical import receipts retain their original generation. Host attachment is available without reviewer credentials. Review operations use private `reviewer.json`, optional `promoter.json` and optional `git-sync.json` beside the selected host connection; each role must match its selected endpoint and generation, with host-bound roles also matching the selected host identity. No operator credentials or connection paths are returned.
 
+### Review output for agents
+
+`project review inspect`, `resolve`, `approve` and `revoke` print a status summary
+by default, including with `--json`. They omit the patch, individual changed
+paths, redundant policy snapshots and full decision history. This changes the
+pre-stable CLI output shape; scripts requiring complete review evidence must
+explicitly select `--full --json`.
+
+```bash
+dim project review inspect PROJECT REPOSITORY REVIEW_ID --agent
+dim project review inspect PROJECT REPOSITORY REVIEW_ID --full --json
+```
+
+`--agent` produces one compact JSON record. Summaries retain exact review and
+commit identities, independent human-review and CI states, counts and up to
+eight required/missing reviewers, stale reasons and actionable jobs. Failed,
+stale and unavailable jobs precede pending jobs; successful jobs are counted.
+Omitted entries and shortened stale reasons are explicit. Absent CI stays null.
+`fullDetails` contains an argument array using the caller's project alias; reuse
+the same `--host` selection when executing it. `--agent` and `--full` conflict
+before an operation executes. Summary generation belongs to this plugin and
+does not change the CLI–host wire protocol, service evidence or approval rules.
+
 Existing repositories can explicitly refresh policy without another import:
 
 ```bash
