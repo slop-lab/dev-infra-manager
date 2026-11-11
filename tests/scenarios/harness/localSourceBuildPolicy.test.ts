@@ -466,7 +466,7 @@ exec "$DIM_TEST_REAL_PNPM" "$@"
     expect(invocations).not.toContain("dev-infra-project-workspace:latest");
   });
 
-  it("binds the versioned image tag to the inspected immutable image ID", async () => {
+  it("binds immutable images and package bytes independently of the caller locale", async () => {
     // Given
     const root = await mkdtemp(resolve(tmpdir(), "dim-local-image-state-"));
     fixtureRoots.push(root);
@@ -489,6 +489,9 @@ exec "$DIM_TEST_REAL_PNPM" "$@"
       execution: { tag: "dim-local-execution:test", id: `sha256:${"0".repeat(63)}8` } }));
     await writeFile(resolve(packages, "packages.json"), "{}\n");
     await writeFile(resolve(packages, "package.tgz"), "package bytes\n");
+    // These names collate in opposite orders under en_US.UTF-8 and C.
+    await writeFile(resolve(packages, "a-b.tgz"), "hyphenated package bytes\n");
+    await writeFile(resolve(packages, "aa.tgz"), "unhyphenated package bytes\n");
     await writeFile(
       resolve(packages, ".dim-source-state"),
       `root=${fixtureRootCommit}\naggregate-lock-sha256=${"a".repeat(64)}\n`
@@ -500,14 +503,17 @@ exec "$DIM_TEST_REAL_PNPM" "$@"
     const imageTag = `dev-infra-project-workspace:0.9.0-local-${"a".repeat(64)}`;
 
     // When
-    const result = spawnSync("/usr/bin/bash", [resolve(scripts, "local-preparation-state.bash")], {
+    const readiness = (locale: string) => spawnSync("/usr/bin/bash", [resolve(scripts, "local-preparation-state.bash")], {
       encoding: "utf8",
       env: {
         PATH: `${tools}:/usr/bin:/bin`,
+        LC_ALL: locale,
         DIM_LOCAL_IMAGE_INSPECT_REF: "dev-infra-project-workspace:prepare-test",
         DIM_LOCAL_IMAGE_RECORD_REF: imageTag
       }
     });
+    const result = readiness("C");
+    const otherLocale = readiness("en_US.UTF-8");
 
     // Then
     expect(result.status).toBe(0);
@@ -515,6 +521,14 @@ exec "$DIM_TEST_REAL_PNPM" "$@"
     expect(result.stdout).toContain(`image.id=sha256:${"0".repeat(63)}8\n`);
     expect(result.stdout).toContain(`root=${fixtureRootCommit}\n`);
     expect(result.stdout).toContain(`aggregate-lock-sha256=${"a".repeat(64)}\n`);
+    expect(otherLocale.status).toBe(0);
+    expect(otherLocale.stdout).toBe(result.stdout);
+
+    await writeFile(resolve(packages, "aa.tgz"), "changed package bytes\n");
+    const changed = readiness("en_US.UTF-8");
+    expect(changed.status).toBe(0);
+    const packageHash = (output: string) => output.split("\n").find((line) => line.startsWith("packages.sha256="));
+    expect(packageHash(changed.stdout)).not.toBe(packageHash(result.stdout));
   });
 
   it("preserves the previously published candidate when staging fails", async () => {

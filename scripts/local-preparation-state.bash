@@ -40,8 +40,9 @@ printf 'schema=1\n'
 cat -- "$package_root/.dim-source-state"
 
 package_sha="$({
+  export LC_ALL=C
   cd -- "$package_root"
-  LC_ALL=C sha256sum -- packages.json ./*.tgz
+  sha256sum -- packages.json ./*.tgz
 } | sha256sum | cut -d ' ' -f 1)"
 [[ "$package_sha" =~ ^[0-9a-f]{64}$ ]]
 printf 'packages.sha256=%s\n' "$package_sha"

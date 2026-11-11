@@ -115,6 +115,8 @@ is implied by these source changes.
   cached npm metadata without forcing offline resolution or changing user configuration.
   Resolve bundled transitive dependencies from their reviewed local artifacts
   instead of probing the registry for unpublished development versions.
+  Keep prepared package identities consistent across host locales without
+  weakening package-content or immutable-image verification.
   Support host-only installation from existing control-plane role connections,
   optional owned SSH forwarding, generation attestation and retained reconnect
   settings without deploying services on the new host. Add a dependencies-only
