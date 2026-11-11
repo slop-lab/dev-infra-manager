@@ -3,7 +3,7 @@ name: dim-native-ci
 description: Request exact-candidate DIM CI and inspect its jobs, logs and artifacts from a managed repository checkout without host credentials.
 ---
 
-Run `dim-workspace inspect` to discover this workspace's installed integrations,
+Run `dim-workspace discovery` to discover this workspace's installed integrations,
 then `dim-ci --help` inside the repository checkout. Each checkout's `origin`
 selects its own repository. Never request host or operator credentials to read CI.
 
