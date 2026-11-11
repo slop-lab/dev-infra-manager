@@ -160,10 +160,8 @@ export async function launchTeamFingerprint(input) {
 }
 /** @param {string} source */
 const birth=source=>{const fields=source.slice(source.lastIndexOf(')')+2).trim().split(/\s+/);if(fields[0]==='Z'||!/^\d+$/.test(fields[19]??''))throw Error('invalid process');return fields[19];};
-/** @param {{home:string,procRoot?:string,signal?:AbortSignal,directory?:string}} input @returns {Promise<TeamMetadata>} */
-export async function inspectServerTeamMetadata(input) {
-  const signal=AbortSignal.any([AbortSignal.timeout(5000),...(input.signal?[input.signal]:[])]);
-  try {
+/** @param {{home:string,procRoot?:string,directory?:string}} input @param {AbortSignal} signal */
+async function ownedServerContext(input,signal) {
     const home=resolve(input.home);await directory(home,signal);
     const settings=record(JSON.parse(await bytes(join(home,'.local/state/dim-agent-tools/opencode-service.json'),32768,signal)));
     if(typeof settings.stateHome!=='string'||!isAbsolute(settings.stateHome)||relative(home,settings.stateHome).startsWith('..'))throw Error('unsafe state root');
@@ -176,6 +174,19 @@ export async function inspectServerTeamMetadata(input) {
     if(environment.HOME!==home||environment.DIM_OPENCODE_WEB_INSTANCE_ID!==match[4])throw Error('unowned process');
     const cwd=await readlink(join(processPath,'cwd'));
     if(input.directory!==undefined&&(input.directory!==cwd||resolve(input.directory)!==input.directory))throw Error('session directory differs from owned server');
+    return {home,pidFile,pidText,match,processPath,environment,cwd};
+}
+/** @param {{home:string,procRoot?:string,signal?:AbortSignal}} input */
+export async function inspectOwnedServerIdentity(input) {
+  const signal=AbortSignal.any([AbortSignal.timeout(5000),...(input.signal?[input.signal]:[])]);
+  const context=await ownedServerContext(input,signal);
+  return {directory:context.cwd,port:Number(context.match[3]),identity:createHash('sha256').update(context.pidText).update('\0').update(context.cwd).digest('hex')};
+}
+/** @param {{home:string,procRoot?:string,signal?:AbortSignal,directory?:string}} input @returns {Promise<TeamMetadata>} */
+export async function inspectServerTeamMetadata(input) {
+  const signal=AbortSignal.any([AbortSignal.timeout(5000),...(input.signal?[input.signal]:[])]);
+  try {
+    const {home,pidFile,pidText,match,processPath,environment,cwd}=await ownedServerContext(input,signal);
     const parse=await installedParser(home,signal), selected=await managedContext(home,cwd,environment,parse,signal);
     if(!/^[a-f0-9]{64}$/.test(environment.DIM_OPENCODE_WEB_OMO_CONFIG_SHA256??'')||selected.fingerprint!==environment.DIM_OPENCODE_WEB_OMO_CONFIG_SHA256)throw Error('configuration changed after launch');
     const result=await readTeamRuntime({...selected,maxRuns:16,maxMembers:80,deadlineMs:5000,signal,allowAbsentRuntime:true});
@@ -187,6 +198,10 @@ export async function inspectServerTeamMetadata(input) {
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href) {
   if(process.argv.length===3&&process.argv[2]==='--launch-fingerprint') process.stdout.write(await launchTeamFingerprint({home:process.env.HOME??'',cwd:process.cwd(),environment:process.env}));
+  else if(process.argv.length===3&&process.argv[2]==='--server-identity') {
+    try {process.stdout.write(JSON.stringify(await inspectOwnedServerIdentity({home:process.env.HOME??''}))+'\n');}
+    catch {process.stderr.write('Owned OpenCode identity unavailable\n');process.exitCode=1;}
+  }
   else if(process.argv.length===2){
     let input='';for await(const chunk of process.stdin){input+=chunk.toString();if(Buffer.byteLength(input)>8192)throw Error('metadata input limit');}
     const request=input?record(JSON.parse(input)):{};if(Object.keys(request).some(key=>key!=='directory')||(request.directory!==undefined&&(typeof request.directory!=='string'||!isAbsolute(request.directory)||/[\x00-\x1f\x7f]/.test(request.directory))))throw Error('invalid metadata input');
