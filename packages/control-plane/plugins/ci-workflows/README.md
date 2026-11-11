@@ -17,6 +17,19 @@ A job needs a script from the candidate repository. Jobs use Sysbox by default;
 command. Projects install their own tools inside the disposable job. Images,
 resource limits, mounts and credentials belong to trusted host policy.
 
+Managed workspace agents can edit this file and its scripts, push an ordinary
+candidate branch, and request that candidate with the delivered `dim-ci` helper.
+See the [workspace request and evidence commands](../../../host/plugins/native-git/README.md#native-git-host-integration).
+The operator must first enable the repository's CI policy and provide matching
+capacity; a candidate workflow cannot perform either setup step. This path is
+shared by Projects and does not require a DIM source checkout.
+
+The submitting workspace does not need KVM access or the separate `dim-vm`
+helper. QEMU execution happens on the configured worker host. A project test
+that starts nested VMs additionally needs an operator-selected hardware runner
+with usable nested KVM. The YAML selects VM execution, not that trusted profile;
+it does not automatically run DIM's own practical scenarios.
+
 The optional Git CI integration selects the installed compiler extension named `dim`
 (the exported implementation is `dimWorkflowCompiler`). Repository storage and human reviews do not load a compiler by
 themselves. Another `WorkflowCompiler` may use a different configuration path

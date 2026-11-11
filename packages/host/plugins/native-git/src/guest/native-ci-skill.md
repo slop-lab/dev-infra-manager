@@ -7,6 +7,31 @@ Run `dim-workspace inspect` to discover this workspace's installed integrations,
 then `dim-ci --help` inside the repository checkout. Each checkout's `origin`
 selects its own repository. Never request host or operator credentials to read CI.
 
+To change CI, edit `.dim/ci/runner.yml` and its referenced scripts in the
+repository, then commit and request that exact candidate. For example:
+
+```yaml
+jobs:
+  source:
+    script: scripts/check.sh
+  integration:
+    script: scripts/integration.sh
+    runtime: vm
+```
+
+Jobs default to containers; `runtime: vm` requests the shared QEMU capacity.
+This works for any managed Project whose operator has enabled CI and configured
+matching trusted capacity. The workflow cannot enable CI policy, choose worker
+hosts/images/resources, or grant additional repositories. Report missing policy
+or unavailable capacity to the operator; do not copy host credentials or start a
+private worker to bypass it. The current request's `status` and `jobs` distinguish
+queued, failed and successful work; they do not provision capacity.
+
+The ordinary workspace does not need `/dev/kvm` or `dim-vm` to submit a VM job.
+The job runs separately on a configured KVM host. Tests that create further VMs
+inside that job require an operator-selected hardware runner with nested KVM;
+`runtime: vm` alone does not guarantee that profile or install project tools.
+
 1. Commit and push the candidate to an ordinary branch. Workspace CI does not
    promote protected refs, approve reviews, or change repository policy.
 2. Generate a UUID and retain it with the exact candidate:
