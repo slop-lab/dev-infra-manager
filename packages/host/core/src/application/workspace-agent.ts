@@ -16,6 +16,7 @@ import { workspaceServiceEndpoint, workspaceServicePort } from "../workspace/ser
 import { privateJson, parseStoredConfiguration, parseConfiguration, workspaceAgentGeneration, type AgentConfiguration, type StoredAgentConfiguration } from "./workspace-agent-state.js";
 import { workspaceDiscovery } from "./workspace-discovery.js";
 import { prepareWorkspaceReadiness } from "./workspace-readiness.js";
+import { verifyWorkspaceBootIdentity } from "./workspace-boot-identity.js";
 import { prepareWorkspacePlugins } from "./workspace-plugins.js";
 export { workspaceAgentGeneration } from "./workspace-agent-state.js";
 
@@ -27,6 +28,7 @@ function directory(store: WorkspaceStore, id: string): string { return path.join
 /** A small per-workspace process survives CLI/SSH disconnects. It has no host-admin route. */
 export async function ensureWorkspaceAgent(record: WorkspaceRecord, context: AgentHostContext): Promise<void> {
   await prepareWorkspaceReadiness(record, context.store, async () => {
+    await verifyWorkspaceBootIdentity(record, context);
     await ensureWorkspaceIntegration(record, context);
     await prepareWorkspaceAgent(record, context);
   });
@@ -118,6 +120,7 @@ export async function runWorkspaceAgent(file: string): Promise<void> {
   if (current.id !== config.workspaceId || !current.initialized || current.phase !== "running") throw new UserError("workspace bridge no longer matches its runtime");
   const server = createWorkspaceAgentServer(config, context, async (updated) => {
     await prepareWorkspaceReadiness(updated, store, async () => {
+      await verifyWorkspaceBootIdentity(updated, context);
       await ensureWorkspaceIntegration(updated, context);
       await prepareWorkspacePlugins(updated, context);
     });
