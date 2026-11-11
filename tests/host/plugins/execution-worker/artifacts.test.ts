@@ -2,9 +2,14 @@ import { mkdtemp,mkdir,readFile,rm,symlink,writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { expect,it } from "vitest";
 import { NativeOutputCollector } from "../../../../packages/host/plugins/execution-worker/src/output.js";
 import { captureExecutionArtifacts } from "../../../../packages/host/plugins/execution-worker/src/artifacts.js";
+import { captureScenarios } from "./artifactCaptureFixture.js";
 it("captures full bounded logs and binary opt-in files outside the runtime root before cleanup",async()=>{
  const base=await mkdtemp(join(tmpdir(),"dim-capture-"));try{
   const root=join(base,"runtime"),pending=join(base,"pending");await mkdir(root);await mkdir(join(root,"workspace"));await mkdir(join(root,"workspace/.dim-ci-artifacts"));
@@ -13,6 +18,10 @@ it("captures full bounded logs and binary opt-in files outside the runtime root 
   const manifest=await captureExecutionArtifacts({root,pending,result:{executionId:randomUUID(),descriptorDigest:"sha256:"+"a".repeat(64),cleanupComplete:true,startedAt:new Date(0).toISOString(),finishedAt:new Date(1).toISOString(),completion:{kind:"exited",exitCode:23},result:"failure",stdout:output.stdoutEvidence,stderr:output.stderrEvidence,logs:{stdout:{base64:bytes.subarray(0,65536).toString("base64"),truncated:true},stderr:{base64:"",truncated:false}}}});
   await rm(root,{recursive:true});expect(manifest.availability).toBe("complete");const log=manifest.artifacts.find(x=>x.name==="logs/stdout.log")!,image=manifest.artifacts.find(x=>x.name==="files/image.png")!;expect(await readFile(join(pending,log.id))).toEqual(bytes);expect(await readFile(join(pending,image.id))).toEqual(png);expect(image.mediaType).toBe("image/png");
  }finally{await rm(base,{recursive:true,force:true});}
+});
+it.each(captureScenarios)("captures or diagnoses %s artifacts in an unprivileged child",async(condition)=>{
+ const {stdout}=await promisify(execFile)(process.execPath,["--import",createRequire(import.meta.url).resolve("tsx"),"--conditions=dim-source",fileURLToPath(new URL("./artifactCaptureFixture.ts",import.meta.url)),condition],{env:{...process.env,TMPDIR:"/tmp"},maxBuffer:4096});
+ expect(JSON.parse(stdout)).toEqual({condition,verified:true});
 });
 it("rejects opt-in symlinks while preserving captured logs and explicit artifact unavailability",async()=>{
  const base=await mkdtemp(join(tmpdir(),"dim-capture-"));try{const root=join(base,"runtime");await mkdir(root);await mkdir(join(root,"workspace"));await mkdir(join(root,"workspace/.dim-ci-artifacts"));await writeFile(join(base,"secret"),"outside");await symlink(join(base,"secret"),join(root,"workspace/.dim-ci-artifacts/secret"));
