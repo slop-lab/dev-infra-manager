@@ -38,6 +38,15 @@ preparation without exposing private configuration. A successful preparation
 retry clears its recorded failure. A concurrent stop or identity replacement
 must not be overwritten by a delayed preparation result.
 
+Before source/plugin preparation, a bounded read-only guest boot-identity
+probe rejects unreadable or malformed Linux `boot_id` as a runtime identity
+failure rather than blaming cache URLs or LLM routing. It preserves processes,
+owned volumes and credentials; no automatic restart or runtime fallback is
+authorized. Exact-UUID keep-data recovery requires operator-confirmed
+quiescence across main sessions, subagents, teams and independent workloads;
+unknown activity is not idle. See the
+[operator recovery procedure](../guides/workspace-runtime-recovery.md).
+
 Discard records intent and deletes only exact owned runtime resources. The
 record is removed after cleanup succeeds. Interrupted or failed cleanup remains
 retryable. Missing data on an initialized record is an error; DIM never replaces
