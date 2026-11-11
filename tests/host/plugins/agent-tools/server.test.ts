@@ -11,7 +11,7 @@ import { expect, it } from "vitest";
 
 const execute = promisify(execFile);
 const launcher = fileURLToPath(new URL("../../../../packages/host/plugins/agent-tools/src/assets/opencode-server.bash", import.meta.url));
-async function fixture() {
+async function fixture(environment: NodeJS.ProcessEnv = process.env) {
   const root = await mkdtemp(path.join(tmpdir(), "dim-server-lifecycle-"));
   const home = path.join(root, "home"), bin = path.join(root, "bin");
   await mkdir(home); await mkdir(bin);
@@ -22,10 +22,12 @@ async function fixture() {
   const address = probe.address(); if (!address || typeof address === "string") throw Error("missing probe address");
   const port = address.port;
   await new Promise<void>((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
-  const env = { ...process.env, HOME: home, XDG_STATE_HOME: path.join(home, ".local/state"), PATH: `${bin}:${path.dirname(process.execPath)}:${process.env.PATH}`, OPENCODE_WEB_PORT: String(port), NPM_CONFIG_CACHE: undefined, npm_config_cache: undefined };
-  const run = async (operation: string, cwd?: string) => JSON.parse((await execute("bash", [launcher, operation, "--json"], { env, timeout: 30_000, ...(cwd ? { cwd } : {}) })).stdout) as { state: string; port: number; credentialsFile: string; logFile: string; username: string; url: string };
+  // The fixture owns configuration as well as HOME. Never borrow the invoking
+  // agent's inline plugins, profile, XDG config root or repository overrides.
+  const env = { ...environment, HOME: home, XDG_STATE_HOME: path.join(home, ".local/state"), XDG_CONFIG_HOME: path.join(home, ".config"), OMO_PROFILE: undefined, OCX_PROFILE: undefined, OPENCODE_CONFIG: undefined, OPENCODE_CONFIG_DIR: undefined, OPENCODE_CONFIG_CONTENT: undefined, PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`, OPENCODE_WEB_PORT: String(port), NPM_CONFIG_CACHE: undefined, npm_config_cache: undefined };
+  const run = async (operation: string, cwd = home) => JSON.parse((await execute("bash", [launcher, operation, "--json"], { env, cwd, timeout: 30_000 })).stdout) as { state: string; port: number; credentialsFile: string; logFile: string; username: string; url: string };
   const setPassword = async (password: string) => new Promise<{ state: string }>((resolve, reject) => {
-    const child = spawn("bash", [launcher, "password", "--json"], { env, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn("bash", [launcher, "password", "--json"], { env, cwd: home, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "", stderr = "";
     child.stdout.on("data", chunk => { stdout += chunk.toString(); });
     child.stderr.on("data", chunk => { stderr += chunk.toString(); });
@@ -68,7 +70,7 @@ http.createServer((req, res) => { res.statusCode = req.headers.authorization ===
     expect(await f.run("status")).toEqual(started);
     const pidFile = path.join(path.dirname(started.credentialsFile), "server.pid");
     const firstPid = (await readFile(pidFile, "utf8")).split(" ")[0];
-    expect((await f.run("start", f.home)).state).toBe("running");
+    expect((await f.run("start", f.root)).state).toBe("running");
     expect((await readFile(pidFile, "utf8")).split(" ")[0]).not.toBe(firstPid);
     expect(await readFile(started.credentialsFile, "utf8")).toBe(credential);
     const password = 'quotes" backslash\\ spaces : secure  ';
@@ -124,7 +126,7 @@ it("sets a password before installation without launching tools and rejects unsa
 });
 
 it("retains explicit OpenCode service intent across boot resume and clears it on stop", async () => {
-  const f = await fixture();
+  const f = await fixture({ ...process.env, OPENCODE_CONFIG_CONTENT: '{"plugin":["foreign-plugin"]}', OMO_PROFILE: "foreign-profile", XDG_CONFIG_HOME: "/unrelated/config" });
   const registry = fileURLToPath(new URL("../../../../packages/host/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
   const serviceFile = path.join(f.home, ".local/state/dim/services/dim-agent-tools-opencode.json");
   const ownerFile = path.join(f.home, ".local/state/dim/services/dim-agent-tools-opencode.lock/owner.json");
@@ -272,7 +274,7 @@ it("fails clearly when DIM guest service helpers are missing instead of starting
     await writeFile(path.join(f.home, ".config/dim/workspace.json"), "{}");
     await expect(f.run("start")).rejects.toThrow("DIM workspace service registry is unavailable");
     await expect(access(path.join(f.home, ".local/state/opencode-web/credentials"))).rejects.toThrow();
-  } finally { await rm(f.root, { recursive: true, force: true }); }
+  } finally { await f.run("stop").catch(() => {}); await rm(f.root, { recursive: true, force: true }); }
 });
 
 it("does not replace or remove a project service occupying the reserved plugin name", async () => {
