@@ -13,8 +13,8 @@ export { acquireWorkspaceSource } from "./workspace/source.js";
 export { buildWorkspaceImage } from "./workspaceImage.js";
 export { ContainerWorkspaceRuntime, workspaceRuntimeResources } from "./workspace/runtime.js";
 
-export { checkWorkspaceHost } from "./workspace/doctor.js";
-export type { HostCheck } from "./workspace/doctor.js";
+export { checkWorkspaceHost, workspaceRuntimeFailureCheck } from "./workspace/doctor.js";
+export type { HostCheck, WorkspaceRuntimeFailure } from "./workspace/doctor.js";
 export { workspacePortBridge, workspacePortCleanup, workspacePortBridgeMarker } from "./workspace/portBridge.js";
 export { workspaceCopyGuest, workspaceCopyCleanup, workspaceCopyMarker } from "./workspace/copy.js";
 export { workspaceGuestAssets, workspaceEnvironmentSkillAsset } from "./workspace/guestAssets.js";
