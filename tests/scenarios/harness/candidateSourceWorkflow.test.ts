@@ -88,7 +88,10 @@ describe("candidate source workflows", () => {
       expect(portable).toContain(`["${stage}", [`);
     }
     const dimWorkflow = parse(await readFile(resolve(workspaceRoot, ".dim/ci/runner.yml"), "utf8"));
-    expect(dimWorkflow).toEqual({ jobs: { source: { script: "scripts/ci/source.bash" } } });
+    expect(dimWorkflow).toEqual({ jobs: {
+      source: { script: "scripts/ci/source.bash" },
+      "runtime-recovery": { runtime: "vm", script: "scripts/ci/runtime-recovery.bash" },
+    } });
     const policy = parse(await readFile(resolve(workspaceRoot, ".dim/repos.yml"), "utf8"));
     expect(policy.policy["git-ci"].requiredJobs).toContainEqual({ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" });
     const fullSource = await readFile(resolve(workspaceRoot, "scripts/ci/source.bash"), "utf8");
