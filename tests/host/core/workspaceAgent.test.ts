@@ -61,9 +61,9 @@ describe("workspace-scoped agent gateway", () => {
       async updateResources() { return { recreated: false }; }, async connect() { return 0; }, async hostGateway() { return "10.0.0.1"; },
       async exec(_record, command, options) {
         const script = command.at(-1); if (!script) throw new Error("missing guest writer");
-        return (await runner.run(process.execPath, ["--input-type=commonjs", "-e", `Object.defineProperty(process,'pid',{value:42});${script}`], {
+        return runner.runStreaming(process.execPath, ["--input-type=commonjs", "-e", `Object.defineProperty(process,'pid',{value:42});${script}`], {
           ...options, cwd: home, env: { ...process.env, HOME: home }
-        })).exitCode;
+        });
       }
     };
     const service = new WorkspaceService(store, runtime, async ({ destination }) => { await mkdir(destination); return { url: "source", ref: "main", commit: "a".repeat(40) }; });
@@ -345,7 +345,7 @@ it("replaces an older bridge protocol once, rotates its token and publishes the 
   const f = await fixture(), home = path.join(f.root, "home");
   await mkdir(home, { mode: 0o700 });
   const runner = new ProcessRunner(); f.runtime.hostGateway = async () => "10.0.0.1";
-  f.runtime.exec = async (_record, command, options) => (await runner.run(process.execPath, [...command.slice(1)], { ...options, env: { ...process.env, HOME: home } })).exitCode;
+  f.runtime.exec = async (_record, command, options) => runner.runStreaming(process.execPath, [...command.slice(1)], { ...options, env: { ...process.env, HOME: home } });
   const context = { service: f.service, store: f.store, runtime: f.runtime, runner, cleanupRunner: runner, stateRoot: f.store.root, signal: AbortSignal.timeout(5000) };
   const root = path.join(f.store.root, "agents", f.record.id), file = path.join(root, "config.json"), pidFile = path.join(f.root, "bridge.pid");
   await mkdir(root, { recursive: true, mode: 0o700 });
