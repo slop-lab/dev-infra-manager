@@ -120,6 +120,16 @@ DIM_SOURCE_ROOT_COMMIT="$REVIEWED_SHA" just prepare-local
 DIM_SOURCE_ROOT_COMMIT="$REVIEWED_SHA" just install-local
 ```
 
+These read-only preflight checks establish the reviewed Ubuntu 24.04 amd64,
+Docker 29.1.4 and Sysbox 0.7 installation, but they cannot prove container
+startup without starting a container. The bootstrap does not probe by creating
+a disposable container, edit Docker feature settings, restart Docker after a
+diagnostic, or select a fallback runtime. If a later workspace start records
+`namespace {"time" ""} does not exist`, use `dim doctor` and follow the
+operator-reviewed idle-host procedure in
+[host readiness](host-install-readiness.md). Do not broaden these package or OS
+pins based on failures from an unreviewed host combination.
+
 ## Installed paths and pins
 
 - SSH client/key tools, Git, CA certificates, curl and xz from Ubuntu APT.
