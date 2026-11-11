@@ -66,6 +66,72 @@ must equal the actual server directory. Workspace-backed monitoring supplies it
 automatically; nested selections needing a different configuration context
 require the appropriate server or an explicit reviewed adapter.
 
+## Execution status and bounded change waiting
+
+Agent-tools owns coding-agent observation. Host core's workspace agent remains
+the generic scoped service bridge, not a coding-agent scheduler. The OpenCode
+adapter reuses the bounded task-tree monitor: it reads the owned server's
+authenticated API, subagent relationships and optional OMO metadata. Credentials
+stay in the guest and never appear in status, arguments or evidence. Inspection
+does not deploy helpers, start a server, submit a message or stop a task.
+
+From the workspace, use the existing plugin-operation boundary:
+
+```sh
+dim-workspace plugin agent-tools execution-status '{"sessionId":"ses_REVIEWED"}'
+dim-agent-execution status --session ses_REVIEWED
+dim-agent-execution wait --session ses_REVIEWED --timeout-seconds 120 --json
+```
+
+The selected-host console exposes the same snapshot, with immutable workspace
+identity, and a bounded wait:
+
+```sh
+dim tools console invoke execution.status --input '{"workspace":"development","workspaceId":"EXACT_UUID","sessionId":"ses_REVIEWED"}' --json
+dim tools console invoke execution.wait --input '{"workspace":"development","workspaceId":"EXACT_UUID","sessionId":"ses_REVIEWED","timeoutSeconds":120}'
+```
+
+Status returns `evidence` and a SHA-256 `revision`. The guest one-shot operation
+returns the evidence directly. Wait optionally accepts `since` (or local
+`--since`) from an earlier revision and returns `changed` or `timed-out`, with
+the latest evidence and observation count. With no revision it takes an initial
+snapshot, then waits for a semantic change. A deadline before any successful
+observation returns null evidence/revision, never fabricated idle evidence.
+Human output is one concise summary; `--json` retains sanitized machine data.
+
+Wait has one absolute deadline of at most 180 seconds, at most three snapshots
+and at least 60 seconds between snapshots. Each OpenCode snapshot is capped at
+16 sessions, depth 8, 48 API requests, four recent messages per session and ten
+seconds; a complete wait therefore permits at most 144 API requests. HTTP
+responses and guest output have independent byte bounds. Request counts,
+observation timestamps and metadata modification times do not change the
+revision. Cancellation aborts only observation, not the underlying task. Long
+waiting belongs to the host console or local helper, not the guest bridge's
+15-second request transport. Coordinators should call wait rather than polling
+status more often than once per minute.
+
+Known busy children keep the aggregate active even when their parent is idle.
+Unknown/truncated team discovery remains explicit; active-child counts are a
+lower bound when total discovery is unknown. Empty `teams` never establishes
+idle when team metadata is unavailable. Conflicting API/OMO state is retained
+and cannot establish idle. Waiting questions/permissions are counted without
+their payloads. Completion is always `not-assessed`, not task acceptance.
+
+Discovery advertises `coding-agent-execution-status` only when the reviewed
+adapter is present; absent installed helpers remain blocked without automatic
+repair. It separately reports `coding-agent-task-submission` as unavailable,
+reason `no-task-producer`. DIM currently has no typed task-message submission
+operation. A direct OpenCode adapter can deliver a task under its own authority,
+but that is not a DIM task API. Submission/correlation and authorization belong
+to an explicit future agent-tools producer adapter, not the workspace bridge,
+CI scheduler or a new policy engine.
+
+Installed metadata returning `source: "unavailable"`, `enabled: null`,
+`unreadable: true`, `teams: []` remains real negative evidence even when main
+sessions run and OpenCode's `team_list` succeeds. These observations do not
+establish team idleness or diagnose the installed configuration. This status
+interface preserves that distinction rather than manufacturing metadata.
+
 The optional `@slop-lab/dim-web-plugin-agent-tools` package adds a **Workspace
 tools** section in each DIM Web workspace management row. It discovers this host plugin automatically through
 configured controllers. Open a running workspace's tools to inspect or explicitly

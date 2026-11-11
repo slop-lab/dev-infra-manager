@@ -2,18 +2,22 @@ import { deployToolHelpers, inspectTools, prepareToolWorkspace } from "./integra
 import { UserError } from "@slop-lab/dim-host-core/workspace";
 import { type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { runToolsConsole } from "./console.js";
+import { executionCapabilities, executionStatus } from "./executionHost.js";
 
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "agent-tools",
+  workspaceCapabilities: executionCapabilities,
   workspaceReady: prepareToolWorkspace,
   guest: {
     description: "Coding-agent helper commands; installing this host plugin prepares small helpers automatically, while pinned npm tools require explicit setup",
     commands: [
       { name: "dim-tools-setup", description: "Install opencode or codex explicitly; this may download pinned npm packages" },
       { name: "dim-agent", description: "Run opencode or codex when configured, with persistent continuation support" },
-      { name: "dim-opencode-server", description: "Run the configured OpenCode Web backend" }
+      { name: "dim-opencode-server", description: "Run the configured OpenCode Web backend" },
+      { name: "dim-agent-execution", description: "Read coding-agent task/subagent status or wait for a bounded semantic change" }
     ],
-    inspect: inspectTools
+    inspect: inspectTools,
+    operations: [{ name: "execution-status", description: "Inspect an existing OpenCode task and subagents without starting or changing them", handle: executionStatus }]
   },
   commands: [{ name: "tools", description: "Set up and run user-owned coding-agent tools without repository bootstrap files" }],
   async run(args, context) {

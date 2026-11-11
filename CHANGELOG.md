@@ -326,7 +326,12 @@ is implied by these source changes.
   redacted evidence. Workspace-backed monitoring automatically reads fresh
   metadata from the owned installed OpenCode server for the managed default and
   safe team-directory overrides; ambiguous or unsafe configuration remains
-  unknown without requiring a fabricated project snapshot. Incomplete monitoring and failed or absent host-doctor
+  unknown without requiring a fabricated project snapshot. Expose the same
+  bounded task/subagent/team observation through agent-tools' scoped execution
+  status operation, selected-host console and concise workspace client. Wait for
+  semantic change under one bounded deadline without minute-by-minute coordinator
+  polling; unavailable team discovery never means idle and task submission is
+  explicitly unavailable until an owning producer is installed. Incomplete monitoring and failed or absent host-doctor
   checks cannot count as successful selected-host verification; task completion
   remains independently unassessed. Verify explicitly selected hosts through
   real disposable workspace Git, LLM, helper, ingress and reconnect flows;

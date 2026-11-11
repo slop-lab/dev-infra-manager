@@ -6,6 +6,7 @@ import { ContainerWorkspaceRuntime, ProcessRunner, WorkspaceService, WorkspaceSt
 import type { WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-api";
 import { invokeToolsConsole } from "../../../../packages/host/plugins/agent-tools/src/console.js";
 import { workspaceRecord } from "../../../support/workspaceFixture.js";
+import { hostPlugin } from "../../../../packages/host/plugins/agent-tools/src/index.js";
 
 afterEach(() => vi.restoreAllMocks());
 async function fixture(run: (context: WorkspaceHostPluginContext, workspace: ReturnType<typeof workspaceRecord>) => Promise<void>) {
@@ -108,4 +109,37 @@ it("reads bounded public team metadata with exact workspace identity without sta
   expect(result).toMatchObject({...identity,enabled:true,teams:[{members:[{sessionId:"ses_child",status:"failed"}]}]});
   expect(JSON.stringify(result)).not.toContain("PRIVATE");expect(execute).toHaveBeenCalledTimes(1);
   await expect(invokeToolsConsole("server.team-metadata",{...identity,path:"/private"},context)).rejects.toThrow("Invalid");
+}));
+
+it("exposes execution status through the scoped operation without deployment, secrets or caller-selected endpoints", async () => fixture(async (context, workspace) => {
+  const status = { schemaVersion: 1, runtime: "opencode", state: "active", completion: "not-assessed", parent: "idle", discovery: "partial", activeChildren: 1, totalChildren: null, currentFailures: 0, historicalFailures: 0, pendingQuestions: 0, pendingPermissions: 0, teams: "unknown", sessions: [
+    { sessionId: "ses_parent", parentId: null, activity: "idle", omoStatus: null, sourceDisagreement: false, runningTools: [] },
+    { sessionId: "ses_child", parentId: "ses_parent", activity: "active", omoStatus: null, sourceDisagreement: false, runningTools: [] }
+  ], teamRuns: [], password: "PRIVATE", raw: "PRIVATE" };
+  const execute = vi.spyOn(context.service, "exec").mockImplementation(async (_name, command, options) => {
+    expect(command).toEqual(["bash", "-c", 'exec node "$HOME/.local/share/dim-agent-tools/execution/guest.ts"']);
+    expect(options?.workspaceId).toBe(workspace.id);
+    let input = ""; if (options?.stdin) for await (const chunk of options.stdin) input += chunk.toString();
+    expect(JSON.parse(input)).toEqual({ sessionId: "ses_parent" });
+    options?.stdout?.write(JSON.stringify(status)); return 0;
+  });
+  const identity = { workspace: workspace.name, workspaceId: workspace.id };
+  const result = await invokeToolsConsole("execution.status", { ...identity, sessionId: "ses_parent" }, context);
+  expect(result).toMatchObject({ ...identity, evidence: { state: "active", teams: "unknown" }, revision: expect.stringMatching(/^[a-f0-9]{64}$/) });
+  expect(JSON.stringify(result)).not.toContain("PRIVATE");
+  const operation = hostPlugin.guest?.operations?.find(row => row.name === "execution-status");
+  expect(await operation?.handle({ sessionId: "ses_parent" }, workspace, context)).toMatchObject({ state: "active", teams: "unknown" });
+  await expect(invokeToolsConsole("execution.status", { ...identity, sessionId: "ses_parent", origin: "http://foreign.invalid" }, context)).rejects.toThrow("Invalid");
+  expect(execute).toHaveBeenCalledTimes(2);
+}));
+
+it("advertises the status adapter separately from the missing task-message producer", async () => fixture(async (context, workspace) => {
+  const execute = vi.spyOn(context.service, "exec").mockResolvedValue(0);
+  expect(await hostPlugin.workspaceCapabilities?.(workspace, context)).toMatchObject([
+    { name: "coding-agent-execution-status", state: "available", access: { kind: "guest-operation", operation: "execution-status" } },
+    { name: "coding-agent-task-submission", state: "unavailable", access: { kind: "none" }, reason: { code: "no-task-producer" } }
+  ]);
+  expect(execute).toHaveBeenCalledTimes(1);
+  execute.mockResolvedValue(1);
+  expect(await hostPlugin.workspaceCapabilities?.(workspace, context)).toMatchObject([{ state: "blocked", reason: { code: "execution-adapter-unavailable" } }, { state: "unavailable" }]);
 }));

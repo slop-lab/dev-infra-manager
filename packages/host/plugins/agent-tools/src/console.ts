@@ -5,8 +5,11 @@ import { deployToolHelpers } from "./integration.js";
 import { toolStatusScript } from "./toolStatus.js";
 
 import { projectTeamMetadata } from "./teamMetadata.js";
+import { executionOperation } from "./executionHost.js";
+import { formatExecutionStatus } from "./execution/status.ts";
+import { parseExecutionStatus } from "./execution/parse.ts";
 
-const operations = ["tools.status", "tools.setup", "server.start", "server.status", "server.stop", "server.credentials", "server.password", "server.team-metadata"];
+const operations = ["tools.status", "tools.setup", "server.start", "server.status", "server.stop", "server.credentials", "server.password", "server.team-metadata", "execution.status", "execution.wait"];
 
 /** Capture only bounded machine output; guest stderr and installer logs never become Web responses. */
 async function execute(context: WorkspaceHostPluginContext, workspace: WorkspaceRecord, command: string[], json = true, input?: unknown, timeoutMilliseconds = 175_000) {
@@ -29,7 +32,7 @@ export async function invokeToolsConsole(operation: string, input: unknown, cont
   if (!operations.includes(operation)) throw new UserError("Unknown tools operation");
   if (typeof input !== "object" || input === null || Array.isArray(input)) throw new UserError("Tools input must be an object");
   const value = input as Record<string, unknown>;
-  const allowed = operation === "server.team-metadata" ? ["workspace", "workspaceId", "directory"] : operation === "tools.setup" ? ["workspace", "workspaceId", "tool"] : operation === "server.password" ? ["workspace", "workspaceId", "password"] : ["workspace", "workspaceId"];
+  const allowed = operation.startsWith("execution.") ? ["workspace", "workspaceId", "sessionId", ...(operation === "execution.wait" ? ["since", "timeoutSeconds"] : [])] : operation === "server.team-metadata" ? ["workspace", "workspaceId", "directory"] : operation === "tools.setup" ? ["workspace", "workspaceId", "tool"] : operation === "server.password" ? ["workspace", "workspaceId", "password"] : ["workspace", "workspaceId"];
   if (Object.keys(value).some((key) => !allowed.includes(key)) || typeof value.workspace !== "string" || typeof value.workspaceId !== "string"
     || !/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(value.workspace) || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.workspaceId)
     || (operation === "tools.setup" && value.tool !== "opencode" && value.tool !== "codex")) throw new UserError("Invalid tools operation input");
@@ -40,6 +43,10 @@ export async function invokeToolsConsole(operation: string, input: unknown, cont
   if (!workspace.initialized || workspace.phase !== "running" || workspace.runtimeStatus !== "running") throw new UserError("Start the workspace before running tools");
   if (["tools.setup", "server.start", "server.stop", "server.password"].includes(operation)) await deployToolHelpers(workspace, context);
   const identity = { workspace: workspace.name, workspaceId: workspace.id };
+  if (operation.startsWith("execution.")) {
+    const { workspace: _name, workspaceId: _id, ...selection } = value;
+    return { ...identity, ...await executionOperation(operation, selection, workspace, context) };
+  }
   if (operation === "server.team-metadata") {
     const response = await execute(context, workspace, ["bash", "-c", 'exec node "$HOME/.local/share/dim-agent-tools/opencode-team-metadata.mjs"'], true, value.directory === undefined ? {} : {directory:value.directory}, 10_000);
     return { ...identity, ...projectTeamMetadata(response) };
@@ -68,7 +75,7 @@ export async function runToolsConsole(args: string[], context: WorkspaceHostPlug
   const positional = args.filter((arg) => arg !== "--json");
   if (positional.length === 1 && positional[0] === "describe") {
     const workspaces = (await context.service.list()).map(({ name, id, phase, runtimeStatus }) => ({ name, id, phase: runtimeStatus === "running" ? phase : runtimeStatus }));
-    process.stdout.write(JSON.stringify({ schemaVersion: 1, workspaces, tools: ["opencode", "codex"] }) + "\n");
+    process.stdout.write(JSON.stringify({ schemaVersion: 1, workspaces, tools: ["opencode", "codex"], operations }) + "\n");
     return;
   }
   const stdin = positional.length === 3 && positional[2] === "--input-stdin";
@@ -87,5 +94,8 @@ export async function runToolsConsole(args: string[], context: WorkspaceHostPlug
   if (positional[1] === "server.password" && !stdin) throw new UserError("Password input must use --input-stdin");
   let input: unknown;
   try { input = JSON.parse(source) as unknown; } catch { throw new UserError("Tools input must be valid JSON"); }
-  process.stdout.write(JSON.stringify(await invokeToolsConsole(positional[1]!, input, context)) + "\n");
+  const result = await invokeToolsConsole(positional[1]!, input, context);
+  if (!args.includes("--json") && positional[1]?.startsWith("execution.") && typeof result === "object" && result !== null && "evidence" in result) {
+    process.stdout.write((result.evidence === null ? "unknown; no observation before deadline; completion not assessed" : formatExecutionStatus(parseExecutionStatus(result.evidence))) + ("outcome" in result ? `; wait ${result.outcome}` : "") + "\n");
+  } else process.stdout.write(JSON.stringify(result) + "\n");
 }
