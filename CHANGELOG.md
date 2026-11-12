@@ -426,7 +426,13 @@ is implied by these source changes.
   Configured workspace OpenCode/OMO helpers route `openai/*` through that router
   while preserving role-specific models, variants, fallback chains and other
   provider connections. Model selection, including main/background defaults,
-  belongs entirely to OpenCode and OMO; attachment supplies only routing.
+  stays with OpenCode and OMO unless an operator explicitly selects a tier
+  profile. An opted-in profile supplies quick, standard and deep choices for
+  main, background and role-specific work without changing unrelated user
+  profiles or falling back to unselected providers. Carry workspace-scoped
+  session affinity through the gateway to compatible upstream routers; record
+  requested selectors and observed response models separately so upstream
+  aliases and tier routing do not fail after streaming a valid response.
   Generate timeout settings accepted by pinned OpenCode and recover only OMO's
   generated provider inventories after discovery failure. Verify owned server
   routing and configured-agent inventory before reuse without rewriting roles,

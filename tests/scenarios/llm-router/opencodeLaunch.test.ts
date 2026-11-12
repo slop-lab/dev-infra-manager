@@ -8,13 +8,13 @@ import DimLlmRouter from "../../../packages/host/plugins/llm-router/src/opencode
 import { prepareOpenCode } from "../../../packages/host/plugins/llm-router/src/opencode-launch.js";
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
-async function fixture() {
+async function fixture(tiers?: unknown) {
   const home = await mkdtemp(join(tmpdir(), "dim-opencode-profile-")); roots.push(home);
   vi.stubEnv("HOME", home); vi.stubEnv("DIM_LLM_ROUTER_OPENCODE_MODE", "router");
   vi.stubEnv("XDG_CACHE_HOME", join(home, ".cache"));
   vi.stubEnv("OPENCODE_CONFIG_CONTENT", '{"permission":{"bash":"ask"},"model":"explicit/original"}');
   const connection = join(home, "connection.json"); vi.stubEnv("DIM_LLM_ROUTER_CONNECTION_FILE", connection);
-  await writeFile(connection, JSON.stringify({ schemaVersion: 1, endpoint: "http://127.0.0.1:8319", token: "x".repeat(43) }), { mode: 0o600 });
+  await writeFile(connection, JSON.stringify({ schemaVersion: 1, endpoint: "http://127.0.0.1:8319", token: "x".repeat(43), ...(tiers === undefined ? {} : { tiers }) }), { mode: 0o600 });
   await mkdir(join(home, ".omo")); await mkdir(join(home, ".local/lib/node_modules"), { recursive: true });
   const require = createRequire(import.meta.url);
   await symlink(dirname(require.resolve("jsonc-parser/package.json")), join(home, ".local/lib/node_modules/jsonc-parser"));
@@ -133,4 +133,59 @@ it("does not follow or modify OMO inventory owned by the catalog bootstrap", asy
   expect(await readFile(join(inventory, "connected-providers.json"), "utf8")).toBe('{"preserve":true}');
 
   expect(await readFile(authentication, "utf8")).toBe('{"preserve":true}');
+});
+
+const tierTargets = { quick: "auto:dim-quick", standard: "auto:dim-standard", deep: "auto:dim-deep" };
+async function tierFixture() {
+  const fx = await fixture(tierTargets);
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ models:
+    Object.values(tierTargets).map((id) => ({ id, name: id, api: "chat", context: 10000, output: 1000 })) })));
+  return fx;
+}
+it("selects only the owned opt-in OMO tier profile and preserves root settings and launch permissions", async () => {
+  const fx = await tierFixture();
+  const original = { agents: { oracle: { models: ["openai/user"], prompt: "keep" } },
+    profiles: { personal: { "[opencode]": { model: "user/model" } } } };
+  await writeFile(fx.omo, '// user comment\n'+JSON.stringify(original), { mode: 0o600 });
+  vi.stubEnv("OMO_PROFILE", "personal");
+  expect(await prepareOpenCode()).toEqual({ OMO_PROFILE: "dim-tiers" });
+  const text = await readFile(fx.omo, "utf8"), next = parse(text);
+  expect(text).toContain('// user comment');
+  expect(next.agents).toEqual(original.agents);
+  expect(next.profiles.personal).toEqual(original.profiles.personal);
+  expect(next.profiles['dim-tiers']['[opencode]']).toMatchObject({ runtime_fallback: false,
+    agents: { sisyphus: { models: ['dim-chat/standard'] }, explore: { models: ['dim-chat/quick'] },
+      librarian: { models: ['dim-chat/quick'] }, hephaestus: { models: ['dim-chat/deep'] }, oracle: { models: ['dim-chat/deep'] } },
+    categories: { quick: { models: ['dim-chat/quick'] }, deep: { models: ['dim-chat/deep'] } } });
+  expect(process.env.OPENCODE_CONFIG_CONTENT).toBe('{"permission":{"bash":"ask"},"model":"explicit/original"}');
+  expect(process.env.OMO_PROFILE).toBe('personal'); // returned overrides belong to the launcher caller
+  expect(await prepareOpenCode()).toEqual({ OMO_PROFILE: 'dim-tiers' });
+  expect(await readFile(fx.omo, 'utf8')).toBe(text);
+});
+it("refuses a user tier profile or edited owned profile without changing it", async () => {
+  const fx = await tierFixture();
+  const text = '{"profiles":{"dim-tiers":{"model":"user/model"}}}';
+  await writeFile(fx.omo,text,{mode:0o600});
+  await expect(prepareOpenCode()).rejects.toThrow(/user-owned/);
+  expect(await readFile(fx.omo,'utf8')).toBe(text);
+  await writeFile(fx.omo,'{}',{mode:0o600});
+  await prepareOpenCode();
+  const edited = parse(await readFile(fx.omo,'utf8'));edited.profiles['dim-tiers']['[opencode]'].runtime_fallback=true;
+  const changed=JSON.stringify(edited);await writeFile(fx.omo,changed,{mode:0o600});
+  await expect(prepareOpenCode()).rejects.toThrow(/ownership/);
+  expect(await readFile(fx.omo,'utf8')).toBe(changed);
+});
+
+it("preserves the official JSON-only OMO configuration instead of shadowing it with a new JSONC file", async () => {
+  const fx = await tierFixture(), json = fx.omo.slice(0,-1);
+  const original = { agents: { oracle: { prompt: "keep JSON user config" } }, profiles: { personal: { model: "user/model" } } };
+  await writeFile(json,JSON.stringify(original),{mode:0o600});
+  expect(await prepareOpenCode()).toEqual({ OMO_PROFILE: "dim-tiers" });
+  await expect(readFile(fx.omo)).rejects.toMatchObject({ code: "ENOENT" });
+  const selected = JSON.parse(await readFile(json,"utf8"));
+  expect(selected.agents).toEqual(original.agents);
+  expect(selected.profiles.personal).toEqual(original.profiles.personal);
+  expect(selected.profiles['dim-tiers']).toBeDefined();
+  expect(await prepareOpenCode()).toEqual({ OMO_PROFILE: "dim-tiers" });
+  await expect(readFile(fx.omo)).rejects.toMatchObject({ code: "ENOENT" });
 });

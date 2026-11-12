@@ -192,3 +192,35 @@ exposing raw service bodies or changing the generic CLI-host wire contract.
 Project policy replacement takes `--policy-file` with an owned mode-0600 JSON file. Each operation rejects unrelated flags and validates its arguments with the same definition used by the service and Web plugin. Workspace inference principals and host issuer credentials cannot authenticate this interface.
 
 The package also provides the standalone `dim-llm-router` executable with the same arguments (omit the `dim llm-router` prefix). This client requires no host runtime, local workspace installation or control-plane service implementation. Its host-core peer is optional; this isolated executable imports only the remote client and operation contracts, without loading the workspace gateway or host integration.
+
+### Explicit OpenCode and OMO tiers
+
+`dim llm attach WORKSPACE --config gateway.json --project PROJECT --tiers-file tiers.json`
+opts this attachment into a reviewed three-tier model selection. The host file must contain
+exactly `{"quick":"auto:fast","standard":"auto:balanced","deep":"auto:smart"}`
+(or other exact IDs offered by that authenticated route). Every target must support chat;
+missing targets, alias collisions and malformed mappings fail without falling back.
+These selectors express operator routing preferences, not a guaranteed quality band.
+Named selectors such as `auto:dim-quick` require prior router configuration and can
+replace these bindings explicitly. The scoped guest connection receives the mapping,
+not provider account credentials.
+
+OpenCode exposes `dim-chat/quick`, `dim-chat/standard` and `dim-chat/deep` with the
+route's target IDs and limits, selects standard for normal work and quick for small
+work, enables only the DIM provider, and rejects unrouted calls. An existing session
+may retain its earlier model: explicitly select a tier when continuing it; a saved
+unrouted selection fails instead of silently calling another provider.
+
+The launch hook selects the separate owned OMO `dim-tiers` profile. Main/general
+roles use standard, explore/librarian and quick work use quick, and
+oracle/prometheus/metis/momus/hephaestus/deep/ultrabrain use deep. Each mapping has a
+single model chain and runtime fallback is disabled. Root settings, personal profiles,
+launch permissions and authentication remain untouched. An existing `dim-tiers`
+profile must match DIM's private ownership metadata before it can be updated; a
+user-created or edited profile is rejected. Explicit tiers require router mode.
+Attachments without tiers preserve existing model choices.
+
+For routed DIM/OpenAI requests, the adapter supplies the validated OpenCode session
+identity as `x-dim-session-id`; only bounded letters, digits, `_ . : -` are accepted.
+Other providers receive no DIM session header. Session identity is metadata, not
+an authentication credential.

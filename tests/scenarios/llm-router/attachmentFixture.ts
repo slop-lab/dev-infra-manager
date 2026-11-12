@@ -23,7 +23,7 @@ async function listen(server: Server) {
   const address = server.address(); if (!address || typeof address === "string") throw new Error("no listener");
   return `http://127.0.0.1:${address.port}`;
 }
-export async function fixture(stream = false) {
+export async function fixture(stream = false, chat = false) {
   const root = await mkdtemp(join(tmpdir(), "dim-llm-separated-")); cleanup.push(() => rm(root, { recursive: true, force: true }));
   let upstreamClosed = false, seenAuthorization: string | undefined;
   const backend = createServer((request, response) => {
@@ -41,7 +41,7 @@ export async function fixture(stream = false) {
       { id: "host-b", keyFile: join(root, "issuer-b.key"), projects: [{ id: "application", routeIds: ["default", "secondary"] }] }],
     listen: { host: "127.0.0.1", port: 8318 }, backend: backendProfile,
     accounts: [{ id: "default", reference: "exclusive-account", endpoint: backendOrigin, keyFile: join(root, "backend.key") }],
-    routes: ["default", "secondary"].map((id) => ({ id, accountId: "default", models: [{ id: "reviewed-model", name: "Reviewed", api: "responses", context: 10000, output: 1000 }] })), limits: defaultLimits });
+    routes: ["default", "secondary"].map((id) => ({ id, accountId: "default", models: [{ id: "reviewed-model", name: "Reviewed", api: chat ? "chat" : "responses", context: 10000, output: 1000 }] })), limits: defaultLimits });
   const cp = await createRouter(cpConfig);
   const cpOrigin = await listen(cp.server); cleanup.push(() => cp.close());
   cp.ledger.createProject("application", { allowedRoutes: ["default", "secondary"], limits: defaultLimits, captureMode: "required", tokenMode: "observe" });

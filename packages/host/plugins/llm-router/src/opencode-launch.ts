@@ -1,6 +1,6 @@
 /** Optional in-guest launch hook. No DIM host module or upstream credential is available here. */
 import { constants } from "node:fs";
-import { open, rename, unlink } from "node:fs/promises";
+import { mkdir, open, rename, unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -37,11 +37,70 @@ async function atomic(file: string, text: string): Promise<void> {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }); }
 }
+function jsoncParser(home: string): JsoncParser {
+  const loaded: unknown = createRequire(join(home, ".local/package.json"))(join(home, ".local/lib/node_modules/jsonc-parser"));
+  const module = record(loaded);
+  if (typeof module.parse !== "function" || typeof module.modify !== "function") throw new Error("invalid pinned JSONC parser; rerun dim tools setup");
+  return module as JsoncParser;
+}
+function applyEdit(parser: JsoncParser, source: string, path: readonly string[], value: unknown): string {
+  const edits = parser.modify(source, path, value, { formattingOptions: { insertSpaces: true, tabSize: 2 } });
+  if (!Array.isArray(edits)) throw new Error("invalid JSONC edit output");
+  let output = source;
+  for (const item of [...edits].reverse()) {
+    const edit = record(item);
+    if (typeof edit.offset !== "number" || typeof edit.length !== "number" || !Number.isSafeInteger(edit.offset)
+      || !Number.isSafeInteger(edit.length) || edit.offset < 0 || edit.length < 0 || edit.offset + edit.length > source.length
+      || typeof edit.content !== "string") throw new Error("invalid JSONC edit");
+    output = output.slice(0, edit.offset) + edit.content + output.slice(edit.offset + edit.length);
+  }
+  return output;
+}
+async function prepareTierProfile(home: string): Promise<Record<string, string>> {
+  const profileName = "dim-tiers";
+  const jsoncFile = join(home, ".omo/omo.jsonc"), jsonFile = join(home, ".omo/omo.json");
+  const jsoncSource = await privateText(jsoncFile, true);
+  const file = jsoncSource === undefined && await privateText(jsonFile, true) !== undefined ? jsonFile : jsoncFile;
+  const metadataFile = join(home, ".config/dim/opencode-omo-tiers.json");
+  const parser = jsoncParser(home), source = jsoncSource ?? await privateText(file, true) ?? "{}";
+  const errors: unknown[] = [], config = record(parser.parse(source, errors, { allowTrailingComma: true }));
+  if (errors.length) throw new Error("invalid OMO JSONC; refusing to modify it");
+  const profiles = config.profiles === undefined ? {} : record(config.profiles);
+  const model = (tier: string) => ({ models: [`dim-chat/${tier}`] });
+  const agents = Object.fromEntries([
+    ...["sisyphus", "atlas", "sisyphus-junior", "multimodal-looker", "build", "plan"].map((name) => [name, model("standard")]),
+    ...["explore", "librarian"].map((name) => [name, model("quick")]),
+    ...["oracle", "prometheus", "metis", "momus", "hephaestus"].map((name) => [name, model("deep")]),
+  ]);
+  const categories = Object.fromEntries([
+    ...["visual-engineering", "artistry", "writing", "unspecified-low", "unspecified-high"].map((name) => [name, model("standard")]),
+    ["quick", model("quick")], ...["deep", "ultrabrain"].map((name) => [name, model("deep")]),
+  ]);
+  const profile = { "[opencode]": { agents, categories, runtime_fallback: false } };
+  const metadata = await privateText(metadataFile, true);
+  const owned = metadata === undefined ? undefined : record(JSON.parse(metadata));
+  if (owned !== undefined && (Object.keys(owned).length !== 3 || owned.schemaVersion !== 1
+    || owned.profileName !== profileName || JSON.stringify(owned.profile) !== JSON.stringify(profile))) {
+    throw new Error("invalid DIM tier profile ownership metadata");
+  }
+  if (profiles[profileName] !== undefined) {
+    if (owned === undefined) throw new Error("OMO profile 'dim-tiers' is user-owned; refusing to replace it");
+    if (JSON.stringify(owned.profile) !== JSON.stringify(profiles[profileName])) {
+      throw new Error("OMO profile 'dim-tiers' no longer matches DIM ownership metadata");
+    }
+  }
+  const output = applyEdit(parser, source, ["profiles", profileName], profile);
+  await mkdir(join(home, ".omo"), { recursive: true, mode: 0o700 });
+  await mkdir(join(home, ".config/dim"), { recursive: true, mode: 0o700 });
+  await atomic(metadataFile, JSON.stringify({ schemaVersion: 1, profileName, profile }));
+  if (output !== source) await atomic(file, output);
+  return { OMO_PROFILE: profileName };
+}
 export async function prepareOpenCode(): Promise<Record<string, string>> {
   const mode = process.env.DIM_LLM_ROUTER_OPENCODE_MODE ?? "router";
   if (mode !== "router" && mode !== "providers") throw new Error("DIM_LLM_ROUTER_OPENCODE_MODE must be router or providers");
-  // Routing belongs to OpenCode's provider configuration. OMO's selected
-  // profile, model chains, variants and non-OpenAI providers stay user-owned.
+  // Without explicit tiers, OMO's selected profile, model chains, variants
+  // and non-OpenAI providers stay user-owned. Tiers select a separate owned profile.
   // Remove only the profile previously generated by DIM, with its exact owned
   // metadata as evidence; an edited or unrelated profile must survive.
   const home = homedir();
@@ -53,6 +112,8 @@ export async function prepareOpenCode(): Promise<Record<string, string>> {
     const adapter: unknown = await import(pathToFileURL(adapterFile).href);
     if (!adapter || typeof adapter !== "object" || !("default" in adapter) || typeof adapter.default !== "function") throw new Error("invalid DIM OpenCode adapter; rerun explicit tool preparation");
     await adapter.default();
+    const parsed = record(JSON.parse(connection));
+    if (parsed.tiers !== undefined) return prepareTierProfile(home);
   }
   const metadataFile = join(home, ".config/dim/opencode-omo-profile.json");
   const metadata = await privateText(metadataFile, true);
@@ -60,26 +121,14 @@ export async function prepareOpenCode(): Promise<Record<string, string>> {
   const omoFile = join(home, ".omo/omo.jsonc");
   const source = await privateText(omoFile, true);
   if (source === undefined) return {};
-  const loaded: unknown = createRequire(join(home, ".local/package.json"))(join(home, ".local/lib/node_modules/jsonc-parser"));
-  const module = record(loaded);
-  if (typeof module.parse !== "function" || typeof module.modify !== "function") throw new Error("invalid pinned JSONC parser; rerun dim tools setup");
-  const parser = module as JsoncParser;
+  const parser = jsoncParser(home);
   const errors: unknown[] = [];
   const value = record(parser.parse(source, errors, { allowTrailingComma: true }));
   if (errors.length) throw new Error("invalid OMO JSONC; refusing to modify it");
   const profiles = value.profiles === undefined ? {} : record(value.profiles);
   const profileName = "dim-router";
   if (profiles[profileName] === undefined || JSON.stringify(profiles[profileName]) !== JSON.stringify(JSON.parse(metadata))) return {};
-  const edits = parser.modify(source, ["profiles", profileName], undefined, { formattingOptions: { insertSpaces: true, tabSize: 2 } });
-  if (!Array.isArray(edits)) throw new Error("invalid JSONC edit output");
-  let output = source;
-  for (const item of [...edits].reverse()) {
-    const edit = record(item);
-    if (!Number.isSafeInteger(edit.offset) || !Number.isSafeInteger(edit.length) || typeof edit.offset !== "number"
-      || typeof edit.length !== "number" || edit.offset < 0 || edit.length < 0 || edit.offset + edit.length > source.length
-      || typeof edit.content !== "string") throw new Error("invalid JSONC edit");
-    output = output.slice(0, edit.offset) + edit.content + output.slice(edit.offset + edit.length);
-  }
+  const output = applyEdit(parser, source, ["profiles", profileName], undefined);
   if (output !== source) await atomic(omoFile, output);
   await unlink(metadataFile);
   return {};
