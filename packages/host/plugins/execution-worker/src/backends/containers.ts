@@ -51,8 +51,23 @@ export async function cleanupNativeContainer(runner: StreamingCommandRunner, cla
   const [id, ...labels] = inspected.stdout.trim().split("|");
   const expected = ownershipLabels(claim, kind).map((label) => label.slice(label.indexOf("=") + 1));
   if (id === undefined || !/^[0-9a-f]{64}$/.test(id) || labels.join("|") !== expected.join("|")) return false;
+  if (/^[0-9a-f]{64}$/.test(name) && id !== name) return false;
   const removed = await runner.run("docker", ["container", "rm", "--force", "--volumes", id], { signal: AbortSignal.timeout(30_000) });
   return removed.exitCode === 0 || isMissing(removed.stderr, id);
+}
+
+export async function stopOwnedNativeContainer(runner: StreamingCommandRunner, claim: ExecutionGrant, id: string): Promise<void> {
+  if (!/^[0-9a-f]{64}$/.test(id)) throw new Error("invalid owned container identity");
+  const format = ["{{.Id}}", ...labelKeys.map(key => `{{index .Config.Labels \"${key}\"}}`),
+    "{{.State.Status}}", "{{.State.Running}}", "{{.State.Paused}}", "{{.State.Pid}}"].join("|");
+  const expected = [id, ...ownershipLabels(claim).map(label => label.slice(label.indexOf("=") + 1))].join("|");
+  const inspect = () => runner.run("docker", ["container", "inspect", id, "--format", format], { signal: AbortSignal.timeout(30_000) });
+  const before = await inspect();
+  if (before.exitCode !== 0 || !before.stdout.trim().startsWith(expected + "|")) throw new Error("owned container inspection rejected");
+  const stopped = await runner.run("docker", ["stop", "--time", "0", id], { signal: AbortSignal.timeout(30_000) });
+  if (stopped.exitCode !== 0) throw new Error("owned container stop failed");
+  const after = await inspect();
+  if (after.exitCode !== 0 || after.stdout.trim() !== expected + "|exited|false|false|0") throw new Error("owned container writers remain uncertain");
 }
 
 export function nativeRunnerScript(repositoryId: string, targets: readonly string[] = [], defaults?: Readonly<Record<string, string>>): string {

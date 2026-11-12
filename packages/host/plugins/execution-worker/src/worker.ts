@@ -74,7 +74,8 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
     journal.root = root.identity; await writeJournal(journalPath, journal);
     const result = await withLease(assignment, async (signal) => {
       const credentialProvider = executionCandidateCredential((signal) => options.client.candidate(assignment, signal));
-      const result = await backend.run({ grant, root: root.path, runner, signal,
+      const artifactNonce = randomUUID();
+      const { artifactSource, ...result } = await backend.run({ grant, root: root.path, runner, signal, artifactNonce,
         acquireCandidate: async (paths) => {
           const credential = await acquisitionOperation("credential-acquisition", () => credentialProvider(paths.signal), paths.diagnostics);
           return withNativeGitExecutionReadAuthority({ gitExecutable: options.gitExecutable!,
@@ -86,7 +87,7 @@ export async function runExecutionWorker(options: ExecutionWorkerOptions): Promi
       const pending = join(options.directory,"artifacts-"+assignment.id);
       journal.artifactUploadDeadlineAt = Date.now() + uploadBudget;
       try {
-        await captureExecutionArtifacts({root:root.path,pending,result});
+        await captureExecutionArtifacts({root:root.path,pending,result,...(artifactSource === undefined ? {} : { artifactSource, artifactNonce })});
         journal.pendingResult=result; await writeJournal(journalPath,journal);
         return await finishArtifactUpload(journal, assignment, pending, signal);
       } finally {

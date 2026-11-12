@@ -5,8 +5,11 @@ import { writeFile } from "node:fs/promises";
 import type { ExecutionResult } from "@slop-lab/dim-contracts-ci/aggregate";
 import { cleanupNativeContainer, nativeContainerArgs, nativeRunnerScript, prepareNativeImages } from "./containers.js";
 import type { ExecutionBackend } from "../backend.js";
-import { NativeOutputCollector, executionDiagnostics } from "../output.js";
+import { NativeOutputCollector, executionDiagnostics, type NativeBoundedOutput } from "../output.js";
 import { candidateFailureCode } from "../candidate-failure.js";
+import { randomUUID } from "node:crypto";
+import { exportContainerArtifacts } from "./container-artifacts.js";
+import type { BackendArtifactSource } from "../artifact-source.js";
 
 export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBackend {
   return {
@@ -22,8 +25,11 @@ export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBa
     const timeout = AbortSignal.timeout(bound(descriptor.bounds.wallClockSeconds) * 1_000);
     const signal = AbortSignal.any([input.signal, stop.signal, timeout]);
     const output = new NativeOutputCollector(bound(descriptor.bounds.outputBytes), () => stop.abort(), join(input.root, "output"));
+    let captured: NativeBoundedOutput;
     let completion: ExecutionResult["completion"] = { kind: "executor-failure", code: "execution-failed" };
     let failureCode = "candidate-acquisition-failed";
+    const nonce = input.artifactNonce ?? randomUUID();
+    let id: string | undefined, artifactSource: BackendArtifactSource = { kind: "archive", nonce, index: [] };
     try {
       await acquisitionOperation("candidate-acquisition", () => input.acquireCandidate({ workspace, scriptFile: script, signal }));
       failureCode = "job-configuration-failed";
@@ -45,32 +51,38 @@ export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBa
       const launched = await input.runner.run("docker", nativeContainerArgs(claim,
         { workspace, script, launcher, daemonConfig, jobFiles }, routing), { signal });
       if (launched.exitCode !== 0 || !/^[0-9a-f]{64}$/.test(launched.stdout.trim())) throw new Error("container launch failed");
-      const id = launched.stdout.trim();
+      id = launched.stdout.trim();
       failureCode = "container-observer-failed";
-      const [waited, logs] = await Promise.all([
+      const observations = [
         input.runner.run("docker", ["wait", id], { signal }),
         input.runner.runStreaming("docker", ["logs", "--follow", id], { signal,
           stdout: output.stdout, stderr: output.stderr })
-      ]);
-      const exitCode = /^(?:0|[1-9][0-9]{0,2})\n?$/.test(waited.stdout) ? Number(waited.stdout.trim()) : -1;
-      completion = waited.exitCode === 0 && logs === 0 && exitCode >= 0 && exitCode <= 255
-        ? { kind: "exited", exitCode } : { kind: "executor-failure", code: "container-observer-failed" };
+      ] as const;
+      try {
+        const [waited, logs] = await Promise.all(observations);
+        const exitCode = /^(?:0|[1-9][0-9]{0,2})\n?$/.test(waited.stdout) ? Number(waited.stdout.trim()) : -1;
+        completion = waited.exitCode === 0 && logs === 0 && exitCode >= 0 && exitCode <= 255
+          ? { kind: "exited", exitCode } : { kind: "executor-failure", code: "container-observer-failed" };
+      } finally { stop.abort(); await Promise.allSettled(observations); }
     } catch (error) {
+      if (id === undefined && failureCode === "container-launch-failed") artifactSource = { kind: "unavailable", nonce, error: "artifact-export-failed" };
       writeAcquisitionDiagnostic(output.stderr, error, candidateFailureCode(error));
       completion = { kind: "executor-failure", code: failureCode === "candidate-acquisition-failed"
         ? candidateFailureCode(error) ?? failureCode : failureCode };
     } finally {
-      if (!await cleanupNativeContainer(input.runner, claim)) throw new Error("owned Sysbox cleanup is uncertain");
+      try {
+        try { if (id !== undefined) artifactSource = await exportContainerArtifacts(input, id, nonce); }
+        finally { if (!await cleanupNativeContainer(input.runner, claim, "sysbox", id)) throw new Error("owned Sysbox cleanup is uncertain"); }
+      } finally { captured = output.result(); }
     }
     if (input.signal.aborted) completion = { kind: "cancelled" };
     else if (output.exceeded) completion = { kind: "output-limit-exceeded" };
     else if (timeout.aborted) completion = { kind: "timed-out" };
-    const captured = output.result();
     return { executionId: input.grant.executionId, descriptorDigest: input.grant.descriptorDigest,
       cleanupComplete: true, startedAt, finishedAt: new Date().toISOString(), completion,
       result: completion.kind === "cancelled" ? "cancelled"
         : completion.kind === "exited" && "exitCode" in completion && completion.exitCode === 0 ? "success" : "failure",
-      stdout: captured.stdoutEvidence, stderr: captured.stderrEvidence, logs: executionDiagnostics(captured) };
+      stdout: captured.stdoutEvidence, stderr: captured.stderrEvidence, logs: executionDiagnostics(captured), artifactSource };
   },
   cleanup: (runner, grant) => cleanupNativeContainer(runner, grant)
   };
