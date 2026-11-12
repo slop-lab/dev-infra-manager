@@ -1,7 +1,9 @@
 import { join } from "node:path";
+import { access } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { refValue } from "../../../support/gitHelpers.js";
+import { createTraversalRejectingGit } from "./realGitIdentity.js";
 import {
   activateFinalizeService,
   cleanupFinalizeFixtures,
@@ -22,6 +24,31 @@ import {
 afterEach(cleanupFinalizeFixtures);
 
 describe("native Project root import finalization", () => {
+  it("imports a received bundle without a whole-repository integrity traversal", async () => {
+    // Given
+    const root = await createFinalizeRoot("finalize-bounded-validation");
+    const bundle = await createRootBundle();
+    const initialService = await startFinalizeService(root);
+    await activateFinalizeService(initialService.origin);
+    await initialService.prepareProject(generationId, importer.hostId, projectInput("project-a"));
+    await uploadRootBundle(initialService.origin, bundle);
+    await closeFinalizeService(initialService);
+    const database = new DatabaseSync(join(root, "native-idle.sqlite3"));
+    database.prepare("UPDATE native_project_root_import SET phase = 'installing'").run();
+    database.close();
+    const runtimeGit = await createTraversalRejectingGit(await createFinalizeRoot("finalize-bounded-git"));
+
+    // When
+    await startFinalizeService(root, undefined, undefined, undefined, undefined, {
+      gitExecutable: runtimeGit.gitExecutable,
+      gitVersion: runtimeGit.gitVersion
+    });
+
+    // Then
+    await expect(access(runtimeGit.forbiddenInvocation)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await refValue(rootRepository(root), "refs/heads/main")).toBe(bundle.commit);
+  });
+
   it("installs one bound commit and tree, creates only the unborn protected ref, and exactly replays", async () => {
     const root = await createFinalizeRoot("finalize");
     const bundle = await createRootBundle();

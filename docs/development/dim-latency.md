@@ -28,9 +28,9 @@ local/remote CLI comparisons cannot be claimed from this environment.
   truthful pending/failure visibility. Git success waits for durable handoff,
   not slow review/CI preparation. Protected merge still needs exact passing
   evidence and human authority.
-- Import proof owns process-lifetime immutable integrity attestation. Authority,
-  generation and storage identities remain live checks; metadata changes must
-  invalidate proof, including in-place edits. There is no TTL trust shortcut.
+- Import owns bounded archive/bundle input integrity. Ordinary proof reads retain
+  live authority, root/static ownership/path and selected-object checks, without
+  full-bundle rehashing, whole-repository fsck or recursive object inventories.
 - Installer/CLI/host adapters own lazy startup and selected command dispatch.
   Frozen CLI–host version-1 fixtures and incompatibility failures remain intact.
 - Web owns private connection/catalog reads and in-flight request coalescing.
@@ -87,122 +87,38 @@ latency, not a claim that ordinary refs previously ran CI. Ordinary push and
 discovery did not show a warm-median improvement in this small fixture. Cheap
 live checks, filesystem metadata walks and Git process startup remain costs;
 the small sample does not support claims of universal speedup.
-Cold proof is more expensive because it builds the recursive metadata identity;
-warm proof avoids bundle hashing and full fsck. The driver waits for the exact
+These historical proof rows used a now-removed whole-store attestation model;
+they are not current-policy qualification. The driver waits for the exact
 raw job to become `ready` before advancing to the next sample, so it does not
 hide preparation by superseding earlier work. The installed broker's roughly
 27-second read-only baseline remains a separate topology and is not claimed
 fixed without operator deployment and exact-commit verification.
 
-## Imported-root integrity attestation evidence
+## Selected-object integrity boundary
 
-The repository service retains one process-local immutable-root attestation per
-live `NativeGitBundleState` and repository path. It has no TTL and is not written
-to durable state. Restart creates a new state owner and therefore requires a cold
-proof. Concurrent identical cold proofs share the same pending proof, but failure
-removes it.
+Routine import, startup, proof/read, review, candidate acquisition and source
+export do not run a whole-repository integrity check. The service no longer
+maintains the whole-store attestation cache or recursive object metadata
+snapshot. Ordinary reads do not hash the full retained bundle. Service-owned
+trusted storage instead retains private root/ancestor and static path ownership
+gates, exact authority/ref/target checks and bounded selected-object validation.
 
-The immutable authority key contains the requested owner, complete repository
-registration, complete immutable import receipt and pinned Git executable
-identity. The import receipt contains its exact import generation, nonce, bundle
-digest and size, imported commit/tree, protected ref and original policy digest.
-The active serving generation is deliberately not inferred from the state owner
-or stored in the immutable key: exact activation and serving-generation binding
-remain live checks before and after `verifyLiveImportedRepository`. Effective
-policy and current protected heads are also deliberately live, mutable authority,
-not immutable-cache inputs; every request rereads and compares them. The state
-owner scopes process lifetime and storage ownership only, not generation
-authorization.
+First import still verifies declared bundle/archive bytes, size, SHA-256 and safe
+extraction. Incremental Git received-object checks remain enabled. Corrupt
+selected commit/tree/blob data fails without automatic repair. No unrelated
+object-store or retained-bundle tamper detection is claimed on ordinary reads.
+The normative boundary is in
+[Native Git transport](../specs/local-details/native-git-transport.md).
 
-Reuse additionally requires exact storage identity. The bundle binds device,
-inode, mode, owner, link count, size, mtime and ctime. The repository root binds
-directory type, device, inode, mode and owner, but deliberately excludes root
-directory content metadata because trusted review/CI state directories mutate
-there. A recursively sorted snapshot binds every Git object-store path with type,
-device, inode, mode, owner, link count, size, mtime and ctime; an object-directory
-mtime alone is never sufficient. Every request still checks the storage owner
-marker, private modes, pinned Git binary, allowed ref namespace, current and
-imported commit/tree identity and ancestry. Replacement, in-place bundle/object
-writes and trusted object installation change the identity and run the bundle
-SHA-256 plus strict full `git fsck` again. A final snapshot fence must match the
-completed attestation, so tampering after an initial proof cannot pass merely
-because the replacement remains an owned regular file.
+Use the real disposable first-import/read, worker acquisition/export and GS
+review regressions to verify this behavior; do not substitute a new full-scan
+command or another recursive object inventory. Whole-store inspection remains
+an explicit operator choice, not a new DIM check CLI or normal-path prerequisite.
 
-Reproduce the count and invalidation checks:
-
-```bash
-pnpm --dir tests exec vitest run \
-  control-plane/plugins/git-repositories/nativeRootProofAttestation.test.ts \
-  control-plane/plugins/git-repositories/authoritativeNativeRootTarget.test.ts \
-  --maxWorkers=1
-```
-
-The unchanged warm-read case performs one full immutable proof for two HTTP
-proofs. Repository replacement, trusted object mutation and in-place object
-tampering each increment the full-proof count. Same-size bundle tampering is
-rejected by a renewed SHA-256 before another fsck. Restart performs at least one
-cold startup proof, while subsequent unchanged reads reuse it. The final-fence
-test edits the bundle after target resolution and confirms the cached target is
-rejected.
-
-The real Git-blame fixture also exercises the proposal push that creates trusted
-review state before `createAuthoritativeNativeReview` performs its final current
-snapshot check. The targeted post-fix run completed the push and authenticated
-blame request without the former curl 18 disconnect:
-
-```bash
-pnpm --dir tests exec vitest run \
-  control-plane/plugins/git-blame/gitBlame.test.ts \
-  control-plane/plugins/git-repositories/authoritativeNativeRootTarget.test.ts \
-  control-plane/plugins/git-repositories/nativeRootProofAttestation.test.ts \
-  --maxWorkers=1
-```
-
-Result: 3 test files passed, 18 tests passed in 21.41 seconds. The target tests
-separately prove that creating `.extensions/code-review` changes ordinary root
-directory content metadata without invalidating the immutable proof, while a
-same-size durable-bundle write between the initial proof and final snapshot is
-rejected.
-
-The narrower review-resolution fixture directly covers
-`createAuthoritativeNativeReview` through the final imported-root snapshot after
-a real push:
-
-```bash
-pnpm --dir tests exec vitest run \
-  control-plane/plugins/git-repositories/optionalFeatures.test.ts \
-  --testNamePattern="review-only service records and approves real Git proposals" \
-  --maxWorkers=1
-```
-
-Result: the selected test passed in 2.31 seconds; the other test in that file was
-skipped by the name filter.
-
-Strict checks and the broader package tests used for this change:
-
-```bash
-pnpm --dir packages/control-plane/plugins/git-repositories run check
-pnpm --dir packages/control-plane/plugins/git-repositories run build
-pnpm --dir tests exec tsc -p tsconfig.json --noEmit
-pnpm --dir tests exec vitest run control-plane/plugins/git-repositories --maxWorkers=2
-```
-
-On the disposable tiny real-Git HTTP fixture, Node v24.22.1 on Linux produced
-cold proof samples of 51.54 ms, 55.19 ms and 58.33 ms. Fifteen warm samples
-ranged from 31.16 ms to 41.79 ms. These timings isolate source-fixture proof
-behavior and do not represent the installed service or a large repository. The
-operator's separate read-only baseline measured full fsck of the DIM repository
-at about 683 ms.
-
-The disposable timing driver used for the source-fixture samples is
-`/mnt/dim-tmp/opencode/opencode/measure-native-root-attestation.ts` in this
-development environment. Run it without installing or deploying services:
-
-```bash
-NODE_OPTIONS=--conditions=dim-source \
-  pnpm --dir tests exec tsx \
-  /mnt/dim-tmp/opencode/opencode/measure-native-root-attestation.ts
-```
+This is a user-requested integrity-policy/performance change, not evidence that
+fsck caused an earlier fetch timeout. Installed-service timing and historical
+network causes remain separate from source-fixture verification. Backend total
+elapsed time is not an isolated Git fetch duration.
 
 ## Web Native Git catalog latency evidence
 

@@ -15,13 +15,11 @@ import {
   type NativeProjectRootCurrentHead
 } from "./repository-ref-state.js";
 import { assertOwnedNativeProjectStorage } from "./native-project-storage.js";
-import { inspectImportedNativeRootLive, inspectImportedNativeRootReadOnly } from "./native-root-import-proof-git.js";
-import { assertDurableNativeRootBundle } from "./native-root-import-storage.js";
+import { assertNativeRootObjectStoreRoots } from "./native-root-import-durability.js";
+import { inspectImportedNativeRootLive } from "./native-root-import-proof-git.js";
+import { assertDurableNativeRootBundleStatic, assertPrivateDirectory } from "./native-root-import-storage.js";
 import type { GitExecutableIdentity } from "./repository.js";
 import { isDeepStrictEqual } from "node:util";
-import { captureNativeRootStorageIdentity } from "./native-root-import-attestation-storage.js";
-import { attestImmutableNativeRoot, immutableNativeRootAttestationIsCurrent,
-  nativeRootImmutableAuthorityIdentity } from "./native-root-import-attestation.js";
 
 export type LiveImportedRoot = {
   readonly imported: NativeProjectRootImportInstalled;
@@ -93,27 +91,17 @@ export async function verifyImportedRepositoryReadOnly(input: ImportedRootInput)
       : AbortSignal.any([input.signal, AbortSignal.timeout(30_000)])
   };
   await assertOwnedNativeProjectStorage(input.stateDirectory, registration);
-  const storageIdentity = await captureStorageIdentity(input, imported, repository);
-  const proved = await attestImmutableNativeRoot({
-    state: input.state,
-    repository,
-    authority: nativeRootImmutableAuthorityIdentity({ ...input, registration, imported }),
-    storage: storageIdentity,
-    prove: async () => {
-      await assertDurableNativeRootBundle(input.stateDirectory, input.projectId, input.repositoryId,
-        imported.importNonce, imported.bundleDigest, imported.bundleSize);
-      await inspectImportedNativeRootReadOnly(proofInput);
-      if (await captureStorageIdentity(input, imported, repository) !== storageIdentity) {
-        throw new NativeProjectRootImportStateError("native Project imported root storage changed during proof");
-      }
-    }
-  });
-  if (!proved) await inspectImportedNativeRootLive(proofInput);
+  await assertPrivateDirectory(repository);
+  await assertNativeRootObjectStoreRoots(repository);
+  await assertDurableNativeRootBundleStatic(input.stateDirectory, input.projectId, input.repositoryId,
+    imported.importNonce, imported.bundleSize);
+  await inspectImportedNativeRootLive(proofInput);
   input.signal?.throwIfAborted();
   await assertOwnedNativeProjectStorage(input.stateDirectory, registration);
-  if (await captureStorageIdentity(input, imported, repository) !== storageIdentity) {
-    throw new NativeProjectRootImportStateError("native Project imported root storage changed during proof");
-  }
+  await assertPrivateDirectory(repository);
+  await assertNativeRootObjectStoreRoots(repository);
+  await assertDurableNativeRootBundleStatic(input.stateDirectory, input.projectId, input.repositoryId,
+    imported.importNonce, imported.bundleSize);
   const current = requireImportedRoot(input);
   const currentRegistration = readNativeProjectRegistrationsFromDatabase(input.state.database)
     .find((entry) => entry.projectId === input.projectId && entry.repositoryId === input.repositoryId);
@@ -128,7 +116,6 @@ export async function verifyImportedRepositoryReadOnly(input: ImportedRootInput)
   return { imported: { ...imported, ...effective }, importReceipt: imported, currentHead, repository };
 }
 
-/** Rechecks the durable authority tuple after a full proof without repeating repository-wide fsck. */
 export async function assertImportedRepositorySnapshotCurrent(
   input: ImportedRootInput & { readonly expected: Pick<LiveImportedRoot, "imported" | "currentHead" | "repository"> }
 ): Promise<void> {
@@ -143,16 +130,30 @@ export async function assertImportedRepositorySnapshotCurrent(
     input.state.database, imported.projectId, imported.repositoryId, input.protectedRef
   );
   const repository = join(input.stateDirectory, input.projectId, `${input.repositoryId}.git`);
+  const extensionRefs = await input.state.ownedRefs?.({ projectId: input.projectId, repositoryId: input.repositoryId }) ?? [];
+  const authoritativeHeads = readNativeRepositoryHeadsFromDatabase(
+    input.state.database, imported.projectId, imported.repositoryId
+  );
   await assertOwnedNativeProjectStorage(input.stateDirectory, registration);
-  const storageIdentity = await captureStorageIdentity(input, imported, repository);
-  if (!await immutableNativeRootAttestationIsCurrent({
-    state: input.state,
+  await assertPrivateDirectory(repository);
+  await assertNativeRootObjectStoreRoots(repository);
+  await assertDurableNativeRootBundleStatic(input.stateDirectory, input.projectId, input.repositoryId,
+    imported.importNonce, imported.bundleSize);
+  await inspectImportedNativeRootLive({
+    gitExecutable: input.gitExecutable,
+    gitIdentity: input.gitIdentity,
     repository,
-    authority: nativeRootImmutableAuthorityIdentity({ ...input, registration, imported }),
-    storage: storageIdentity
-  })) {
-    throw new NativeProjectRootImportStateError("native Project imported root storage changed after proof");
-  }
+    protectedRef: currentHead.protectedRef,
+    extensionRefs,
+    authoritativeHeads,
+    importedCommit: imported.expectedCommit,
+    importedTree: imported.resolvedTree,
+    currentCommit: currentHead.commit,
+    currentTree: currentHead.tree,
+    signal: input.signal === undefined
+      ? AbortSignal.timeout(30_000)
+      : AbortSignal.any([input.signal, AbortSignal.timeout(30_000)])
+  });
   input.signal?.throwIfAborted();
   const currentRegistration = readNativeProjectRegistrationsFromDatabase(input.state.database)
     .find((entry) => entry.projectId === input.projectId && entry.repositoryId === input.repositoryId);
@@ -171,21 +172,6 @@ function assertActive(input: LiveImportedRootInput): void {
   )) {
     throw new NativeImportedRootInactiveError();
   }
-}
-
-async function captureStorageIdentity(
-  input: ImportedRootInput,
-  imported: NativeProjectRootImportInstalled,
-  repository: string
-): Promise<string> {
-  return captureNativeRootStorageIdentity({
-    stateDirectory: input.stateDirectory,
-    projectId: input.projectId,
-    repositoryId: input.repositoryId,
-    importNonce: imported.importNonce,
-    bundleSize: imported.bundleSize,
-    repository
-  });
 }
 
 function requireImportedRoot(input: ImportedRootInput): NativeProjectRootImportInstalled {

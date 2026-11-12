@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { chmod, lstat, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -34,17 +34,6 @@ export async function assertNativeRootObjectFormat(
   return format;
 }
 
-export async function assertNativeRootCommitGraph(
-  input: PinnedGit & { readonly repository: string; readonly commit: string }
-): Promise<void> {
-  try {
-    await runPinned(input, ["--git-dir", input.repository, "-c", "fsck.fullPathname=error",
-      "fsck", "--strict", "--full", "--no-reflogs", "--no-progress", input.commit]);
-  } catch (error) {
-    throw new NativeRootImportBundleError("native root commit graph is invalid", { cause: error });
-  }
-}
-
 export async function verifyNativeRootBundle(input: PinnedGit & {
   readonly directory: string;
   readonly canonicalRepository: string;
@@ -65,10 +54,10 @@ export async function verifyNativeRootBundle(input: PinnedGit & {
     if (heads.stdout !== `${input.expectedCommit} ${input.protectedRef}\n`) {
       throw new NativeRootImportBundleError("root bundle must advertise exactly the requested ref and commit");
     }
-    await runPinned(input, ["--git-dir", repository, "bundle", "unbundle", input.bundlePath]);
-    const object = await runPinned(input, ["--git-dir", repository, "cat-file", "-t", input.expectedCommit]);
-    if (object.stdout !== "commit\n") throw new NativeRootImportBundleError("root bundle target is not a commit");
-    await assertNativeRootCommitGraph({ ...input, repository, commit: input.expectedCommit });
+    await fetchNativeRootBundle({ ...input, repository });
+    await assertNativeRootObjectIdentity({ ...input, repository }, input.expectedCommit, "commit");
+    const tree = await resolveNativeRootTree({ ...input, repository });
+    await assertNativeRootObjectIdentity({ ...input, repository }, tree, "tree");
   } catch (error) {
     if (error instanceof NativeRootImportBundleError) throw error;
     throw new NativeRootImportBundleError("root bundle verification failed", { cause: error });
@@ -85,16 +74,10 @@ export async function installNativeRootObjects(input: PinnedGit & {
 }): Promise<string> {
   await assertNativeRootRefUnborn(input);
   try {
-    await runPinned(input, ["--git-dir", input.repository, "-c", "core.fsyncMethod=fsync",
-      "-c", "core.fsync=all", "bundle", "unbundle", input.bundlePath]);
-    const object = await runPinned(input, ["--git-dir", input.repository, "cat-file", "-t", input.expectedCommit]);
-    if (object.stdout !== "commit\n") throw new NativeRootImportBundleError("root bundle target is not a commit");
-    await assertNativeRootCommitGraph({ ...input, commit: input.expectedCommit });
-    const tree = (await runPinned(input, ["--git-dir", input.repository, "rev-parse", "--verify",
-      `${input.expectedCommit}^{tree}`])).stdout.trim();
-    if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(tree) || tree.length !== input.expectedCommit.length) {
-      throw new NativeRootImportBundleError("native root resolved tree is invalid");
-    }
+    await fetchNativeRootBundle(input);
+    await assertNativeRootObjectIdentity(input, input.expectedCommit, "commit");
+    const tree = await resolveNativeRootTree(input);
+    await assertNativeRootObjectIdentity(input, tree, "tree");
     await syncNativeRootObjectStore(input.repository);
     await assertNativeRootRefUnborn(input);
     return tree;
@@ -102,6 +85,18 @@ export async function installNativeRootObjects(input: PinnedGit & {
     if (error instanceof NativeRootImportBundleError) throw error;
     throw new NativeRootImportBundleError("native root object installation failed", { cause: error });
   }
+}
+
+async function fetchNativeRootBundle(input: PinnedGit & {
+  readonly repository: string;
+  readonly bundlePath: string;
+  readonly protectedRef: string;
+}): Promise<void> {
+  await runPinned(input, ["--git-dir", input.repository,
+    "-c", "core.fsyncMethod=fsync", "-c", "core.fsync=all",
+    "-c", "fetch.fsckObjects=true", "-c", "transfer.fsckObjects=true",
+    "-c", "fsck.fullPathname=error", "-c", "fetch.unpackLimit=1",
+    "fetch", "--no-write-fetch-head", "--no-tags", input.bundlePath, input.protectedRef]);
 }
 
 export async function publishNativeRootRef(input: PinnedGit & {
@@ -147,11 +142,37 @@ export async function assertInstalledNativeRootObjects(input: PinnedGit & {
   readonly expectedCommit: string;
   readonly resolvedTree: string;
 }): Promise<void> {
-  await assertNativeRootCommitGraph({ ...input, commit: input.expectedCommit });
+  await assertNativeRootObjectIdentity(input, input.expectedCommit, "commit");
+  const tree = await resolveNativeRootTree(input);
+  if (tree !== input.resolvedTree) throw new NativeRootImportBundleError("native root resolved tree conflicts");
+  await assertNativeRootObjectIdentity(input, tree, "tree");
+  await syncNativeRootObjectStore(input.repository);
+}
+
+async function assertNativeRootObjectIdentity(
+  input: PinnedGit & { readonly repository: string },
+  objectId: string,
+  type: "commit" | "tree"
+): Promise<void> {
+  const algorithm = objectId.length === 40 ? "sha1" : objectId.length === 64 ? "sha256" : undefined;
+  if (algorithm === undefined) throw new NativeRootImportBundleError("native root object identity is invalid");
+  const content = await runPinnedBytes(input, ["--git-dir", input.repository, "cat-file", type, objectId]);
+  const actual = createHash(algorithm)
+    .update(`${type} ${String(content.length)}\0`)
+    .update(content)
+    .digest("hex");
+  if (actual !== objectId) throw new NativeRootImportBundleError(`native root selected ${type} identity is invalid`);
+}
+
+async function resolveNativeRootTree(
+  input: PinnedGit & { readonly repository: string; readonly expectedCommit: string }
+): Promise<string> {
   const tree = (await runPinned(input, ["--git-dir", input.repository, "rev-parse", "--verify",
     `${input.expectedCommit}^{tree}`])).stdout.trim();
-  if (tree !== input.resolvedTree) throw new NativeRootImportBundleError("native root resolved tree conflicts");
-  await syncNativeRootObjectStore(input.repository);
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(tree) || tree.length !== input.expectedCommit.length) {
+    throw new NativeRootImportBundleError("native root resolved tree is invalid");
+  }
+  return tree;
 }
 
 export async function assertNativeRootRefUnborn(input: PinnedGit & {
@@ -208,4 +229,16 @@ async function runPinned(input: PinnedGit, arguments_: readonly string[]): Promi
   const result = await execute(input.gitExecutable, arguments_, { ...gitOptions, signal: input.signal });
   await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
   return result;
+}
+
+async function runPinnedBytes(input: PinnedGit, arguments_: readonly string[]): Promise<Buffer> {
+  await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
+  const result = await execute(input.gitExecutable, arguments_, {
+    ...gitOptions,
+    encoding: "buffer",
+    maxBuffer: 8 * 1024 * 1024,
+    signal: input.signal
+  });
+  await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
+  return result.stdout;
 }

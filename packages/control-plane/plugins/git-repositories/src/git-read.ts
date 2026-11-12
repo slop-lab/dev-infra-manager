@@ -1,5 +1,6 @@
 import type { RepositoryExtensionContext } from "./plugin-api.js";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { assertGitExecutableIdentity, type GitExecutableIdentity } from "./repository.js";
 import { isOrdinaryCandidateRef as isNativeGitOrdinaryCandidateRef } from "@slop-lab/gs-repository-contracts";
@@ -61,8 +62,8 @@ export async function assertAdvertisedCommits(input: RepositoryReadGit, commits:
   }
   if (refs.size === 0) throw new RepositoryReadError("repository has no advertised commits");
   for (const commit of commits) {
-    const type = utf8(await gitBytes(input, ["cat-file", "-t", commit])).trim();
-    if (type !== "commit") throw new RepositoryReadError("diff identity is not a commit");
+    const content = await gitBytes(input, ["cat-file", "commit", commit]);
+    assertObjectIdentity(commit, "commit", content);
     let reachable = false;
     for (const ref of refs) {
       try { await gitBytes(input, ["merge-base", "--is-ancestor", commit, ref]); reachable = true; break; }
@@ -83,6 +84,7 @@ export async function readTreeFile(input: RepositoryReadGit, commit: string, pat
   const blobId = match[3]!;
   if (match[2] === "commit") return { blobId, mode: match[1]!, byteLength: 0, lineCount: null };
   const content = await gitBytes(input, ["cat-file", "blob", blobId]);
+  assertObjectIdentity(blobId, "blob", content);
   let lineCount: number | null = null;
   if (!content.includes(0)) {
     try {
@@ -91,6 +93,16 @@ export async function readTreeFile(input: RepositoryReadGit, commit: string, pat
     } catch { /* Non-UTF8 blobs have no text anchors. */ }
   }
   return { blobId, mode: match[1]!, byteLength: content.length, lineCount };
+}
+
+function assertObjectIdentity(objectId: string, type: "blob" | "commit", content: Buffer): void {
+  const algorithm = objectId.length === 40 ? "sha1" : objectId.length === 64 ? "sha256" : undefined;
+  if (algorithm === undefined) throw new RepositoryReadError("repository object identity is invalid");
+  const actual = createHash(algorithm)
+    .update(`${type} ${String(content.length)}\0`)
+    .update(content)
+    .digest("hex");
+  if (actual !== objectId) throw new RepositoryReadError(`repository ${type} identity is invalid`);
 }
 
 /** Repository integrations advertise only durable object pins owned by their exact repository. */

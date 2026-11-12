@@ -1,14 +1,14 @@
-import { realGitVersion } from "./realGitIdentity.js";
+import { createTraversalRejectingGit, realGitVersion } from "./realGitIdentity.js";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { assertGitVersion } from "../../../../packages/control-plane/plugins/git-repositories/src/repository.js";
 import {
-  assertNativeRootCommitGraph,
-  assertNativeRootObjectFormat
+  assertNativeRootObjectFormat,
+  verifyNativeRootBundle
 } from "../../../../packages/control-plane/plugins/git-repositories/src/native-root-import-git.js";
 
 const run = promisify(execFile);
@@ -19,20 +19,48 @@ afterEach(async () => {
 });
 
 describe("native root import Git object validation", () => {
-  it("rejects a commit whose referenced tree is missing without publishing a ref", async () => {
-    const { root, repository, gitIdentity } = await bareRepository();
+  it("rejects an unselected malformed object in a received pack without whole-repository fsck", async () => {
+    // Given
+    const { root, repository } = await bareRepository();
+    const blob = (await run("/bin/sh", ["-c",
+      "printf 'valid root\\n' | /usr/bin/git --git-dir \"$1\" hash-object -t blob -w --stdin",
+      "sh", repository])).stdout.trim();
+    const tree = (await run("/bin/sh", ["-c",
+      "printf '100644 blob %s\\tREADME.md\\n' \"$1\" | /usr/bin/git --git-dir \"$2\" mktree",
+      "sh", blob, repository])).stdout.trim();
+    const selectedCommit = (await run("/usr/bin/git", ["--git-dir", repository,
+      "-c", "user.name=DIM Test", "-c", "user.email=dim@example.invalid",
+      "commit-tree", tree, "-m", "selected root"])).stdout.trim();
     const commitFile = join(root, "dangling-commit.txt");
-    await writeFile(commitFile, `tree ${"1".repeat(40)}\n`
-      + "author DIM <dim@example.invalid> 1700000000 +0000\n"
-      + "committer DIM <dim@example.invalid> 1700000000 +0000\n\n"
-      + "missing tree\n");
-    const { stdout } = await run("/usr/bin/git", ["--git-dir", repository, "hash-object", "-t", "commit", "-w", commitFile]);
-    const commit = stdout.trim();
+    await writeFile(commitFile, "not a valid commit object\n");
+    const { stdout } = await run("/usr/bin/git", ["--git-dir", repository,
+      "hash-object", "--literally", "-t", "commit", "-w", commitFile]);
+    const malformedCommit = stdout.trim();
+    const packed = await run("/bin/sh", ["-c",
+      "printf '%s\\n' \"$1\" \"$2\" \"$3\" \"$4\" | /usr/bin/git --git-dir \"$5\" pack-objects --stdout",
+      "sh", selectedCommit, tree, blob, malformedCommit, repository], {
+      encoding: "buffer"
+    });
+    const bundlePath = join(root, "malformed.bundle");
+    await writeFile(bundlePath, Buffer.concat([
+      Buffer.from(`# v2 git bundle\n${selectedCommit} refs/heads/main\n\n`),
+      packed.stdout
+    ]));
+    const runtimeGit = await createTraversalRejectingGit(root);
+    const wrapperIdentity = await assertGitVersion(runtimeGit);
 
-    await expect(assertNativeRootCommitGraph({
-      gitExecutable: "/usr/bin/git", gitIdentity, repository, commit,
+    // When / Then
+    await expect(verifyNativeRootBundle({
+      gitExecutable: runtimeGit.gitExecutable,
+      gitIdentity: wrapperIdentity,
+      directory: root,
+      canonicalRepository: repository,
+      bundlePath,
+      protectedRef: "refs/heads/main",
+      expectedCommit: selectedCommit,
       signal: AbortSignal.timeout(5_000)
-    })).rejects.toThrow(/graph|fsck|missing/i);
+    })).rejects.toThrow(/bundle|object|tree|missing/i);
+    await expect(access(runtimeGit.forbiddenInvocation)).rejects.toMatchObject({ code: "ENOENT" });
     const refs = await run("/usr/bin/git", ["--git-dir", repository, "for-each-ref", "--format=%(refname)"]);
     expect(refs.stdout).toBe("");
   });

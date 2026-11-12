@@ -114,7 +114,7 @@ describe("authoritative imported-root target", () => {
     await expect(read).rejects.toBeInstanceOf(AuthoritativeRepositoryError);
   });
 
-  it("rejects immutable storage tampering between target proof and final snapshot", async () => {
+  it("retains the selected target when durable bundle content changes after import", async () => {
     // Given
     const fixture = await finalizedCandidateRoot("target-final-storage-fence", matchingRunner(), authoritativePolicy());
     try {
@@ -129,7 +129,7 @@ describe("authoritative imported-root target", () => {
       const current = assertAuthoritativeNativeRepositoryTargetCurrent({ runtime: fixture.context, selector, target });
 
       // Then
-      await expect(current).rejects.toThrow(/storage changed after proof/);
+      await expect(current).resolves.toBeUndefined();
     } finally { await fixture.close(); }
   });
 

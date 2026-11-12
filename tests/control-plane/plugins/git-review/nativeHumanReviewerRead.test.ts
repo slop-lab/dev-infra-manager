@@ -100,12 +100,9 @@ describe("installed imported-root human reviewer", () => {
   it("serves only the required reviewer the exact immutable review and preserves stale inspection across restart", { timeout: 15_000 }, async () => {
     // Given
     const fixture = await nativeBundleReviewFixture("human-reviewer-read");
-    const creationProofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootReadOnly");
     const creationLiveProofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootLive");
     const created = await createBundleReview(fixture.service);
-    expect(creationProofs).not.toHaveBeenCalled();
     expect(creationLiveProofs).toHaveBeenCalled();
-    creationProofs.mockRestore();
     creationLiveProofs.mockRestore();
     const path = `/v1/projects/project-a/repositories/root/reviews/${created.review.reviewId}`;
     const headers = { authorization: humanReviewerAuthorization, "x-dim-generation-id": generationId };
@@ -114,12 +111,9 @@ describe("installed imported-root human reviewer", () => {
     const identity = await fetch(`${fixture.service.origin}/v1/human-reviewer-identity`, {
       headers: { authorization: humanReviewerAuthorization }
     });
-    const proofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootReadOnly");
     const liveProofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootLive");
     const current = await fetch(`${fixture.service.origin}${path}`, { headers });
-    expect(proofs).not.toHaveBeenCalled();
     expect(liveProofs).toHaveBeenCalled();
-    proofs.mockRestore();
     liveProofs.mockRestore();
     await addCandidateCommit(fixture.clone, "review-drift.txt", Buffer.from("drift\n"));
     await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);

@@ -49,7 +49,6 @@ export async function reconstructPracticalSource(repository: string, context: st
     }
     await writeFile(join(repository, ".git/shallow"), parents.join("\n") + "\n", { mode: 0o600, flag: "wx" });
     run(["update-ref", "refs/heads/qualification", commit]);
-    run(["fsck", "--strict", "--full", "--no-reflogs", "--no-progress"]);
     assert.equal(run(["rev-parse", "HEAD"]), commit); assert.equal(run(["rev-parse", "HEAD^{tree}"]), tree);
     assert.equal(run(["status", "--porcelain=v1", "--untracked-files=all"]), "", "exact source must be clean");
     assert.equal(run(["rev-parse", "HEAD^"]), parents[0]);

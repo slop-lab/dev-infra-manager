@@ -87,30 +87,26 @@ bootstrap_source_read_manifest() {
 # Shared by the operator validator and fresh guest consumer. No Node is needed
 # in the pristine guest. The raw candidate commits bind the only allowed boundary.
 bootstrap_source_import_bundle() {
-  local root="$1" bundle="$2" sha="$3" tree="$4" bounded="$5" actual_tree actual_parents objects expected git_dir
+  local root="$1" bundle="$2" sha="$3" tree="$4" bounded="$5" actual_tree actual_parents git_dir
   git -C "$root" bundle verify "$bundle" >/dev/null || return
   if [[ -n "$bounded" ]]; then
     [[ "$bounded" =~ ^[a-f0-9]{40}(,[a-f0-9]{40}){0,7}$ ]] || { echo 'invalid bounded source parents' >&2; return 2; }
-    git -C "$root" bundle unbundle "$bundle" >/dev/null || return
-    [[ "$(git -C "$root" cat-file -t "$sha")" == commit ]] || return 2
-    actual_parents="$(git -C "$root" cat-file commit "$sha" | sed -n '/^$/q;s/^parent //p' | paste -sd ,)"
-    [[ "$actual_parents" == "$bounded" ]] || { echo 'bounded source parents do not match raw candidate' >&2; return 2; }
-    # Reject a misleading bounded manifest carrying extra commit ancestry.
-    objects="$(git -C "$root" cat-file --batch-all-objects --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" {print $1}' | LC_ALL=C sort)"
-    expected="$(printf '%s\n' "$sha" "${bounded//,/$'\n'}" | LC_ALL=C sort -u)"
-    [[ "$objects" == "$expected" ]] || { echo 'bounded source contains commits outside its immediate context' >&2; return 2; }
     git_dir="$(git -C "$root" rev-parse --absolute-git-dir)"
     [[ ! -e "$git_dir/shallow" && ! -L "$git_dir/shallow" ]] || return 2
     printf '%s\n' "${bounded//,/$'\n'}" >"$git_dir/shallow"
     chmod 0600 "$git_dir/shallow"
   fi
-  git -C "$root" -c fetch.fsckObjects=true fetch --quiet --no-tags "$bundle" "$sha" || return
+  git -C "$root" -c transfer.fsckObjects=true -c fetch.fsckObjects=true fetch --quiet --no-tags "$bundle" "$sha" || return
+  if [[ -n "$bounded" ]]; then
+    [[ "$(git -C "$root" cat-file -t "$sha")" == commit ]] || return 2
+    actual_parents="$(git -C "$root" cat-file commit "$sha" | sed -n '/^$/q;s/^parent //p' | paste -sd ,)"
+    [[ "$actual_parents" == "$bounded" ]] || { echo 'bounded source parents do not match raw candidate' >&2; return 2; }
+  fi
   [[ "$(git -C "$root" rev-parse FETCH_HEAD)" == "$sha" ]] || { echo 'source bundle did not resolve declared source SHA' >&2; return 2; }
   actual_tree="$(git -C "$root" rev-parse 'FETCH_HEAD^{tree}')"
   [[ "$actual_tree" == "$tree" ]] || { echo 'source bundle tree differs from declared tree' >&2; return 2; }
   git -C "$root" update-ref refs/heads/dim-bootstrap-source "$sha" || return
   git -C "$root" symbolic-ref HEAD refs/heads/dim-bootstrap-source || return
-  git -C "$root" fsck --strict --full --no-reflogs --no-progress || return
 }
 bootstrap_source_verify_bundle() {
   local validation_root="$1"

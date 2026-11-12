@@ -239,9 +239,12 @@ is implied by these source changes.
   remotes, existing grants and policy evidence. Preserve gzip request metadata
   through the broker and CGI backend so protocol-v2 fetch acknowledgments remain
   valid when negotiation expands beyond small histories.
-  Reuse immutable bundle hashes and full Git proofs across requests only while
-  exact process-owned authority/storage/object identities remain unchanged, with
-  live authorization and final snapshot checks. Return legacy proposal pushes
+  Keep first-import archive/bundle size, SHA-256 and safe extraction checks while
+  ordinary Git reads use private root/static ownership, exact live authority and
+  bounded selected commit/tree/blob validation. Retain incremental received-object
+  checks without automatic whole-repository fsck, full-bundle rehashing on reads
+  or recurring all-object metadata scans; whole-store inspection is an explicit
+  operator concern, not a new check CLI or automatic repair. Return legacy proposal pushes
   after durable raw-job handoff and prepare reviews/CI asynchronously, exposing
   pending/failed/stale/ready outcomes with crash recovery and generation-safe
   approval/merge gates. Keep unrelated repositories and reads progressing through
