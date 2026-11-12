@@ -6,8 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
+import { sysboxAcquisitionFailure } from "../execution-worker/sysboxAcquisitionFixture.js";
 
 const helper = new URL("../../../../packages/host/plugins/native-git/src/guest/dim-ci.mjs", import.meta.url).pathname;
+const fetchFixture = new URL("./ciFetchFixture.ts", import.meta.url).href;
 it("offers offline help and rejects unknown request flags before Git or credential lookup", async () => {
   const root = await mkdtemp(join(tmpdir(), "dim-ci-cli-"));
   const environment = { HOME: root, PATH: "" };
@@ -52,11 +54,14 @@ it("downloads only explicitly selected, digest-verified request evidence to a ne
     }
     response.writeHead(404, { "content-type": "application/json" }).end('{"error":"not found"}');
   });
-  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(19420, "127.0.0.1", resolve); });
+  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("missing fixture listener");
+  const environment = { HOME: root, PATH: root, DIM_TEST_CI_ENDPOINT: `http://127.0.0.1:${address.port}` };
   const git = join(root, "git");
   await writeFile(git, `#!${process.execPath}\nif(process.argv[2]==='remote') console.log('http://127.0.0.1:19420/services/native-git/v1/projects/project-a/repositories/root.git'); else if(process.argv[2]==='credential') {process.stdin.resume();process.stdin.on('end',()=>console.log('username=dim\\npassword=${credential}'));} else process.exit(2);\n`, { mode: 0o700 });
-  const invoke = (output: string) => promisify(execFile)(process.execPath, [helper, "download", "--request-id", requestId, "--job", job,
-    "--artifact", artifactId, "--output", output], { cwd: root, env: { HOME: root, PATH: root }, timeout: 10_000 });
+  const invoke = (output: string) => promisify(execFile)(process.execPath, ["--import", fetchFixture, helper, "download", "--request-id", requestId, "--job", job,
+    "--artifact", artifactId, "--output", output], { cwd: root, env: environment, timeout: 10_000 });
   const rejected = async (output: string) => {
     try { await invoke(output); throw new Error("unsafe download succeeded"); }
     catch (error) {
@@ -80,8 +85,8 @@ it("downloads only explicitly selected, digest-verified request evidence to a ne
     await rejected(join(root, "too-large.bin"));
     declaredBytes = bytes.length - 1; await rejected(join(root, "wrong-size.bin"));
     declaredBytes = bytes.length; logMode = true;
-    const logs = (extra: string[] = []) => promisify(execFile)(process.execPath, [helper, "logs", "--request-id", requestId, "--job", job,
-      "--stream", "stdout", ...extra], { cwd: root, env: { HOME: root, PATH: root }, timeout: 10_000 });
+    const logs = (extra: string[] = []) => promisify(execFile)(process.execPath, ["--import", fetchFixture, helper, "logs", "--request-id", requestId, "--job", job,
+      "--stream", "stdout", ...extra], { cwd: root, env: environment, timeout: 10_000 });
     const tail = await logs(["--tail-bytes", "32"]);
     expect(tail.stdout).toContain("retained-log tail"); expect(tail.stdout).toContain("truncated=true");
     expect(tail.stdout.length).toBeLessThan(1024); expect(tail.stdout).toMatch(/%{32}\n$/);
@@ -94,6 +99,65 @@ it("downloads only explicitly selected, digest-verified request evidence to a ne
     expect((await readdir(root)).sort()).toEqual(["git", "selected-proof.bin", "link.bin", "full-log.bin"].sort());
   } finally {
     await new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("exposes a real pre-runtime acquisition failure when a verified empty retained log contradicts its diagnostic", async () => {
+  // Given a backend result from a real timed-out Git request, with no candidate runtime created.
+  const { result, stderr } = await sysboxAcquisitionFailure("timeout");
+  expect(result.completion).toEqual({ kind: "executor-failure", code: "candidate-read-timeout" });
+  const root = await mkdtemp(join(tmpdir(), "dim-ci-acquisition-cli-"));
+  const requestId = randomUUID(), job = result.executionId, artifact = "b".repeat(64), credential = "z".repeat(43);
+  const base = `/services/native-git/v1/projects/project-a/repositories/root/workspace-ci/requests/${requestId}/jobs/${job}`;
+  let retained = Buffer.alloc(0), diagnostic = stderr, badDigest = false, logReads = 0;
+  const server = createServer((request, response) => {
+    if (request.headers.authorization !== `Basic ${Buffer.from(`dim:${credential}`).toString("base64")}`) { response.writeHead(401).end(); return; }
+    if (request.url === `${base}/artifacts`) {
+      response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ executionId: job, availability: "complete", artifacts: [{
+        id: artifact, name: "logs/stderr.log", bytes: retained.length,
+        sha256: `sha256:${badDigest ? "0".repeat(64) : createHash("sha256").update(retained).digest("hex")}`,
+      }] })); return;
+    }
+    if (request.url === `${base}/artifacts/${artifact}`) { response.writeHead(200, { "content-type": "application/octet-stream" }).end(retained); return; }
+    if (request.url === `${base}/logs`) {
+      logReads++;
+      response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ result: { ...result,
+        logs: { ...result.logs, stderr: { base64: diagnostic.toString("base64"), truncated: false } } } })); return;
+    }
+    response.writeHead(404).end();
+  });
+  try {
+    await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing fixture listener");
+    await writeFile(join(root, "git"), `#!${process.execPath}\nif(process.argv[2]==='remote') console.log('http://127.0.0.1:19420/services/native-git/v1/projects/project-a/repositories/root.git'); else if(process.argv[2]==='credential') {process.stdin.resume();process.stdin.on('end',()=>console.log('username=dim\\npassword=${credential}'));} else process.exit(2);\n`, { mode: 0o700 });
+    const logs = (extra: string[] = []) => promisify(execFile)(process.execPath, ["--import", fetchFixture, helper, "logs", "--request-id", requestId, "--job", job,
+      "--stream", "stderr", ...extra], { cwd: root, env: { HOME: root, PATH: root, DIM_TEST_CI_ENDPOINT: `http://127.0.0.1:${address.port}` }, timeout: 10_000 });
+    // When the normal scoped CLI sees conflicting empty retained evidence.
+    const displayed = await logs();
+    // Then it exposes the actual bounded diagnostic with honest provenance, never empty success.
+    expect(displayed.stdout).toBe("");
+    expect(displayed.stderr).toContain("diagnostic-prefix; retained log empty");
+    expect(displayed.stderr).toContain(stderr.toString());
+    expect(displayed.stderr).toContain("reason=candidate-read-timeout");
+    expect(displayed.stderr).not.toContain(credential);
+    const destination = join(root, "must-not-be-a-complete-log.txt");
+    await expect(logs(["--output", destination])).rejects.toMatchObject({ code: 2 });
+    await expect(stat(destination)).rejects.toMatchObject({ code: "ENOENT" });
+    badDigest = true;
+    await expect(logs()).rejects.toMatchObject({ code: 2 });
+    badDigest = false; retained = stderr;
+    const before = logReads;
+    const complete = await logs();
+    expect(complete.stderr).toContain("retained-log tail");
+    expect(complete.stderr).toContain(stderr.toString());
+    expect(logReads).toBe(before);
+    retained = Buffer.alloc(0); diagnostic = Buffer.alloc(0);
+    expect((await logs()).stderr).toContain("retained-log tail; collection=complete; 0/0 bytes");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await rm(root, { recursive: true, force: true });
   }
 });

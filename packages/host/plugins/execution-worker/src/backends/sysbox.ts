@@ -25,7 +25,7 @@ export function createSysboxBackend(routing?: HostExecutionRouting): ExecutionBa
     let completion: ExecutionResult["completion"] = { kind: "executor-failure", code: "execution-failed" };
     let failureCode = "candidate-acquisition-failed";
     try {
-      await acquisitionOperation("candidate-acquisition", () => input.acquireCandidate({ workspace, scriptFile: script, signal }));
+      await acquisitionOperation("candidate-acquisition", () => input.acquireCandidate({ workspace, scriptFile: script, signal, diagnostics: output.stderr }), output.stderr);
       failureCode = "job-configuration-failed";
       const files = routing?.jobFiles ?? [];
       if (files.length > 16 || new Set(files.map(({ target }) => target)).size !== files.length) throw new Error("invalid host job configuration files");

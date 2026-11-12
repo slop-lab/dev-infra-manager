@@ -278,6 +278,23 @@ in worker memory, never attached to completion evidence. After launch, Docker wa
 `container-observer-failed`. These codes identify the failed stage even when
 guest logs are empty and never include raw command output or host exceptions.
 
+Sysbox and QEMU acquisition both retain the existing closed phase start/finish
+records, monotonic phase elapsed time, status and authenticated Git subprocess
+output byte counts. A failed fetch occurs before candidate code or its runtime
+starts; it is not a failed project test. A backend's total started/finished time
+includes other preparation and cleanup and must not be reported as measured
+fetch duration. Byte counts describe subprocess output, not network throughput.
+These diagnostics do not establish a network root cause or authorize a retry.
+
+The scoped logs API retains the bounded diagnostic prefix independently of file
+artifacts. If `dim-ci logs` verifies an empty retained stream but that prefix is
+nonempty, it displays the prefix labelled `retained log empty`, including the
+closed completion reason. It does not present that prefix as a complete retained
+log or save it through `logs --output`. A genuinely empty stream remains valid;
+nonempty retained streams retain precedence and size/digest checks. Historical
+artifact inconsistencies require operator investigation, not credential access
+or changes to execution status.
+
 The worker validates Docker and required Sysbox/KVM access before reserving
 jobs. Multiple Projects share configured slots; there is no per-Project runner
 registration or separate QEMU scheduler. Only select QEMU slots on hosts with

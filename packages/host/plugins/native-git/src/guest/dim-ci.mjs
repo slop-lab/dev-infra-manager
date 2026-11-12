@@ -71,6 +71,15 @@ async function main(args) {
       const raw = retained?.find((value) => value && typeof value === "object" && "name" in value && value.name === `logs/${channel}.log`);
       if (raw !== undefined) {
         const item = logArtifact(raw);
+        if (item.bytes === 0) {
+          await readArtifact(`${base}/artifacts/${item.id}`, credential, item, () => {});
+          const diagnostic = await readDiagnosticLog(base, credential, channel);
+          if (diagnostic.bytes.length > 0) {
+            if (output !== undefined) throw new Error("empty retained log conflicts with nonempty diagnostics; run logs without --output to inspect the labelled diagnostic prefix");
+            writeDiagnosticLog(channel, diagnostic, "empty");
+            continue;
+          }
+        }
         if (output !== undefined) { await saveArtifact(`${base}/artifacts/${item.id}`, credential, item, output); console.log(JSON.stringify({ output, stream: channel, bytes: item.bytes, source: "retained-log", sha256: item.sha256 })); continue; }
         let tail = Buffer.alloc(0);
         await readArtifact(`${base}/artifacts/${item.id}`, credential, item, (chunk) => { tail = Buffer.concat([tail, chunk]).subarray(-tailBytes); });
@@ -79,19 +88,7 @@ async function main(args) {
         destination.write(tail); if (tail.at(-1) !== 10) destination.write("\n");
       } else {
         if (output !== undefined) throw new Error("full retained log is unavailable; no output file was created");
-        const value = await requestJson({ method: "GET", url: `${base}/logs`, authorization: credential });
-        if (!value || typeof value !== "object" || !("result" in value) || !value.result || typeof value.result !== "object" || !("logs" in value.result)
-          || !value.result.logs || typeof value.result.logs !== "object") throw new Error("no retained or diagnostic logs are available yet");
-        /** @type {unknown} */ const log = Reflect.get(value.result.logs, channel);
-        if (!log || typeof log !== "object" || !("base64" in log) || typeof log.base64 !== "string" || !("truncated" in log) || typeof log.truncated !== "boolean") throw new Error("diagnostic log response is invalid");
-        const bytes = Buffer.from(log.base64, "base64");
-        if (bytes.length > 64 * 1024 || bytes.toString("base64") !== log.base64) throw new Error("diagnostic log response exceeds its bound");
-        const destination = channel === "stderr" ? process.stderr : process.stdout;
-        /** @type {unknown} */ const completion = Reflect.get(value.result, "completion");
-        const reason = completion && typeof completion === "object" && "code" in completion && typeof completion.code === "string"
-          && /^[a-z0-9-]{1,128}$/.test(completion.code) ? `; reason=${completion.code}` : "";
-        destination.write(`[DIM CI ${channel}: diagnostic-prefix; retained log unavailable; truncated=${log.truncated}${reason}]\n`);
-        destination.write(bytes); if (bytes.at(-1) !== 10) destination.write("\n");
+        writeDiagnosticLog(channel, await readDiagnosticLog(base, credential, channel), "unavailable");
       }
     }
     return;
@@ -109,6 +106,28 @@ async function main(args) {
     return;
   }
   usage();
+}
+
+/** @param {string} base @param {string} credential @param {string} channel */
+async function readDiagnosticLog(base, credential, channel) {
+  const value = await requestJson({ method: "GET", url: `${base}/logs`, authorization: credential });
+  if (!value || typeof value !== "object" || !("result" in value) || !value.result || typeof value.result !== "object" || !("logs" in value.result)
+    || !value.result.logs || typeof value.result.logs !== "object") throw new Error("no retained or diagnostic logs are available yet");
+  /** @type {unknown} */ const log = Reflect.get(value.result.logs, channel);
+  if (!log || typeof log !== "object" || !("base64" in log) || typeof log.base64 !== "string" || !("truncated" in log) || typeof log.truncated !== "boolean") throw new Error("diagnostic log response is invalid");
+  const bytes = Buffer.from(log.base64, "base64");
+  if (bytes.length > 64 * 1024 || bytes.toString("base64") !== log.base64) throw new Error("diagnostic log response exceeds its bound");
+  /** @type {unknown} */ const completion = Reflect.get(value.result, "completion");
+  const reason = completion && typeof completion === "object" && "code" in completion && typeof completion.code === "string"
+    && /^[a-z0-9-]{1,128}$/.test(completion.code) ? `; reason=${completion.code}` : "";
+  return { bytes, truncated: log.truncated, reason };
+}
+
+/** @param {string} channel @param {{bytes:Buffer,truncated:boolean,reason:string}} log @param {"empty"|"unavailable"} retained */
+function writeDiagnosticLog(channel, log, retained) {
+  const destination = channel === "stderr" ? process.stderr : process.stdout;
+  destination.write(`[DIM CI ${channel}: diagnostic-prefix; retained log ${retained}; truncated=${log.truncated}${log.reason}]\n`);
+  destination.write(log.bytes); if (log.bytes.at(-1) !== 10) destination.write("\n");
 }
 
 /** @param {string[]} args */
