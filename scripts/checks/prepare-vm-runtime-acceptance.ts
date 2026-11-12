@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,7 +21,12 @@ if (args.length > 1 || args.some((argument) => argument !== "--run")) { process.
 
 if (process.platform !== "linux" || process.arch !== "x64") throw new Error("VM runtime preparation requires Linux x86-64");
 for (const command of ["docker", "cc", "pnpm"]) await run("sh", ["-c", 'command -v "$1" >/dev/null', "vm-runtime-tool", command]);
-await run("test", ["-c", "/dev/kvm"]); await run("test", ["-r", "/dev/kvm"]); await run("test", ["-w", "/dev/kvm"]);
+// Ask the kernel to enforce access, including ACLs, using the same read/write
+// mode as the real VM probe. External test implementations may only inspect bits.
+const kvm = await open("/dev/kvm", constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+try {
+  if (!(await kvm.stat()).isCharacterDevice()) throw new Error("VM runtime preparation requires a KVM character device");
+} finally { await kvm.close(); }
 await run("docker", ["info"]); await run("docker", ["buildx", "version"]);
 const runtimes = await capture("docker", ["info", "--format", "{{json .Runtimes}}"]);
 if (!runtimes.includes("sysbox-runc")) throw new Error("VM runtime preparation requires registered sysbox-runc");
