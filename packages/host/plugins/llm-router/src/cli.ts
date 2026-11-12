@@ -1,5 +1,6 @@
+import { constants } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, open } from "node:fs/promises";
 import { once } from "node:events";
 import { join, resolve } from "node:path";
 import { deployGuestIntegration, workspaceServiceEndpoint } from "@slop-lab/dim-host-core/workspace";
@@ -9,20 +10,22 @@ import { loadHostConfig, object, parseHostConfig } from "./config.js";
 import { deployRouterHelpers, repairRouterConnectionEndpoint } from "./integration.js";
 import { createAttachment, createHostGateway } from "./gateway.js";
 import { lockWorkspaceGateway, selectWorkspaceGateway, validateGatewayAdoption } from "./workspaceService.js";
+import { parseTierModels, validateTierModels } from "./tier-models.js";
 import { snapshotRouterConnection, restoreRouterConnection } from "./connectionSnapshot.js";
 
 const usage = `dim llm prepare DIRECTORY --control-plane ORIGIN --issuer ID --issuer-key-file FILE --endpoint GUEST_REACHABLE_ORIGIN [--listen-host IP] [--port PORT]
   dim llm serve|status CONFIG
-  dim llm attach WORKSPACE --config CONFIG --project PROJECT [--route ID]
+  dim llm attach WORKSPACE --config CONFIG --project PROJECT [--route ID] [--tiers-file FILE]
   dim llm recover WORKSPACE --config ORIGINAL_CONFIG`;
 export async function runLlmCommand(args: string[], context: WorkspaceHostPluginContext): Promise<void> {
   const [command, action, positional, ...tail] = args;
   if (command !== "llm" || !action || !positional || positional.startsWith("-")) throw new Error(usage);
-  const flags = new Map<string, string>(), allowed = new Set(["--control-plane", "--issuer", "--issuer-key-file", "--endpoint", "--listen-host", "--port", "--config", "--project", "--route"]);
+  const flags = new Map<string, string>(), allowed = new Set(["--control-plane", "--issuer", "--issuer-key-file", "--endpoint", "--listen-host", "--port", "--config", "--project", "--route", "--tiers-file"]);
   for (let index = 0; index < tail.length; index += 2) {
     const name = tail[index], value = tail[index + 1];
     if (!name || !allowed.has(name) || !value || flags.has(name)) throw new Error(usage); flags.set(name, value);
   }
+  if (flags.has("--tiers-file") && action !== "attach") throw new Error(usage);
   const required = (name: string) => { const value = flags.get(name); if (!value) throw new Error(`required ${name}\n${usage}`); return value; };
   if (action === "prepare") {
     const directory = resolve(positional), config = parseHostConfig({ schemaVersion: 1, stateDirectory: join(directory, "state"), workspaceStateRoot: context.store.root,
@@ -43,6 +46,18 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
     } finally { await gateway.close(); } return;
   }
   if (action !== "attach" && action !== "recover") throw new Error(usage);
+  const tiersFile = flags.get("--tiers-file");
+  let tiers;
+  if (tiersFile !== undefined) {
+    const file = await open(resolve(tiersFile), constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
+    try {
+      const stat = await file.stat();
+      if (!stat.isFile() || stat.size > 16 * 1024) throw new Error("DIM tiers file must be a bounded regular JSON file");
+      const text = await file.readFile("utf8");
+      if (Buffer.byteLength(text) > 16 * 1024) throw new Error("DIM tiers file exceeds its size limit");
+      tiers = parseTierModels(JSON.parse(text));
+    } finally { await file.close(); }
+  }
   const workspace = await context.store.read(positional);
   if (!workspace.initialized || workspace.phase !== "running") throw new Error("LLM attachment requires a running initialized workspace");
   if (action === "recover") {
@@ -78,9 +93,10 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
   let selected: Awaited<ReturnType<typeof selectWorkspaceGateway>> | undefined;
   let deliveredConnection: string | undefined;
   try {
+    if (tiers !== undefined) validateTierModels(tiers, issued.models);
     attachment = await createAttachment(config, scope, issued);
     const connection = { schemaVersion: 1, workspaceId: workspace.id, projectId: scope.projectId, principalId: issued.principalId,
-      endpoint: workspaceServiceEndpoint("llm-router"), token: attachment.token };
+      endpoint: workspaceServiceEndpoint("llm-router"), token: attachment.token, ...(tiers === undefined ? {} : { tiers }) };
     selected = await selectWorkspaceGateway(workspace, context, configFile);
     await validateGatewayAdoption(config, workspace, previousConnection);
     await deployRouterHelpers(workspace, context);
@@ -105,6 +121,6 @@ export async function runLlmCommand(args: string[], context: WorkspaceHostPlugin
     if (failures.length) throw new AggregateError([error, ...failures], "LLM attachment failed and rollback was incomplete");
     throw error;
   }
-  console.log(`Attached project '${scope.projectId}' route '${scope.routeId}' to ${workspace.name}; OpenCode and OMO keep their own model choices. Rerun dim tools server to refresh an existing server.`);
+  console.log(`Attached project '${scope.projectId}' route '${scope.routeId}' to ${workspace.name}; ${tiers === undefined ? "OpenCode and OMO keep their own model choices" : "OpenCode and OMO select the explicit DIM tiers"}. Rerun dim tools server to refresh an existing server.`);
   } finally { await guard.release(); }
 }

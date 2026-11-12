@@ -259,3 +259,28 @@ it("passes large requests through the host gateway without a hidden upload cap",
   expect(response.status).toBe(200); await response.text();
   expect(f.cp.ledger.request(response.headers.get("x-dim-request-id")!)).toMatchObject({ outcome: "completed" });
 }, 20_000);
+
+it("attaches explicit tiers using authenticated route models and preserves the old binding on invalid targets", async () => {
+  const f = await fixture(false, true), tiersFile = join(f.root, "tiers.json");
+  const tiers = { quick: "reviewed-model", standard: "reviewed-model", deep: "reviewed-model" };
+  await writeFile(tiersFile, JSON.stringify(tiers));
+  const command = ["llm", "attach", f.workspace.name, "--config", join(f.root,"host/gateway.json"), "--project", "application", "--tiers-file", tiersFile];
+  await runLlmCommand(command, f.context);
+  const saved = await readFile(f.connectionPath, "utf8");
+  expect(JSON.parse(saved)).toMatchObject({ tiers });
+  await writeFile(tiersFile, JSON.stringify({ ...tiers, deep: "unoffered" }));
+  await expect(runLlmCommand(command, f.context)).rejects.toThrow(/available chat route/);
+  expect(await readFile(f.connectionPath, "utf8")).toBe(saved);
+  await writeFile(tiersFile, JSON.stringify({ ...tiers, extra: "not-a-tier" }));
+  await expect(runLlmCommand(command, f.context)).rejects.toThrow(/exactly quick/);
+  expect(await readFile(f.connectionPath, "utf8")).toBe(saved);
+});
+
+it("rejects a FIFO tiers file without waiting for a writer or changing the existing attachment", async () => {
+  const f = await fixture(), fifo = join(f.root,"tiers-fifo");
+  await promisify(execFile)("mkfifo", [fifo]);
+  const previous = await readFile(f.connectionPath,"utf8");
+  await expect(runLlmCommand(["llm","attach",f.workspace.name,"--config",join(f.root,"host/gateway.json"),
+    "--project","application","--tiers-file",fifo],f.context)).rejects.toThrow(/bounded regular/);
+  expect(await readFile(f.connectionPath,"utf8")).toBe(previous);
+}, 5000);

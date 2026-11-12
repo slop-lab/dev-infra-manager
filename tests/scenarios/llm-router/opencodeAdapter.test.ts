@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import DimLlmRouter from "../../../packages/host/plugins/llm-router/src/opencode.js";
 
+import { parseTierModels } from "../../../packages/host/plugins/llm-router/src/tier-models.js";
+
 const roots: string[] = [];
 const reviewed = { id: "reviewed", name: "Reviewed", api: "responses", context: 128000, output: 16000 };
 const added = { id: "added", name: "Added", api: "chat", context: 64000, output: 8000 };
@@ -11,13 +13,13 @@ afterEach(async () => {
   vi.unstubAllGlobals(); vi.unstubAllEnvs();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
-async function fixture() {
+async function fixture(tiers?: unknown) {
   const root = await mkdtemp(join(tmpdir(), "dim-opencode-catalogue-")); roots.push(root);
   const connection = join(root, "connection.json");
   vi.stubEnv("DIM_LLM_ROUTER_CONNECTION_FILE", connection);
   vi.stubEnv("DIM_LLM_ROUTER_OPENCODE_MODE", "router");
   const token = "x".repeat(43);
-  await writeFile(connection, JSON.stringify({ schemaVersion: 1, endpoint: "http://127.0.0.1:8319", token }));
+  await writeFile(connection, JSON.stringify({ schemaVersion: 1, endpoint: "http://127.0.0.1:8319", token, ...(tiers === undefined ? {} : { tiers }) }));
   return { token };
 }
 it("uses the authenticated current route catalogue without selecting main or background models", async () => {
@@ -151,4 +153,58 @@ it.each([false, 2345])("preserves explicit OpenCode chunk deadline %s while disa
   const hooks = await DimLlmRouter(), config: Record<string, unknown> = { provider: { openai: { options: { headerTimeout: 1234, chunkTimeout } } } };
   await hooks.config(config);
   expect(config).toMatchObject({ provider: { openai: { options: { headerTimeout: 1234, chunkTimeout } }, "dim-responses": { options: { headerTimeout: false, chunkTimeout: false } } } });
+});
+
+const tierTargets = { quick: "auto:dim-quick", standard: "auto:dim-standard", deep: "auto:dim-deep" };
+const tierCatalogue = Object.values(tierTargets).map((id) => ({ ...added, id }));
+it("uses strict authenticated tier aliases and refuses both stale and unrouted selections", async () => {
+  await fixture(tierTargets);
+  vi.stubEnv("DIM_LLM_ROUTER_REQUEST_NONCE", "b".repeat(32));
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ models: tierCatalogue })));
+  const hooks = await DimLlmRouter(), config: Record<string, unknown> = { provider: { bigpickle: { name: "User" } }, model: "bigpickle/free" };
+  await hooks.config(config);
+  expect(config).toMatchObject({ model: "dim-chat/standard", small_model: "dim-chat/quick", enabled_providers: ["dim-chat"],
+    provider: { "dim-chat": { options: { headers: { "x-dim-request-nonce": "b".repeat(32) } }, models: { quick: { id: tierTargets.quick, limit: { context: 64000, output: 8000 } } } } } });
+  for (const id of ["quick", "standard", "deep", ...Object.values(tierTargets)]) {
+    await expect(hooks["chat.params"]({ model: { providerID: "dim-chat", id } })).resolves.toBeUndefined();
+  }
+  for (const providerID of ["bigpickle", "anthropic", "openai"]) {
+    await expect(hooks["chat.params"]({ model: { providerID, id: "free" } })).rejects.toThrow(/tier mode/);
+  }
+  await expect(hooks["chat.params"]({ model: { providerID: "dim-chat", id: "not-selected" } })).rejects.toThrow(/tier mode/);
+  await expect(hooks.config({ provider: { "dim-chat": {} } })).rejects.toThrow(/collision/);
+  await expect(hooks.config({ disabled_providers: ["dim-chat"] })).rejects.toThrow(/disabled/);
+});
+it.each([
+  { quick: "unknown", standard: tierTargets.standard, deep: tierTargets.deep },
+  tierTargets,
+])("rejects missing tier targets or wrong API without fallback", async (tiers) => {
+  await fixture(tiers);
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ models: [reviewed] })));
+  await expect(DimLlmRouter()).rejects.toThrow(/available chat route/);
+});
+it("rejects alias collisions and contradictory providers-only tier mode", async () => {
+  await fixture(tierTargets);
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ models: [...tierCatalogue, { ...added, id: "quick" }] })));
+  await expect(DimLlmRouter()).rejects.toThrow(/collides/);
+  vi.stubEnv("DIM_LLM_ROUTER_OPENCODE_MODE", "providers");
+  await expect(DimLlmRouter()).rejects.toThrow(/require router/);
+});
+it.each([{}, { ...tierTargets, extra: "oops" }, { ...tierTargets, quick: "bad\nheader" }, { ...tierTargets, deep: 4 }, { ...tierTargets, quick: "auto:fast\n" }])(
+  "rejects malformed tier configuration (%j)", (value) => { expect(() => parseTierModels(value)).toThrow(/exactly quick/); });
+it("adds only validated routed session identity headers in both ordinary and tier configurations", async () => {
+  await fixture();
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ models: [reviewed] })));
+  const hooks = await DimLlmRouter(), output = { headers: { existing: "keep" } };
+  await hooks["chat.headers"]({ sessionID: "ses_scope:1", model: { providerID: "openai" } }, output);
+  expect(output.headers).toEqual({ existing: "keep", "x-dim-session-id": "ses_scope:1" });
+  await expect(hooks["chat.headers"]({ sessionID: "bad\r\nheader", model: { providerID: "dim-chat" } }, {})).rejects.toThrow(/session identity/);
+  await expect(hooks["chat.headers"]({ sessionID: "ses_trailing\n", model: { providerID: "dim-chat" } }, {})).rejects.toThrow(/session identity/);
+  const unrelated = { headers: { existing: "only" } };
+  await hooks["chat.headers"]({ model: { providerID: "anthropic" } }, unrelated);
+  expect(unrelated).toEqual({ headers: { existing: "only" } });
+  vi.stubEnv("DIM_LLM_ROUTER_OPENCODE_MODE", "providers");
+  const independent = await DimLlmRouter();
+  await independent["chat.headers"]({ model: { providerID: "openai" } }, unrelated);
+  expect(unrelated).toEqual({ headers: { existing: "only" } });
 });

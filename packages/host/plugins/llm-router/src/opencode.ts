@@ -8,6 +8,23 @@ function record(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("invalid DIM LLM connection");
   return value as Record<string, unknown>;
 }
+type TierModels = { quick: string; standard: string; deep: string };
+function parseTierModels(value: unknown): TierModels {
+  const tiers = record(value);
+  if (Object.keys(tiers).length !== 3 || !["quick", "standard", "deep"].every((key) =>
+    typeof tiers[key] === "string" && (tiers[key] as string).length > 0 && (tiers[key] as string).length <= 200
+      && !/[\s\x00-\x1f\x7f]/.test(tiers[key] as string))) {
+    throw new Error("DIM tiers must contain exactly quick, standard and deep model IDs");
+  }
+  return { quick: tiers.quick as string, standard: tiers.standard as string, deep: tiers.deep as string };
+}
+function validateTierModels(tiers: TierModels, models: readonly Model[]): void {
+  for (const [tier, id] of Object.entries(tiers)) {
+    const target = models.find((model) => model.id === id);
+    if (!target || target.api !== "chat") throw new Error(`DIM tier '${tier}' requires an available chat route model`);
+    if (models.some((model) => model.id === tier)) throw new Error(`DIM tier alias '${tier}' collides with a route model`);
+  }
+}
 async function routeModels(endpoint: string, token: string): Promise<Model[]> {
   let response: Response;
   try {
@@ -74,11 +91,27 @@ async function DimLlmRouter() {
   // Restarting OpenCode picks up newly allowed models without reattachment.
   const models = await routeModels(connection.endpoint, connection.token);
   const modelsById = new Map(models.map((model) => [model.id, model]));
+  const tiers = connection.tiers === undefined ? undefined : parseTierModels(connection.tiers);
+  if (tiers) {
+    if (mode !== "router") throw new Error("DIM tiers require router mode");
+    validateTierModels(tiers, models);
+  }
   return { async "chat.params"(input: unknown, output?: unknown): Promise<void> {
     if (mode === "providers") return;
     const model = record(record(input).model);
     const routed = model.providerID === "openai" || model.providerID === "dim-responses" || model.providerID === "dim-chat";
-    if (!routed) return;
+    if (!routed) {
+      if (tiers) throw new Error("DIM tier mode rejects unrouted provider calls");
+      return;
+    }
+    if (tiers) {
+      const id = model.id;
+      if (model.providerID !== "dim-chat" || typeof id !== "string"
+        || !Object.entries(tiers).some(([alias, target]) => id === alias || id === target)) {
+        throw new Error("DIM tier mode requires a configured DIM tier model");
+      }
+      return;
+    }
     const requestedId = model.id;
     const exact = typeof requestedId === "string" ? modelsById.get(requestedId) : undefined;
     const target = exact ?? (model.providerID === "openai" && typeof requestedId === "string" && requestedId.endsWith("-fast")
@@ -93,8 +126,37 @@ async function DimLlmRouter() {
       }
       parameters.options = { ...options, store: false };
     }
+  }, async "chat.headers"(input: unknown, output: unknown): Promise<void> {
+    const request = record(input), model = record(request.model);
+    if (!["openai", "dim-responses", "dim-chat"].includes(String(model.providerID))
+      || model.providerID === "openai" && mode === "providers") return;
+    if (typeof request.sessionID !== "string" || request.sessionID.length === 0 || request.sessionID.length > 200
+      || /[^A-Za-z0-9_.:-]/.test(request.sessionID)) {
+      throw new Error("invalid DIM OpenCode session identity");
+    }
+    const result = record(output);
+    const headers = result.headers === undefined ? {} : record(result.headers);
+    result.headers = { ...headers, "x-dim-session-id": request.sessionID };
   }, async config(config: Record<string, unknown>): Promise<void> {
     const providers = config.provider === undefined ? {} : record(config.provider);
+    if (tiers) {
+      if (Array.isArray(config.disabled_providers) && config.disabled_providers.includes("dim-chat")) {
+        throw new Error("DIM tier provider 'dim-chat' is disabled by OpenCode configuration");
+      }
+      if (providers["dim-chat"] !== undefined || providers["dim-responses"] !== undefined) throw new Error("DIM tier provider collision");
+      providers["dim-chat"] = { npm: "@ai-sdk/openai-compatible", name: "DIM workspace tiers",
+        options: { baseURL: `${connection.endpoint}/v1`, apiKey: connection.token, headerTimeout: false, chunkTimeout: false,
+          ...(nonce === undefined ? {} : { headers: { "x-dim-request-nonce": nonce } }) },
+        models: Object.fromEntries(Object.entries(tiers).map(([alias, id]) => {
+          const target = modelsById.get(id)!;
+          return [alias, { id: target.id, name: alias, ...modelLimits(target) }];
+        })) };
+      config.provider = providers;
+      config.enabled_providers = ["dim-chat"];
+      config.model = "dim-chat/standard";
+      config.small_model = "dim-chat/quick";
+      return;
+    }
     for (const api of ["responses", "chat"] as const) {
       const selected = models.filter((model) => model.api === api); if (selected.length === 0) continue;
       const name = `dim-${api}`;
