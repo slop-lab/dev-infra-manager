@@ -54,9 +54,11 @@ OMO's cleanup-capable team-list API.
 Automatic discovery supports the pinned 4.19.4 DIM-managed user configuration
 and its absolute or `~/` team `base_dir` override. It validates ownership and
 rejects symlinks, oversized or changing files. A missing runtime directory is
-empty evidence only after establishing the owned configured base. Selected
-profiles, project overrides, unsupported user configuration, settings differing
-from the owned server launch hash, or unreadable state remain unavailable.
+empty evidence only after establishing the owned configured base.
+Normal setup seeds OpenCode's editor schema before launch, and metadata
+inspection accepts that pinned schema without weakening the launch hash.
+Selected profiles, project overrides, unsupported user configuration, settings
+differing from the owned server launch hash, or unreadable state remain unavailable.
 Advanced setups can supply the monitor's explicit reviewed metadata adapter.
 Already-running servers launched before this capability have no hash and remain
 unavailable; monitoring does not restart them. The reader does not

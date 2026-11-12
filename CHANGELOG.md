@@ -337,7 +337,8 @@ is implied by these source changes.
   responses, parent/child activity aggregation, scoped optional OMO metadata and
   redacted evidence. Workspace-backed monitoring automatically reads fresh
   metadata from the owned installed OpenCode server for the managed default and
-  safe team-directory overrides; ambiguous or unsafe configuration remains
+  safe team-directory overrides, including OpenCode's normal editor schema
+  initialization; ambiguous or unsafe configuration remains
   unknown without requiring a fabricated project snapshot. Expose the same
   bounded task/subagent/team observation through agent-tools' scoped execution
   status operation, selected-host console and concise workspace client. Wait for

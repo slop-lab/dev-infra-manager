@@ -4,12 +4,32 @@ import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, it, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { inspectOwnedServerIdentity, inspectServerTeamMetadata, launchTeamFingerprint, managedTeamConfig, readTeamRuntime } from '../../../../packages/host/plugins/agent-tools/src/assets/opencode-team-metadata.mjs';
 
 const roots: string[]=[];
 afterEach(async()=>{vi.restoreAllMocks();await Promise.all(roots.splice(0).map(path=>rm(path,{recursive:true,force:true})))});
 async function root(){const value=await mkdtemp(join(tmpdir(),'dim-team-observe-'));roots.push(value);return value;}
 async function state(base:string,run:string,extra:Record<string,unknown>={}){await mkdir(join(base,'runtime',run),{recursive:true,mode:0o700});await writeFile(join(base,'runtime',run,'state.json'),JSON.stringify({version:1,teamRunId:run,leadSessionId:'ses_parent',status:'active',members:[{sessionId:'ses_child',status:'running',prompt:'PRIVATE'}],...extra}),{mode:0o600});}
+it('keeps the normal setup fingerprint stable across pinned OpenCode schema normalization',async()=>{
+ const home=await root(),configDir=join(home,'.config/opencode'),modules=join(home,'.local/lib/node_modules');
+ await mkdir(configDir,{recursive:true});await mkdir(join(home,'.omo'));await mkdir(join(modules,'oh-my-openagent'),{recursive:true});
+ await writeFile(join(modules,'oh-my-openagent/package.json'),JSON.stringify({name:'oh-my-openagent',version:'4.19.4'}));
+ const parser=dirname(createRequire(import.meta.url).resolve('jsonc-parser/package.json'));await cp(parser,join(modules,'jsonc-parser'),{recursive:true});
+ // Execute the actual setup producer's configuration block; npm/runtime installation is outside this regression.
+ const setup=await readFile(new URL('../../../../packages/host/plugins/agent-tools/src/assets/tool-setup.bash',import.meta.url),'utf8');
+ const marker='  node - "$parser_path" "$config_dir" "$omo_dir/omo.jsonc" "$install_prefix/lib/node_modules/oh-my-openagent/dist/index.js" <<\'NODE\'\n';
+ const chunks=setup.split(marker);expect(chunks).toHaveLength(2);const program=chunks[1]!.split('\nNODE\n')[0]!;
+ execFileSync(process.execPath,['--input-type=commonjs','-',join(modules,'jsonc-parser'),configDir,join(home,'.omo/omo.jsonc'),join(modules,'oh-my-openagent/dist/index.js')],{input:program,timeout:10000});
+ const file=join(configDir,'opencode.json'),source=await readFile(file,'utf8');
+ expect(JSON.parse(source).$schema).toBe('https://opencode.ai/config.json');
+ const fingerprint=await launchTeamFingerprint({home,cwd:home,environment:{HOME:home}});expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
+ // OpenCode v1.18.31 config.ts loadConfig adds this field on first file-backed load.
+ // https://github.com/anomalyco/opencode/blob/v1.18.31/packages/opencode/src/config/config.ts
+ if(!JSON.parse(source).$schema)await writeFile(file,source.replace(/^\s*\{/,'{\n  "$schema": "https://opencode.ai/config.json",'));
+ expect(await readFile(file,'utf8')).toBe(source);
+ expect(await launchTeamFingerprint({home,cwd:home,environment:{HOME:home}})).toBe(fingerprint);
+});
 it('reads fresh bounded runtime files, preserves failed members and never invokes cleanup or exposes payloads',async()=>{
  const base=await root();await state(base,'one');await state(base,'two',{status:'failed',members:[{sessionId:'ses_failed',status:'failed',output:'PRIVATE'}]});
  const options={baseDirectory:base,maxRuns:80,maxMembers:80,deadlineMs:5000};
@@ -42,7 +62,7 @@ it.each([false,true])('binds actual pinned-parser inspection and base override %
  await cp(dirname(createRequire(import.meta.url).resolve('jsonc-parser/package.json')),join(modules,'jsonc-parser'),{recursive:true});await chmod(join(modules,'jsonc-parser'),0o755);await chmod(join(modules,'jsonc-parser/package.json'),0o644);
  await mkdir(join(home,'.config/opencode'),{recursive:true,mode:0o700});
  const exactPlugin=new URL(`file://${join(modules,'oh-my-openagent/dist/index.js')}`).href;
- await writeFile(join(home,'.config/opencode/opencode.json'),JSON.stringify({autoupdate:false,plugin:[exactPlugin]}),{mode:0o600});
+ await writeFile(join(home,'.config/opencode/opencode.json'),JSON.stringify({$schema:'https://opencode.ai/config.json',autoupdate:false,plugin:[exactPlugin]}),{mode:0o600});
  await writeFile(join(cwd,'opencode.json'),JSON.stringify({provider:{fixture:{}},model:'fixture/model',agent:{fixture:{mode:'primary'}}}),{mode:0o600});
  // Fast first launch: no sleep or timestamp tolerance. A hash, not a clock guess, binds the configuration.
  const content=JSON.stringify({provider:{fixture:{options:{apiKey:'PRIVATE'}}},plugin:[new URL(`file://${join(home,'.config/opencode/plugins/dim-llm-router.mjs')}`).href]});
@@ -52,6 +72,14 @@ it.each([false,true])('binds actual pinned-parser inspection and base override %
  const environment=(extra='',snapshot=fingerprint)=>writeFile(join(proc,pid,'environ'),`HOME=${home}\0DIM_OPENCODE_WEB_INSTANCE_ID=${instance}\0OPENCODE_SERVER_PASSWORD=PRIVATE\0OPENCODE_CONFIG_CONTENT=${content}\0${snapshot?`DIM_OPENCODE_WEB_OMO_CONFIG_SHA256=${snapshot}\0`:''}${extra}`,{mode:0o600});await environment();
  const inspect=()=>inspectServerTeamMetadata({home,procRoot:proc});expect((await inspectServerTeamMetadata({home,procRoot:proc,directory:home})).source).toBe('unavailable');
   const initial=await inspectServerTeamMetadata({home,procRoot:proc,directory:cwd});expect(initial).toMatchObject({source:'optional-omo-adapter',enabled:true,unreadable:false});expect(initial.teams).toHaveLength(override?1:0);
+  const globalFile=join(home,'.config/opencode/opencode.json'),globalSource=await readFile(globalFile,'utf8');
+  // Even a supported field changing after launch remains unknown: raw config hashes are not normalized away.
+  await writeFile(globalFile,JSON.stringify({autoupdate:false,plugin:[exactPlugin]}));expect((await inspect()).source).toBe('unavailable');
+  for(const extra of [{$schema:'https://unreviewed.example/schema.json'},{provider:{unreviewed:{}}}]){
+    await writeFile(globalFile,JSON.stringify({...JSON.parse(globalSource),...extra}));
+    expect(await launchTeamFingerprint({home,cwd,environment:{HOME:home}})).toBe('unavailable');
+  }
+  await writeFile(globalFile,globalSource);expect((await inspect()).unreadable).toBe(false);
   const owned=await inspectOwnedServerIdentity({home,procRoot:proc});expect(owned).toMatchObject({directory:cwd,port:4096,identity:expect.stringMatching(/^[a-f0-9]{64}$/)});expect(JSON.stringify(owned)).not.toContain('PRIVATE');
   await writeFile(join(home,'.local/state/opencode-web/server.pid'),`${pid} ${ticks} 4096 ${'b'.repeat(64)}\n`,{mode:0o600});await environment(`DIM_OPENCODE_WEB_INSTANCE_ID=${'b'.repeat(64)}\0`);
   expect((await inspectOwnedServerIdentity({home,procRoot:proc})).identity).not.toBe(owned.identity);

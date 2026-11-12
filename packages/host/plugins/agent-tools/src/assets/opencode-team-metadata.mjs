@@ -114,7 +114,8 @@ async function managedContext(home,cwd,environment,parse,signal) {
   const optionalConfig=async(/** @type {string} */ file,/** @type {boolean} */ global)=>{
     try {
       const source=await readConfig(file), value=record(parse(source));
-      if(global&&Object.keys(value).some(key=>key!=='plugin'&&key!=='autoupdate'))throw Error('unsupported user OpenCode config');
+      if(global&&Object.keys(value).some(key=>!['plugin','autoupdate','$schema'].includes(key)))throw Error('unsupported user OpenCode config');
+      if(global&&value.$schema!==undefined&&value.$schema!=='https://opencode.ai/config.json')throw Error('unsupported OpenCode schema');
       if(global&&value.autoupdate!==false)throw Error('unpinned OpenCode update');
       plugins(value.plugin,global);hash.update(file).update(source);return true;
     }catch(error){if(!missing(error))throw error;hash.update(file).update('absent');return false;}

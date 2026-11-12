@@ -149,7 +149,7 @@ http.createServer((q,s)=>{s.statusCode=q.headers.authorization===auth?200:401;s.
     await writeFile(path.join(modules,"oh-my-openagent/package.json"),JSON.stringify({name:"oh-my-openagent",version:"4.19.4"}),{mode:0o600});
     await cp(path.dirname(createRequire(import.meta.url).resolve("jsonc-parser/package.json")),path.join(modules,"jsonc-parser"),{recursive:true});
     await mkdir(path.join(f.home,".config/opencode"),{recursive:true});await mkdir(path.join(f.home,".omo"));
-    await writeFile(path.join(f.home,".config/opencode/opencode.json"),JSON.stringify({autoupdate:false,plugin:[new URL(`file://${path.join(modules,"oh-my-openagent/dist/index.js")}`).href]}),{mode:0o600});
+    await writeFile(path.join(f.home,".config/opencode/opencode.json"),JSON.stringify({$schema:"https://opencode.ai/config.json",autoupdate:false,plugin:[new URL(`file://${path.join(modules,"oh-my-openagent/dist/index.js")}`).href]}),{mode:0o600});
     await writeFile(path.join(f.home,".omo/omo.jsonc"),JSON.stringify({"[opencode]":{auto_update:false,team_mode:{enabled:true,max_parallel_members:4,max_members:8,tmux_visualization:false}}}),{mode:0o600});
     Object.assign(f.env, { OPENCODE_WEB_CORS_ORIGINS: '["https://preview.example.test"]' });
     const dormant = path.join(f.home, "unrelated-started");

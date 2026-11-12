@@ -300,6 +300,9 @@ const plans = []
 for (const name of openCodeFiles) {
   const loaded = loadConfig(path.join(configDir, name))
   let output = normalizePluginSource(loaded.source, loaded.value.plugin, loaded.filePath)
+  // The pinned OpenCode loader adds this on first read. Seed it before a
+  // launch snapshot so that ordinary loader normalization cannot change it.
+  if (loaded.value.$schema === undefined) output = setValue(output, ["$schema"], "https://opencode.ai/config.json")
   output = setValue(output, ["autoupdate"], false)
   plans.push({ ...loaded, output })
 }
