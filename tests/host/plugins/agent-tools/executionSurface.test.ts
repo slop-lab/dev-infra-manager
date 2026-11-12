@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
@@ -13,7 +13,7 @@ const source = fileURLToPath(new URL("../../../../packages/host/plugins/agent-to
 it("drives copied HOME-layout ESM helpers against an owned authenticated listener with busy subagents and unavailable teams", async () => {
   const root = await mkdtemp(join(tmpdir(), "dim-execution-surface-"));
   const home = join(root, "home"), helper = join(home, ".local/share/dim-agent-tools"), bin = join(home, "bin");
-  const env = { ...process.env, HOME: home, XDG_STATE_HOME: join(home, ".local/state"), XDG_CONFIG_HOME: join(home, ".config"), OMO_PROFILE: undefined, OCX_PROFILE: undefined, OPENCODE_CONFIG: undefined, OPENCODE_CONFIG_DIR: undefined, OPENCODE_CONFIG_CONTENT: undefined, PATH: `${bin}:/usr/bin:/bin` };
+  const env = { ...process.env, HOME: home, XDG_STATE_HOME: join(home, ".local/state"), XDG_CONFIG_HOME: join(home, ".config"), OMO_PROFILE: undefined, OCX_PROFILE: undefined, OPENCODE_CONFIG: undefined, OPENCODE_CONFIG_DIR: undefined, OPENCODE_CONFIG_CONTENT: undefined, PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin` };
   const launcher = join(helper, "opencode-server.bash"), cli = join(helper, "execution/cli.ts");
   const run = (args: string[]) => execute(process.execPath, [cli, ...args], { env, cwd: home, timeout: 12_000 });
   try {
