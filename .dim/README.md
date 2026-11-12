@@ -22,7 +22,10 @@ review/script files. The host core interprets none of the plugin-specific YAML.
 need no human approval. The explicit `git-ci` policy requires the
 candidate-controlled `source` job before either managed branch can be promoted.
 The current policy/compiler has no per-branch job scope and schedules every job
-declared in `ci/runner.yml`; therefore that workflow contains only `source`.
+declared in `ci/runner.yml`. This runtime-recovery qualification branch explicitly
+adds the disposable `runtime-recovery` VM job alongside `source`; this is not a
+repository-policy change or automatic fleet rollout. The ordinary development
+workflow on main remains source-only.
 Ordinary Native trusted acquisition supplies checkout trees without `.git`, while
 the runtime runner deliberately binds a canonical Git commit/tree. Main merge, `main`
 push and release-tag runtime acceptance use the restricted GitHub workflow on a

@@ -50,6 +50,32 @@ codes, and verify that the workspace resources exist on the selected host.
 See the [CLI reference](../../packages/cli/core/README.md) for forwarding and host
 configuration.
 
+If Sysbox startup fails with the exact Docker diagnostic
+`namespace {"time" ""} does not exist`, run `dim doctor` on that host. Doctor
+reports the recorded incompatibility without launching another container. This
+exact failure has been observed with an unqualified Ubuntu 26.10, Docker 29.7.2
+and Sysbox 0.7 host; do not generalize it to all releases or broaden the reviewed
+bootstrap pins from that observation.
+
+On a fresh host with no running Docker workloads, the operator may review the
+[upstream Sysbox issue 1011](https://github.com/nestybox/sysbox/issues/1011)
+workaround and merge this setting into the existing Docker daemon configuration:
+
+```json
+{
+  "features": {
+    "time-namespaces": false
+  }
+}
+```
+
+Validate the complete configuration with `sudo dockerd --validate
+--config-file /etc/docker/daemon.json`, then perform an operator-controlled
+Docker restart and repeat the failed workspace operation. Do not overwrite
+other daemon settings. Existing hosts require a reviewed idle window because a
+Docker restart interrupts running containers. DIM neither applies this setting
+nor restarts or falls back to another runtime automatically.
+
 Required main/premerge/release acceptance uses real DIM or local VM execution
 and validated exact-source completion receipts under the
 [normative verification contract](../specs/12-verification.md#main-and-release-qualification).

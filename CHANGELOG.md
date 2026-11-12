@@ -13,7 +13,12 @@ is implied by these source changes.
   concurrent guest endpoint or metadata edits even when the credential is unchanged.
   Report missing gateway selection with `dim llm recover` guidance; preserve a
   running workload and expose failed integration preparation instead of hiding
-  readiness failure behind an unqualified running state. Extend the explicit
+  readiness failure behind an unqualified running state. Detect unavailable guest
+  boot identity before integration preparation with exact-UUID, activity-aware
+  keep-data recovery guidance instead of blaming healthy cache URLs. Diagnose
+  the recorded Sysbox time-namespace startup incompatibility without changing
+  daemon settings, restarting workloads or falling back to another runtime.
+  Extend the explicit
   selected-host real-use gate to ordinary repositories, real application schema
   handoff, scoped auxiliary VMs and isolated installation updates, reporting
   unavailable acceptance lanes as blocked rather than passing skips. Installed
@@ -28,7 +33,9 @@ is implied by these source changes.
   runtime coverage in the existing trusted CI gates without development-push
   hardware runs. Explicit DIM CI qualification can use an operator-pinned Ubuntu
   hardware VM, exact bounded parent context and redacted retained diagnostics;
-  the default DIM workflow remains source-only. VM workspaces and auxiliary VMs
+  ordinary development CI remains source-only; explicit runtime-recovery
+  qualification candidates also run the owned recovery VM job. VM workspaces
+  and auxiliary VMs
   share one operator-controlled startup budget across admission, guest agent,
   Docker and helper readiness, cancelling overdue probes and independently
   cleaning up failed new starts. Reconnect only the exact observed local Incus

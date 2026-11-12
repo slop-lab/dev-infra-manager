@@ -1,3 +1,6 @@
 jobs:
   source:
     script: scripts/ci/source.bash
+  runtime-recovery:
+    runtime: vm
+    script: scripts/ci/runtime-recovery.bash

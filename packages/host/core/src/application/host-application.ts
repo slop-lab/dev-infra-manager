@@ -9,7 +9,7 @@ import type { WorkspaceRecord } from "../workspace/models.js";
 import { WorkspaceService } from "../workspace/service.js";
 import { WorkspaceStore } from "../workspace/store.js";
 import { acquireWorkspaceSource } from "../workspace/source.js";
-import { checkWorkspaceHost } from "../workspace/doctor.js";
+import { checkWorkspaceHost, workspaceRuntimeFailureCheck } from "../workspace/doctor.js";
 import { createWorkspaceOnHost, type WorkspaceHostCreateInput } from "./workspace-composition.js";
 import { composeWorkspaceRuntime, loadHostPlugins, resolveHostExecutionRouting, hostPluginExtensions } from "./host-plugins.js";
 import { ensureWorkspaceAgent } from "./workspace-agent.js";
@@ -87,7 +87,12 @@ async function dispatchHostOperation(request: HostOperationRequest, signal: Abor
       }, { signal, reportProgress: (stage) => process.stderr.write(`${stage}\n`) });
       break;
     }
-    case "doctor": result = await checkWorkspaceHost(runner); break;
+    case "doctor": {
+      const checks = await checkWorkspaceHost(runner);
+      const runtimeFailure = workspaceRuntimeFailureCheck(await store.list());
+      result = runtimeFailure ? [...checks, runtimeFailure] : checks;
+      break;
+    }
     case "list": result = await service.list(); break;
     case "show": result = await service.show(string(input.name, "name")); break;
     case "create": {

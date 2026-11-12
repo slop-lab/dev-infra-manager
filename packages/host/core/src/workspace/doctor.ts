@@ -2,6 +2,21 @@ import type { CommandRunner } from "../types.js";
 import { workspaceImageReference } from "../workspaceImageReference.js";
 
 export interface HostCheck { name: string; ok: boolean; detail: string }
+export interface WorkspaceRuntimeFailure { readonly name: string; readonly runtime: string; readonly phase: string; readonly error?: string }
+
+const sysboxTimeNamespaceFailure = 'namespace {"time" ""} does not exist';
+
+export function workspaceRuntimeFailureCheck(failures: readonly WorkspaceRuntimeFailure[]): HostCheck | undefined {
+  const failure = failures.find(({ runtime, phase, error }) => (runtime === "container" || runtime === "container-kvm")
+    && phase === "error" && error !== undefined && /^at start (?:replacement )?runtime:/.test(error)
+    && error.includes(sysboxTimeNamespaceFailure));
+  if (!failure) return undefined;
+  return {
+    name: "Sysbox startup compatibility",
+    ok: false,
+    detail: `workspace '${failure.name}' recorded the Sysbox startup error '${sysboxTimeNamespaceFailure}'. On an idle host, have an operator review Docker daemon configuration for features.time-namespaces=false, validate it, and restart Docker. DIM does not change daemon settings or restart services.`
+  };
+}
 
 /** Inspect only base host prerequisites; never provision services or require managed plugins. */
 export async function checkWorkspaceHost(

@@ -68,7 +68,7 @@ export function workspaceAgentGenerationInputFiles(): readonly string[] {
   const source = fileURLToPath(import.meta.url), application = path.dirname(source), extension = path.extname(source);
   return [
     source,
-    ...["workspace-agent", "workspace-agent-process", "workspace-discovery", "workspace-readiness", "workspace-plugins", "host-plugins", "workspace-composition"]
+    ...["workspace-agent", "workspace-agent-process", "workspace-discovery", "workspace-readiness", "workspace-boot-identity", "workspace-plugins", "host-plugins", "workspace-composition"]
       .map((name) => path.join(application, `${name}${extension}`)),
     path.join(application, "../workspace", `guestAssets${extension}`),
     ...["serviceChannel", "serviceChannelGuest", "serviceChannelReconnect", "serviceEndpoint"]
