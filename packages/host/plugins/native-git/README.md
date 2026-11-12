@@ -113,7 +113,11 @@ are supplied. Reusing the ID with the same candidate resumes the same durable
 review and CI plan; changing its repository scope or candidate is rejected.
 `logs` verifies retained stdout/stderr before displaying their final 64KiB;
 `--stream stderr --tail-bytes 131072` selects a larger bounded tail. A missing
-retained stream falls back to an explicitly labelled diagnostic prefix. Select
+retained stream falls back to an explicitly labelled diagnostic prefix.
+`logs` without `--output` also exposes a nonempty diagnostic prefix when the
+verified retained stream is empty, explicitly labelling that inconsistency.
+It refuses to save that prefix as a complete retained log; genuine empty logs
+remain valid and nonempty retained logs retain precedence. Select
 `--stream stdout --output ./stdout.log` to save a full retained stream. Downloads
 verify the bounded size and SHA-256 in a private staging file and atomically
 publish only to the explicitly selected new destination; existing files and
