@@ -63,6 +63,9 @@ is implied by these source changes.
   `dim-ci` integration. Retain bounded full logs and explicitly selected files
   after runtime cleanup, resume interrupted uploads without rerunning candidate
   code, and connect the private execution query role during local installation.
+  Classify manifest-producing artifact capture failures by closed filesystem
+  operation and errno without exposing raw errors or changing source permissions;
+  retain valid logs when later file capture fails.
   Offer an explicit Ubuntu hardware execution profile with nested KVM and
   disk-backed temporary storage and explicit bounded source manifests for exact
   scheduled practical VM validation, with temporary host-loopback emergency SSH

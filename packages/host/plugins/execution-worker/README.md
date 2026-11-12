@@ -117,6 +117,16 @@ CI backends spool the complete accepted stdout/stderr within the reviewed output
 
 After backend cleanup stops untrusted writers, capture copies bytes into a private pending directory outside the runtime root. The durable worker journal records the completed command before lease-bound chunk upload; uncertain upload restarts reuse those bytes without executing candidate code again. The private runtime root is cleaned even when upload is interrupted. Artifact availability is independent of command success: capture errors are explicit and already captured valid diagnostics remain downloadable. No host keys, user homes or arbitrary configured paths are swept into artifacts.
 
+Manifest-producing capture failures identify a closed operation and errno in
+`error`, for example `artifact-capture-failed:source-open:EACCES` or
+`artifact-capture-failed:file-validation:rejected`. Unlisted filesystem codes
+become `unknown`; unclassified failures retain `artifact-capture-failed`.
+Raw errors, paths and credentials are not included. Files must be readable by
+the host worker after backend cleanup; same-worker-owned mode-0600 files are
+supported. Capture does not change source ownership, modes or link counts to
+make unreadable or unsafe files acceptable. Failure to create or persist the
+pending manifest itself is not diagnosable through that manifest.
+
 Upload has a five-minute worker-owned deadline persisted in the journal; a worker
 restart cannot grant a fresh budget. Healthy lease renewals continue during the
 bounded upload and exact owned cleanup. A storage outage beyond the deadline
