@@ -40,22 +40,21 @@ export async function assertDifferingReviewTrees(input: {
   await compareTrees(input.left, input.right, state, new Set());
 }
 
-export async function assertReviewPathTrees(input: {
+export async function hasVerifiedReviewPathTrees(input: {
   readonly root: ReviewTree;
   readonly path: Uint8Array;
   readonly maximumBytes: number;
   readonly readTree: ReadTree;
-}): Promise<void> {
+}): Promise<boolean> {
   const state = treeState(input.maximumBytes, input.readTree, [input.root]);
   const parts = splitPath(Buffer.from(input.path));
   let current = input.root;
   for (const part of parts.slice(0, -1)) {
     const entry = treeEntries(current).get(part.toString("base64"));
-    if (entry === undefined || entry.mode !== "40000") {
-      throw new AuthoritativeReviewGitError("review path conflicts with its selected tree");
-    }
+    if (entry === undefined || entry.mode !== "40000") return false;
     current = { objectId: entry.objectId, content: await state.read(entry.objectId) };
   }
+  return true;
 }
 
 function treeState(maximumBytes: number, readTree: ReadTree, roots: readonly ReviewTree[]) {

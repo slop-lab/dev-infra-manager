@@ -33,10 +33,40 @@ describe("selected Git read object integrity", () => {
     await expect(readTreeFile(fixture.input, fixture.commit, "README.md"))
       .rejects.toThrow(/blob identity/i);
   });
+
+  it.each(["root", "subtree"] as const)("rejects a valid replacement selected %s tree stored under its stale object ID", async (part) => {
+    // Given a valid replacement tree pointing at another valid blob.
+    const fixture = await repositoryFixture();
+    const replacement = (await run("/bin/sh", ["-c",
+      "printf 'replacement blob\\n' | /usr/bin/git --git-dir \"$1\" hash-object -t blob -w --stdin",
+      "sh", fixture.repository])).stdout.trim();
+    const replacementTree = (await run("/bin/sh", ["-c",
+      "printf '100644 blob %s\\tREADME.md\\n' \"$1\" | /usr/bin/git --git-dir \"$2\" mktree",
+      "sh", replacement, fixture.repository])).stdout.trim();
+    const path = part === "root" ? "README.md" : "dir/README.md";
+    expect((await readTreeFile(fixture.input, fixture.commit, path))?.blobId).not.toBe(replacement);
+    await replaceLooseObject(fixture.repository, part === "root" ? fixture.tree : fixture.subtree, replacementTree, "tree");
+
+    // When the unchanged commit/path is read after the valid-zlib substitution.
+    const selected = readTreeFile(fixture.input, fixture.commit, path);
+    // Then ancestor integrity fails instead of returning the replacement blob.
+    await expect(selected).rejects.toThrow(part === "root" ? /tree identity|hash mismatch/i : /tree identity/i);
+  });
+
+  it("does not inspect an unrelated subtree when resolving a valid selected nested file", async () => {
+    const fixture = await repositoryFixture();
+    await replaceLooseObject(fixture.repository, fixture.unrelatedTree, fixture.subtree, "tree");
+    const selected = await readTreeFile(fixture.input, fixture.commit, "dir/README.md");
+    expect(selected).toMatchObject({ mode: "100644", byteLength: 14, lineCount: 1 });
+    expect(await readTreeFile(fixture.input, fixture.commit, "dir/missing.txt")).toBeNull();
+  });
 });
 
 async function repositoryFixture(): Promise<{
   readonly commit: string;
+  readonly tree: string;
+  readonly subtree: string;
+  readonly unrelatedTree: string;
   readonly input: {
     readonly gitExecutable: string;
     readonly gitIdentity: Awaited<ReturnType<typeof assertGitVersion>>;
@@ -52,15 +82,24 @@ async function repositoryFixture(): Promise<{
   const blob = (await run("/bin/sh", ["-c",
     "printf 'selected blob\\n' | /usr/bin/git --git-dir \"$1\" hash-object -t blob -w --stdin",
     "sh", repository])).stdout.trim();
-  const tree = (await run("/bin/sh", ["-c",
+  const subtree = (await run("/bin/sh", ["-c",
     "printf '100644 blob %s\\tREADME.md\\n' \"$1\" | /usr/bin/git --git-dir \"$2\" mktree",
     "sh", blob, repository])).stdout.trim();
+  const unrelatedTree = (await run("/bin/sh", ["-c",
+    "printf '100644 blob %s\\tunrelated.txt\\n' \"$1\" | /usr/bin/git --git-dir \"$2\" mktree",
+    "sh", blob, repository])).stdout.trim();
+  const tree = (await run("/bin/sh", ["-c",
+    "printf '100644 blob %s\\tREADME.md\\n040000 tree %s\\tdir\\n040000 tree %s\\tother\\n' \"$1\" \"$2\" \"$3\" | /usr/bin/git --git-dir \"$4\" mktree",
+    "sh", blob, subtree, unrelatedTree, repository])).stdout.trim();
   const commit = (await run("/usr/bin/git", ["--git-dir", repository,
     "-c", "user.name=DIM Test", "-c", "user.email=dim@example.invalid",
     "commit-tree", tree, "-m", "selected root"])).stdout.trim();
   await run("/usr/bin/git", ["--git-dir", repository, "update-ref", "refs/heads/main", commit]);
   return {
     commit,
+    tree,
+    subtree,
+    unrelatedTree,
     input: {
       gitExecutable: "/usr/bin/git",
       gitIdentity: await assertGitVersion({ gitExecutable: "/usr/bin/git", gitVersion: realGitVersion }),
@@ -75,7 +114,7 @@ async function replaceLooseObject(
   repository: string,
   selectedObjectId: string,
   replacementObjectId: string,
-  type: "blob"
+  type: "blob" | "tree"
 ): Promise<void> {
   const content = (await run("/usr/bin/git", ["--git-dir", repository, "cat-file", type, replacementObjectId], {
     encoding: "buffer"

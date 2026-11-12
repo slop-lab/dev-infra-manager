@@ -6,7 +6,7 @@ import type { ReviewChangedPath } from "@slop-lab/gs-review-contracts";
 import { parseChangedPaths } from "./changed-paths.js";
 import {
   assertDifferingReviewTrees,
-  assertReviewPathTrees,
+  hasVerifiedReviewPathTrees,
   AuthoritativeReviewGitError,
   readVerifiedReviewObject,
 } from "./review-object-integrity.js";
@@ -160,14 +160,14 @@ export async function readAuthoritativeCandidateFile(input: {
   const candidateTree = await input.reader.readCommitTree(input.access, input.candidateCommit);
   const candidateTreeContent = await readVerifiedReviewObject({ ...input,
     objectId: candidateTree, type: "tree", maximumBytes: maximumOutputBytes });
-  await assertReviewPathTrees({
+  if (!(await hasVerifiedReviewPathTrees({
     root: { objectId: candidateTree, content: candidateTreeContent },
     path: Buffer.from(input.path, "utf8"),
     maximumBytes: maximumOutputBytes,
     readTree: (objectId, maximumBytes) => readVerifiedReviewObject({
       ...input, objectId, type: "tree", maximumBytes,
     }),
-  });
+  }))) return undefined;
   const result = Buffer.from(await input.reader.readBytes({
     access: input.access,
     args: ["ls-tree", "-z", "--full-tree", input.candidateCommit, "--", `:(literal)${input.path}`],
