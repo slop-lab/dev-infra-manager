@@ -4,6 +4,14 @@ import type {
 } from "@slop-lab/gs-repository-service";
 import type { ReviewChangedPath } from "@slop-lab/gs-review-contracts";
 import { parseChangedPaths } from "./changed-paths.js";
+import {
+  assertDifferingReviewTrees,
+  assertReviewPathTrees,
+  AuthoritativeReviewGitError,
+  readVerifiedReviewObject,
+} from "./review-object-integrity.js";
+
+export { AuthoritativeReviewGitError } from "./review-object-integrity.js";
 
 const maximumOutputBytes = 128 * 1024 * 1024;
 
@@ -27,15 +35,24 @@ export async function inspectAuthoritativeReviewGit(input: {
   const protectedHead = await resolveCommit(input.reader, input.access, input.protectedRef, input.signal);
   if (protectedHead !== input.expectedProtectedHead) throw new AuthoritativeReviewGitError("protected ref changed before review creation");
   const candidateCommit = await resolveCommit(input.reader, input.access, input.proposalRef, input.signal);
+  const protectedTree = await input.reader.readCommitTree(input.access, protectedHead);
   const candidateTree = await input.reader.readCommitTree(input.access, candidateCommit);
-  if (candidateCommit.length !== protectedHead.length || candidateTree.length !== protectedHead.length) {
+  if (candidateCommit.length !== protectedHead.length || protectedTree.length !== protectedHead.length
+    || candidateTree.length !== protectedHead.length) {
     throw new AuthoritativeReviewGitError("review object format conflicts");
   }
-  await input.reader.readBytes({
-    access: input.access,
-    args: ["-c", "fsck.fullPathname=error", "fsck", "--strict", "--full", "--no-reflogs", "--no-progress", candidateCommit],
-    signal: input.signal,
+  await readVerifiedReviewObject({ ...input, objectId: candidateCommit, type: "commit", maximumBytes: maximumOutputBytes });
+  const protectedTreeContent = await readVerifiedReviewObject({ ...input,
+    objectId: protectedTree, type: "tree", maximumBytes: maximumOutputBytes });
+  const candidateTreeContent = await readVerifiedReviewObject({ ...input,
+    objectId: candidateTree, type: "tree", maximumBytes: maximumOutputBytes });
+  await assertDifferingReviewTrees({
+    left: { objectId: protectedTree, content: protectedTreeContent },
+    right: { objectId: candidateTree, content: candidateTreeContent },
     maximumBytes: maximumOutputBytes,
+    readTree: (objectId, maximumBytes) => readVerifiedReviewObject({
+      ...input, objectId, type: "tree", maximumBytes,
+    }),
   });
   const raw = await input.reader.readBytes({
     access: input.access,
@@ -51,6 +68,29 @@ export async function inspectAuthoritativeReviewGit(input: {
     maximumBytes: maximumOutputBytes,
   });
   const changes = await parseChangedPaths({ raw, readBlob });
+  const changedBlobs = new Set<string>();
+  for (const change of changes) {
+    if (change.oldObjectId !== "0" && (change.oldMode === "100644" || change.oldMode === "100755")) {
+      changedBlobs.add(change.oldObjectId);
+    }
+    if (change.newObjectId !== "0" && (change.newMode === "100644" || change.newMode === "100755")) {
+      changedBlobs.add(change.newObjectId);
+    }
+  }
+  let verifiedBlobBytes = 0;
+  for (const objectId of changedBlobs) {
+    if (verifiedBlobBytes >= maximumOutputBytes) {
+      throw new AuthoritativeReviewGitError("review changed blobs exceed output limit");
+    }
+    const content = await readReviewBlob({
+      reader: input.reader,
+      access: input.access,
+      objectId,
+      signal: input.signal,
+      maximumBytes: maximumOutputBytes - verifiedBlobBytes,
+    });
+    verifiedBlobBytes += content.length;
+  }
   const patch = Buffer.from(await input.reader.readBytes({
     access: input.access,
     args: ["diff", "--binary", "--no-color", "--no-ext-diff", "--no-textconv", "--find-renames", "--find-copies", "--full-index", protectedHead, candidateCommit],
@@ -115,6 +155,19 @@ export async function readAuthoritativeCandidateFile(input: {
     || input.path.split("/").some((part) => part === "" || part === "." || part === "..")) {
     throw new AuthoritativeReviewGitError("candidate file path must be a normalized relative path");
   }
+  await readVerifiedReviewObject({ ...input, objectId: input.candidateCommit,
+    type: "commit", maximumBytes: maximumOutputBytes });
+  const candidateTree = await input.reader.readCommitTree(input.access, input.candidateCommit);
+  const candidateTreeContent = await readVerifiedReviewObject({ ...input,
+    objectId: candidateTree, type: "tree", maximumBytes: maximumOutputBytes });
+  await assertReviewPathTrees({
+    root: { objectId: candidateTree, content: candidateTreeContent },
+    path: Buffer.from(input.path, "utf8"),
+    maximumBytes: maximumOutputBytes,
+    readTree: (objectId, maximumBytes) => readVerifiedReviewObject({
+      ...input, objectId, type: "tree", maximumBytes,
+    }),
+  });
   const result = Buffer.from(await input.reader.readBytes({
     access: input.access,
     args: ["ls-tree", "-z", "--full-tree", input.candidateCommit, "--", `:(literal)${input.path}`],
@@ -155,14 +208,9 @@ export async function readReviewBlob(input: {
     maximumBytes: 1024,
   })).toString("utf8").trim());
   if (!Number.isSafeInteger(size) || size < 0 || size > maximumBytes) {
-    throw new AuthoritativeReviewGitError("review matcher blob exceeds 1 MiB");
+    throw new AuthoritativeReviewGitError("review blob exceeds byte limit");
   }
-  return Buffer.from(await input.reader.readBytes({
-    access: input.access,
-    args: ["cat-file", "blob", input.objectId],
-    signal: input.signal,
-    maximumBytes,
-  }));
+  return readVerifiedReviewObject({ ...input, type: "blob", maximumBytes });
 }
 
 async function resolveCommit(
@@ -189,8 +237,4 @@ function splitNul(value: Buffer): readonly Buffer[] {
   }
   if (start !== value.length) throw new AuthoritativeReviewGitError("Git tree output is not NUL terminated");
   return fields;
-}
-
-export class AuthoritativeReviewGitError extends Error {
-  readonly name = "AuthoritativeReviewGitError";
 }

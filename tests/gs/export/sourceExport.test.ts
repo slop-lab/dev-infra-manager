@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, readdir, readlink, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, readlink, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
@@ -72,6 +72,26 @@ it("recovers prior selected ancestry from the bundle without unrelated branch re
     await expect(git(clone, ["cat-file", "-e", `${fixture.unrelatedCommit}^{commit}`])).rejects.toBeDefined();
     expect(await git(clone, ["for-each-ref", "--format=%(refname)", "refs/heads/"])).toBe("refs/heads/source-commit");
     await git(fixture.repository, ["bundle", "verify", join(output, "source-history.bundle")]);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+it("exports selected history without scanning an unrelated corrupt object", async () => {
+  // Given
+  const fixture = await createGitFixture();
+  const output = join(fixture.root, "selected-export");
+  const unrelatedBlob = await git(fixture.repository, ["rev-parse", `${fixture.unrelatedCommit}:unrelated-secret.txt`]);
+  const unrelatedObject = join(fixture.repository, ".git/objects", unrelatedBlob.slice(0, 2), unrelatedBlob.slice(2));
+  await chmod(unrelatedObject, 0o600);
+  await writeFile(unrelatedObject, "corrupt object\n");
+  try {
+    // When
+    const result = await runExporter(fixture.repository, fixture.selectedCommit, output);
+
+    // Then
+    expect(result.status, result.stderr).toBe(0);
+    expect(await readFile(join(output, "source/lib/current.txt"), "utf8")).toBe("prior content\n");
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }
