@@ -10,6 +10,7 @@ import { ExecutorRunner } from "./sysboxFixture.js";
 import { ExecutionLeaseLostError, ExecutionServiceUnavailableError } from "../../../../packages/host/plugins/execution-worker/src/client.js";
 import { NativeGitProcessError } from "../../../../packages/host/plugins/execution-worker/src/nativeGitCandidateProcess.js";
 import { CandidateObjectError } from "../../../../packages/host/plugins/execution-worker/src/nativeGitCandidateObjects.js";
+import type { BackendInput } from "../../../../packages/host/plugins/execution-worker/src/backend.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
 async function input() {
@@ -27,12 +28,21 @@ async function input() {
       return { commitObjectId: descriptor.candidateCommit, treeObjectId: descriptor.candidateTree }; }
   };
   return { root, grant: { ...selected, descriptor, descriptorDigest: executionDescriptorDigest(descriptor) },
-    acquireCandidate: (paths: { workspace: string; scriptFile: string; signal: AbortSignal }) => verifyAndMaterializeCandidate({ ...paths, authority, descriptor, descriptorDigest: executionDescriptorDigest(descriptor) }),
+    acquireCandidate: (paths: Parameters<BackendInput["acquireCandidate"]>[0]) => verifyAndMaterializeCandidate({ ...paths, authority, descriptor, descriptorDigest: executionDescriptorDigest(descriptor) }),
     runner: new ExecutorRunner(), signal: new AbortController().signal };
 }
 it("runs verified candidate bytes with bounded Docker resources and cleans up before returning evidence", async () => {
   const options = await input(), completed = await sysboxBackend.run(options);
   expect(completed.result).toBe("success"); expect(completed.stdout.sha256).toBe(`sha256:${hash("executor-output\n")}`);
+  const stderr = await readFile(join(options.root, "output", "stderr"), "utf8");
+  const events = stderr.trim().split("\n").map((line) => JSON.parse(line));
+  expect(events.map(({ phase, event }) => [phase, event])).toEqual([
+    ["candidate-acquisition", "start"], ["source-blobs", "start"], ["source-blobs", "finish"], ["candidate-acquisition", "finish"],
+  ]);
+  for (const event of events.filter(({ event }) => event === "finish")) {
+    expect(event).toMatchObject({ status: "success", elapsedMilliseconds: expect.any(Number) });
+    expect(event.elapsedMilliseconds).toBeGreaterThanOrEqual(0);
+  }
   const launched = options.runner.calls.find(({ args }) => args[0] === "run")!.args;
   expect(launched[launched.indexOf("--oom-score-adj") + 1]).toBe("500");
   expect(launched).toContain("sysbox-runc"); expect(launched).toContain("--memory");
@@ -111,14 +121,20 @@ it("retains safe acquisition phase and code before exact cleanup without leaking
   const { acquisitionOperation } = await import("../../../../packages/host/plugins/execution-worker/src/acquisitionDiagnostics.js");
   const options = await input();
   const secret = "https://reader:secret@private.invalid/path?token=private";
-  options.acquireCandidate = () => acquisitionOperation("credential-acquisition", async () => {
+  options.acquireCandidate = ({ diagnostics }) => acquisitionOperation("credential-acquisition", async () => {
     throw new ExecutionServiceUnavailableError(secret, "timeout", { cause: new Error(secret) });
-  });
+  }, diagnostics);
   const completed = await sysboxBackend.run(options);
   expect(completed.completion).toEqual({ kind: "executor-failure", code: "candidate-read-timeout" });
   expect(completed.cleanupComplete).toBe(true);
   const stderr = await readFile(join(options.root, "output", "stderr"), "utf8");
-  expect(JSON.parse(stderr)).toEqual({ component: "candidate-acquisition", phase: "credential-acquisition", code: "candidate-read-timeout" });
+  expect(stderr.trim().split("\n").map((line) => JSON.parse(line))).toEqual([
+    { component: "candidate-acquisition", phase: "candidate-acquisition", event: "start" },
+    { component: "candidate-acquisition", phase: "credential-acquisition", event: "start" },
+    { component: "candidate-acquisition", phase: "credential-acquisition", event: "finish", status: "failure", elapsedMilliseconds: expect.any(Number) },
+    { component: "candidate-acquisition", phase: "candidate-acquisition", event: "finish", status: "failure", elapsedMilliseconds: expect.any(Number) },
+    { component: "candidate-acquisition", phase: "credential-acquisition", code: "candidate-read-timeout" },
+  ]);
   expect(completed.stderr.bytes).toBe(String(Buffer.byteLength(stderr)));
   expect(Buffer.from(completed.logs!.stderr.base64, "base64").toString()).toBe(stderr);
   expect(JSON.stringify(completed)).not.toContain(secret);
