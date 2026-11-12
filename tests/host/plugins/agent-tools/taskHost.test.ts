@@ -18,10 +18,10 @@ async function fixture(action: (context: WorkspaceHostPluginContext, workspace: 
   } finally { await rm(root, { recursive: true, force: true }); }
 }
 function request(workspaceId: string) { return parseTaskRequest({ workspaceId, requestId: "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb", runtime: "opencode", serverIdentity: "a".repeat(64), target: { kind: "new" }, mode: "record-only", text: "Explicit task transport fixture" }); }
-it("transports intended text only on stdin and strips all private diagnostic fields from typed receipts", async () => fixture(async (context, workspace) => {
-  const input = request(workspace.id);
+it("transports intended text and structured model only on stdin and strips private diagnostic fields from typed receipts", async () => fixture(async (context, workspace) => {
+  const input = { ...request(workspace.id), model: { providerID: "dim-chat", modelID: "vendor/model/standard" } };
   const execute = vi.spyOn(context.service, "exec").mockImplementation(async (_name, command, options) => {
-    expect(options?.workspaceId).toBe(workspace.id); expect(JSON.stringify(command)).not.toContain(input.text);
+    expect(options?.workspaceId).toBe(workspace.id); expect(JSON.stringify(command)).not.toContain(input.text); expect(JSON.stringify(command)).not.toContain(input.model.modelID);
     let source = ""; if (options?.stdin) for await (const chunk of options.stdin) source += chunk.toString(); expect(JSON.parse(source)).toEqual(input);
     options?.stdout?.write(JSON.stringify({ ...taskReceipt(input, { outcome: "accepted", reason: "accepted", phase: "complete", serverIdentity: input.serverIdentity, sessionId: "ses_fixture", messageId: `msg_${input.requestId.replaceAll("-", "")}` }), token: "PRIVATE", text: input.text })); return 0;
   });
@@ -31,7 +31,7 @@ it("transports intended text only on stdin and strips all private diagnostic fie
 it("rejects stale workspace and preference injection before guest execution", async () => fixture(async (context, workspace) => {
   const execute = vi.spyOn(context.service, "exec"), input = request(workspace.id);
   await expect(invokeToolsConsole("task.submit", { workspace: workspace.name, ...input, workspaceId: "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa" }, context)).rejects.toThrow("replaced");
-  await expect(invokeToolsConsole("task.submit", { workspace: workspace.name, ...input, model: "override" }, context)).rejects.toThrow("Unknown task input field"); expect(execute).not.toHaveBeenCalled();
+  await expect(invokeToolsConsole("task.submit", { workspace: workspace.name, ...input, model: "override" }, context)).rejects.toThrow("Task input must be an object"); expect(execute).not.toHaveBeenCalled();
   await expect(runToolsConsole(["invoke", "task.submit", "--input", JSON.stringify({ workspace: workspace.name, ...input }), "--json"], context)).rejects.toThrow("--input-stdin");
 }));
 it.each(["transport", "workspace", "server"])("reports outcome-unknown without retry when %s evidence is uncertain", async kind => fixture(async (context, workspace) => {

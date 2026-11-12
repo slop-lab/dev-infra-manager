@@ -2,6 +2,7 @@ export type TaskTarget = { readonly kind: "new" } | { readonly kind: "session"; 
 export type TaskRequest = {
   readonly workspaceId: string; readonly requestId: string; readonly runtime: string; readonly serverIdentity: string;
   readonly target: TaskTarget; readonly text: string; readonly mode: "execute" | "record-only";
+  readonly model?: { readonly providerID: string; readonly modelID: string };
 };
 export type TaskLookup = { readonly workspaceId: string; readonly requestId: string };
 export type TaskReceipt = TaskLookup & {
@@ -23,7 +24,7 @@ export function parseTaskLookup(input: unknown): TaskLookup {
   return { workspaceId: row.workspaceId, requestId: row.requestId };
 }
 export function parseTaskRequest(input: unknown): TaskRequest {
-  const row = object(input); exact(row, ["workspaceId", "requestId", "runtime", "serverIdentity", "target", "text", "mode"]);
+  const row = object(input); exact(row, ["workspaceId", "requestId", "runtime", "serverIdentity", "target", "text", "mode", "model"]);
   const identity = parseTaskLookup({ workspaceId: row.workspaceId, requestId: row.requestId }), target = object(row.target);
   if (typeof row.runtime !== "string" || !/^[a-z][a-z0-9-]{0,31}$/.test(row.runtime) || typeof row.serverIdentity !== "string" || !/^[a-f0-9]{64}$/.test(row.serverIdentity)
     || typeof row.text !== "string" || row.text.trim().length === 0 || Buffer.byteLength(row.text) > 8192 || Buffer.from(row.text).toString("utf8") !== row.text
@@ -34,7 +35,17 @@ export function parseTaskRequest(input: unknown): TaskRequest {
     case "session": exact(target, ["kind", "sessionId"]); if (typeof target.sessionId !== "string" || !sessionPattern.test(target.sessionId)) throw new TaskInputError("Invalid task session identity"); selected = { kind: "session", sessionId: target.sessionId }; break;
     default: throw new TaskInputError("Unsupported task target");
   }
-  return { ...identity, runtime: row.runtime, serverIdentity: row.serverIdentity, target: selected, text: row.text, mode: row.mode };
+  let model: TaskRequest["model"];
+  if (Object.hasOwn(row, "model")) {
+    const value = object(row.model); exact(value, ["providerID", "modelID"]);
+    if (row.runtime !== "opencode" || !modelId(value.providerID) || !modelId(value.modelID)) throw new TaskInputError("Invalid OpenCode task model");
+    model = { providerID: value.providerID, modelID: value.modelID };
+  }
+  return { ...identity, runtime: row.runtime, serverIdentity: row.serverIdentity, target: selected, text: row.text, mode: row.mode, ...(model === undefined ? {} : { model }) };
+}
+function modelId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.trim() === value && Buffer.byteLength(value) <= 256
+    && Buffer.from(value).toString("utf8") === value && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(value);
 }
 export function taskReceipt(input: TaskLookup, change: Partial<Omit<TaskReceipt, keyof TaskLookup | "schemaVersion" | "completion">> = {}): TaskReceipt {
   return { workspaceId: input.workspaceId, requestId: input.requestId, schemaVersion: 1, runtime: "opencode", serverIdentity: null, outcome: "outcome-unknown", phase: "claim", sessionId: null, messageId: null, reason: "guarded", completion: "not-assessed", ...change };

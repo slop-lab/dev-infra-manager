@@ -177,9 +177,16 @@ than interpolating it into shell arguments.
 `target: {"kind":"session","sessionId":"ses_EXACT"}` resumes or messages
 that existing session rather than creating another. Its directory must match
 the owned server. `mode: "execute"` requests normal asynchronous execution;
-`record-only` sets OpenCode's `noReply` and requests no inference. Neither mode
-supplies an agent, model, variant, system prompt, tools or configuration override.
-Configured primary-agent and role/model preferences remain OpenCode's choices.
+`record-only` sets OpenCode's `noReply` and requests no inference. An optional
+OpenCode-only `"model": {"providerID":"dim-chat","modelID":"standard"}`
+selects the model explicitly in `prompt_async`, for both new and existing
+sessions. Each ID is a nonempty UTF-8 string of at most 256 bytes without control
+characters or surrounding whitespace. IDs remain separate opaque strings;
+slashes in a model ID are preserved. Extra model fields are rejected.
+Omitting `model` preserves the existing request body and OpenCode's configured
+model selection. The request does not supply an agent, variant, system prompt,
+tools or configuration override. Model selection grants no provider access;
+existing router authentication and authorization still apply.
 Text is limited to 8 KiB UTF-8 and the serialized task payload to 12 KiB, including
 escaping. The complete host/guest envelope stays within the existing 16 KiB
 bridge limit. Through the dedicated task CLI and host console, task text travels
@@ -189,7 +196,8 @@ diagnostic logs, receipts or process arguments.
 The guest journals each `(workspaceId, requestId)` under the fixed private
 `$HOME/.local/state/dim-agent-tools/tasks` root, independent of XDG overrides.
 It syncs an exclusive claim and a canonical hash covering every delivery field,
-including exact text, before any mutating HTTP. Append-only, synced phase
+including exact text and any explicit model, before any mutating HTTP. Changing
+the model under the same request ID returns `conflict`. Append-only, synced phase
 records distinguish possible create dispatch, a known created session and
 possible prompt dispatch. A shared launch lock fences helper-managed server
 replacement; identity is checked before each mutation and after acceptance.

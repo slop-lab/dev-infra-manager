@@ -43,6 +43,38 @@ it("resumes or messages an existing exact session without creating another or se
   expect(f.calls.map(row => [row.method, row.path])).toEqual([["GET", "/session/ses_fixture"], ["POST", "/session/ses_fixture/prompt_async"]]);
   expect(f.calls[1]?.body).not.toHaveProperty("agent"); expect(f.calls[1]?.body).not.toHaveProperty("model"); expect(f.calls[1]?.body).not.toHaveProperty("noReply");
 }));
+it.each([
+  { target: { kind: "new" }, mode: "execute" },
+  { target: { kind: "session", sessionId: "ses_fixture" }, mode: "execute" },
+  { target: { kind: "new" }, mode: "record-only" }
+])("delivers an explicit structured model for $target.kind in $mode mode", async selection => fixture(async f => {
+  const model = { providerID: "dim-chat", modelID: "vendor/model/standard" };
+  const receipt = await f.run({ ...selection, model });
+  expect(receipt.outcome).toBe("accepted");
+  expect(f.calls.at(-1)).toEqual({ path: "/session/ses_fixture/prompt_async", method: "POST", body: {
+    messageID: receipt.messageId, parts: [{ type: "text", text: "Explicit wire fixture content" }],
+    ...(selection.mode === "record-only" ? { noReply: true } : {}), model
+  } });
+  expect(await f.run({ ...selection, model: { modelID: model.modelID, providerID: model.providerID } })).toEqual(receipt);
+  const count = f.calls.length;
+  for (const changed of [{ ...model, modelID: "different" }, { ...model, providerID: "other-provider" }]) {
+    expect((await f.run({ ...selection, model: changed })).outcome).toBe("conflict");
+  }
+  expect((await f.run(selection)).outcome).toBe("conflict");
+  expect(f.calls).toHaveLength(count);
+}));
+it("does not reuse an omitted-model request ID to select a model on replay", async () => fixture(async f => {
+  expect((await f.run()).outcome).toBe("accepted");
+  expect((await f.run({ model: { providerID: "dim-chat", modelID: "standard" } })).outcome).toBe("conflict");
+  expect(f.calls).toHaveLength(2);
+}));
+it("rejects invalid model input before any owned HTTP request", async () => fixture(async f => {
+  for (const model of ["dim-chat/standard", { providerID: "dim-chat", modelID: "standard\n" }, { providerID: "dim-chat", modelID: "standard", system: "override" }]) {
+    expect(() => f.run({ model })).toThrow();
+  }
+  expect(() => f.run({ runtime: "other", model: { providerID: "dim-chat", modelID: "standard" } })).toThrow();
+  expect(f.calls).toHaveLength(0);
+}));
 it.each(["/session", "/session/ses_fixture/prompt_async"])("never retries after uncertain network acceptance at %s", async path => fixture(async f => {
   f.lose(path); expect((await f.run()).outcome).toBe("outcome-unknown");
   const count = f.calls.length; expect((await f.run()).outcome).toBe("outcome-unknown"); expect(f.calls).toHaveLength(count);

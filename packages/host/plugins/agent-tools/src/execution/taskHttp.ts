@@ -44,7 +44,7 @@ export async function deliverOpenCodeTask(input: TaskRequest, journal: TaskJourn
   if (sessionId === null) throw Error("Task session unavailable");
   await transport.verify();
   await journal.mark("message", sessionId);
-  const response = await transport.call("POST", `/session/${sessionId}/prompt_async`, { messageID: `msg_${input.requestId.replaceAll("-", "")}`, parts: [{ type: "text", text: input.text }], ...(input.mode === "record-only" ? { noReply: true } : {}) });
+  const response = await transport.call("POST", `/session/${sessionId}/prompt_async`, { messageID: `msg_${input.requestId.replaceAll("-", "")}`, parts: [{ type: "text", text: input.text }], ...(input.mode === "record-only" ? { noReply: true } : {}), ...(input.model === undefined ? {} : { model: input.model }) });
   await transport.verify();
   if (response.status !== 204) return receipt({ outcome: "outcome-unknown", phase: "message", reason: "transport-unknown" });
   return receipt({ outcome: "accepted", phase: "complete", reason: "accepted" });
