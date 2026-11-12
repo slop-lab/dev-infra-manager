@@ -123,16 +123,25 @@ async function inspect(options: MonitorOptions, team: OmoTeamMetadata, client: M
   const visited = new Set<string>();
   const rows: SessionRow[] = [];
   const omoStatuses = new Map<string, string>();
+  const recordOmoStatus = (id: string | null, status: string) => {
+    if (id === null) return;
+    const previous = omoStatuses.get(id);
+    omoStatuses.set(id, previous === undefined || previous === status ? status : "unknown");
+  };
+  // A session may occur in several runtime files. Never let a later run erase
+  // conflicting activity, including runs whose leads have not been visited yet.
+  for (const runtime of team.teams) {
+    recordOmoStatus(runtime.leadSessionId, runtime.status);
+    for (const member of runtime.members) recordOmoStatus(member.sessionId, member.status);
+  }
 
   while (queue.length > 0 && rows.length < options.maxSessions) {
     const item = queue.shift();
     if (item === undefined || visited.has(item.id)) continue;
     visited.add(item.id);
     for (const runtime of team.teams.filter(({ leadSessionId }) => leadSessionId === item.id)) {
-      omoStatuses.set(item.id, runtime.status);
       for (const member of runtime.members) {
         if (member.sessionId === null) continue;
-        omoStatuses.set(member.sessionId, member.status);
         enqueue(member.sessionId, item.depth + 1);
       }
     }

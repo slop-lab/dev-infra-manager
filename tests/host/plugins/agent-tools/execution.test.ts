@@ -96,3 +96,36 @@ it("reports a deadline before the first observation without inventing idle evide
   const observe = (signal: AbortSignal) => new Promise<never>((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
   expect(await waitForExecutionChange({ observe, signal: new AbortController().signal, timeoutMs: 5 })).toEqual({ outcome: "timed-out", observations: 0, revision: null, evidence: null });
 });
+
+it.each([false, true])("keeps conflicting duplicate lead runs unknown in either metadata order (reverse=%s)", async reverse => {
+  const runs = ["active", "idle"].map(status => ({ leadSessionId: "ses_parent", status, modifiedAt: "2026-11-12T00:00:00.000Z", members: [] }));
+  const team = { source: "optional-omo-adapter", enabled: true, truncated: false, unreadable: false, teams: reverse ? runs.reverse() : runs };
+  const evidence = projectExecutionStatus(await inspectOpenCodeMonitor(options, team, client()));
+  expect(evidence).toMatchObject({ state: "unknown", sessions: [{ sessionId: "ses_parent", sourceDisagreement: true }] });
+  expect(parseExecutionStatus(evidence).state).toBe("unknown");
+});
+
+it.each([false, true])("preaggregates conflicting member runs before a later lead is traversed (reverse=%s)", async reverse => {
+  const runs = [
+    { leadSessionId: "ses_parent", status: "idle", modifiedAt: "2026-11-12T00:00:00.000Z", members: [{ sessionId: "ses_shared", status: "idle" }] },
+    { leadSessionId: "ses_later", status: "idle", modifiedAt: "2026-11-12T00:00:00.000Z", members: [{ sessionId: "ses_shared", status: "running" }] }
+  ];
+  const team = { source: "optional-omo-adapter", enabled: true, truncated: false, unreadable: false, teams: reverse ? runs.reverse() : runs };
+  const selected: MonitorClient = { async get(path, timeout) {
+    if (path === "/session?limit=8") return [{ id: "ses_parent" }, { id: "ses_shared", parentID: "ses_parent" }, { id: "ses_later", parentID: "ses_parent" }];
+    if (path === "/session/ses_parent/children") return [{ id: "ses_later", parentID: "ses_parent" }];
+    return client().get(path, timeout);
+  } };
+  const evidence = projectExecutionStatus(await inspectOpenCodeMonitor(options, team, selected));
+  expect(evidence.state).toBe("unknown");
+  expect(evidence.sessions.find(row => row.sessionId === "ses_shared")).toMatchObject({ sourceDisagreement: true });
+  expect(parseExecutionStatus(evidence).state).toBe("unknown");
+});
+
+it("preserves known API activity while duplicate team statuses disagree", async () => {
+  const team = { source: "optional-omo-adapter", enabled: true, truncated: false, unreadable: false,
+    teams: ["active", "idle"].map(status => ({ leadSessionId: "ses_parent", status, modifiedAt: "2026-11-12T00:00:00.000Z", members: [] })) };
+  const evidence = projectExecutionStatus(await inspectOpenCodeMonitor(options, team, client(true)));
+  expect(evidence).toMatchObject({ state: "active", parent: "active", sessions: [{ sourceDisagreement: true }] });
+  expect(parseExecutionStatus(evidence).state).toBe("active");
+});
