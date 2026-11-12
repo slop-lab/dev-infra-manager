@@ -17,14 +17,15 @@ async function fixture() {
   const home = await mkdtemp(join(tmpdir(), "dim-opencode-profile-")); roots.push(home);
   vi.stubEnv("HOME", home); vi.stubEnv("DIM_LLM_ROUTER_OPENCODE_MODE", "router");
   vi.stubEnv("XDG_CACHE_HOME", join(home, ".cache"));
+  vi.stubEnv("XDG_CONFIG_HOME", join(home, ".config"));
   vi.stubEnv("OPENCODE_CONFIG_CONTENT", '{"permission":{"bash":"ask"},"model":"explicit/original"}');
   const connection = join(home, "connection.json"); vi.stubEnv("DIM_LLM_ROUTER_CONNECTION_FILE", connection);
   await writeFile(connection, JSON.stringify({ schemaVersion: 1, endpoint: "http://127.0.0.1:8319", token: "x".repeat(43) }), { mode: 0o600 });
   await mkdir(join(home, ".omo")); await mkdir(join(home, ".local/lib/node_modules"), { recursive: true });
   const require = createRequire(import.meta.url);
   await symlink(dirname(require.resolve("jsonc-parser/package.json")), join(home, ".local/lib/node_modules/jsonc-parser"));
-  const adapter = join(home, ".config/opencode/plugins/dim-llm-router.mjs"); await mkdir(dirname(adapter), { recursive: true });
-  await writeFile(adapter, await readFile(new URL("../../../packages/host/plugins/llm-router/dist/opencode.js", import.meta.url)));
+  const adapter = join(home, ".config/opencode/plugins/dim-llm-router.mjs"); await mkdir(dirname(adapter), { recursive: true, mode: 0o700 });
+  await writeFile(adapter, await readFile(new URL("../../../packages/host/plugins/llm-router/dist/opencode.js", import.meta.url)), { mode: 0o600 });
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ models: [{ id: "reviewed", name: "Reviewed", api: "responses" }] })));
   return { home, connection, omo: join(home, ".omo/omo.jsonc") };
 }
