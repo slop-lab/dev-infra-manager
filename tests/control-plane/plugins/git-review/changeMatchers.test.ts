@@ -122,7 +122,7 @@ it("reads bounded exact candidate regular files and rejects traversal, links, di
       await expect(readAuthoritativeNativeCandidateFile(input, path)).rejects.toThrow(/normalized relative/);
     await expect(readAuthoritativeNativeCandidateFile(input, "rules/link.json")).rejects.toThrow(/regular file/);
     await expect(readAuthoritativeNativeCandidateFile(input, "rules")).rejects.toThrow(/regular file/);
-    await expect(readAuthoritativeNativeCandidateFile(input, "rules/oversized.json")).rejects.toThrow(/1 MiB/);
+    await expect(readAuthoritativeNativeCandidateFile(input, "rules/oversized.json")).rejects.toThrow(/byte limit/);
     await writeFile(join(f.source, "README.md"), "mutable working tree is not a matcher input\n");
     expect((await readAuthoritativeNativeCandidateFile(input, "README.md"))?.toString()).toBe("initial\n");
   } finally { await f.service.close(); await rm(f.root, { recursive: true, force: true }); }
