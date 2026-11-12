@@ -1,9 +1,10 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, writeFile, mkdir, rm, stat, chmod, symlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { sourceManifest, parseSourceManifest } from '../../../scripts/checks/source-manifest.js';
+import { gitWholeStoreFence } from '../../support/gitWholeStoreFence.js';
 const helper = new URL('../../../scripts/checks/lib/bootstrap-ubuntu-vm-source.bash', import.meta.url).pathname;
 function command(file: string, args: string[], cwd: string) { return spawnSync(file,args,{cwd,encoding:'utf8',timeout:30000,maxBuffer:1024*1024}); }
 function git(root: string,...args: string[]) { const r=command('git',args,root);expect(r.status,r.stderr).toBe(0);return r.stdout.trim(); }
@@ -30,21 +31,45 @@ it.each([false,true])('carries exact bounded source through canonical fetch, gue
   for(const bare of [true,false]){
    const target=join(f.root,bare?'bare':'guest');await mkdir(target);const result=importBundle(target,f.bundle,f.candidate,f.tree,f.parents,bare);expect(result.status,result.stderr).toBe(0);
    expect(git(target,'rev-parse','HEAD','HEAD^{tree}','HEAD^').split('\n')).toEqual([f.candidate,f.tree,f.parents[0]]);
-   git(target,'fsck','--strict','--full');expect(command('git',['cat-file','-e',f.ancestor],target).status).not.toBe(0);
+    expect(command('git',['cat-file','-e',f.ancestor],target).status).not.toBe(0);
    if(!bare){git(target,'checkout','--quiet','--detach',f.candidate);expect(git(target,'status','--porcelain=v1')).toBe('');}
   }
-  const cloned=join(f.root,'clone');git(f.root,'clone','--quiet','--no-local',join(f.root,'bare'),cloned);git(cloned,'fsck','--strict','--full');expect(git(cloned,'rev-parse','HEAD^')).toBe(f.parents[0]);expect(git(cloned,'status','--porcelain=v1')).toBe('');
+   const cloned=join(f.root,'clone');git(f.root,'clone','--quiet','--no-local',join(f.root,'bare'),cloned);expect(git(cloned,'rev-parse','HEAD^')).toBe(f.parents[0]);expect(git(cloned,'status','--porcelain=v1')).toBe('');
  }finally{await rm(f.root,{recursive:true,force:true});}
 });
-it('keeps full-history input explicit and rejects misleading or unrelated bounded ancestry',async()=>{
+it('imports a real bounded bundle without automatic fsck or an all-object catalog scan',async()=>{
+ const f=await fixture(false);
+ try{
+  await writeFile(join(f.repository,'.git/shallow'),f.parents.join('\n')+'\n');git(f.repository,'bundle','create',f.bundle,'HEAD');
+  vi.stubEnv('PATH',await gitWholeStoreFence(f.root));
+  const target=join(f.root,'selected');await mkdir(target);
+  const result=importBundle(target,f.bundle,f.candidate,f.tree,f.parents,true);
+  expect(result.status,result.stderr).toBe(0);
+  expect(git(target,'rev-parse','HEAD','HEAD^{tree}','HEAD^').split('\n')).toEqual([f.candidate,f.tree,f.parents[0]]);
+ }finally{vi.unstubAllEnvs();await rm(f.root,{recursive:true,force:true});}
+});
+it('checks exact bounded parent authority without inventorying unrelated history',async()=>{
  const f=await fixture(false);
  try{
   expect((await sourceManifest(f.repository)).boundedParents).toBeUndefined();git(f.repository,'bundle','create',f.bundle,'HEAD');
   const full=join(f.root,'full');await mkdir(full);expect(importBundle(full,f.bundle,f.candidate,f.tree,[],true).status).toBe(0);expect(git(full,'rev-parse','HEAD^^')).toBe(f.ancestor);
-  const extra=join(f.root,'extra');await mkdir(extra);const rejected=importBundle(extra,f.bundle,f.candidate,f.tree,f.parents,true);expect(rejected.status).not.toBe(0);expect(rejected.stderr).toContain('outside its immediate context');
+   const extra=join(f.root,'extra');await mkdir(extra);const selected=importBundle(extra,f.bundle,f.candidate,f.tree,f.parents,true);expect(selected.status,selected.stderr).toBe(0);expect(git(extra,'rev-list','--count','HEAD')).toBe('2');
   const wrong=join(f.root,'wrong');await mkdir(wrong);const mismatch=importBundle(wrong,f.bundle,f.candidate,f.tree,[f.ancestor],true);expect(mismatch.status).not.toBe(0);expect(mismatch.stderr).toContain('do not match raw candidate');
   await writeFile(join(f.repository,'.git/shallow'),f.ancestor+'\n');await expect(sourceManifest(f.repository)).rejects.toThrow('exactly every immediate parent');
  }finally{await rm(f.root,{recursive:true,force:true});}
+});
+it.each([false,true])('rejects a semantically malformed received commit through incremental pack checks (bounded=%s)',async bounded=>{
+ const f=await fixture(false);
+ try{
+  const malformed=spawnSync('/usr/bin/git',['-C',f.repository,'hash-object','--literally','-t','commit','-w','--stdin'],{
+   input:`tree ${f.tree}\nparent ${f.parents[0]}\ncommitter fixture <fixture@example.invalid> 1 +0000\n\nmissing author\n`,encoding:'utf8',timeout:10000});
+  expect(malformed.status,malformed.stderr).toBe(0);const sha=malformed.stdout.trim();git(f.repository,'update-ref','HEAD',sha);
+  if(bounded)await writeFile(join(f.repository,'.git/shallow'),f.parents.join('\n')+'\n');
+  git(f.repository,'bundle','create',f.bundle,'HEAD');
+  vi.stubEnv('PATH',await gitWholeStoreFence(f.root));
+  const target=join(f.root,'received');await mkdir(target);const result=importBundle(target,f.bundle,sha,f.tree,bounded?f.parents:[],true);
+  expect(result.status).not.toBe(0);expect(result.stderr).toMatch(/missingAuthor|invalid.*commit|fsck error|malformed/i);
+ }finally{vi.unstubAllEnvs();await rm(f.root,{recursive:true,force:true});}
 });
 it('rejects malformed, empty, duplicated, oversized or additional source manifest fields',()=>{
  const base={schemaVersion:1,sourceSha:'a'.repeat(40),sourceTree:'b'.repeat(40)};
