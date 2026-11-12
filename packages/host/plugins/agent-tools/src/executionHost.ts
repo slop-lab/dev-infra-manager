@@ -54,18 +54,19 @@ function parseExecutionInput(input: unknown, wait: boolean) {
 }
 
 export async function executionCapabilities(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext): Promise<readonly WorkspaceCapabilityFact[]> {
-  let available = false;
+  let available = false, producer = false;
   if (workspace.initialized && workspace.phase === "running") {
     const ignored = () => new Writable({ write(_chunk, _encoding, done) { done(); } });
     const stdout = ignored(), stderr = ignored();
     try {
       available = await context.service.exec(workspace.name, ["bash", "-c", 'for file in execution/guest.ts execution/cli.ts execution/status.ts execution/projection.ts execution/monitor.ts execution/monitorMetadata.ts execution/monitorClient.ts execution/package.json opencode-server.bash opencode-runtime.bash opencode-team-metadata.mjs; do test -f "$HOME/.local/share/dim-agent-tools/$file" || exit 1; done'], { workspaceId: workspace.id, signal: AbortSignal.any([context.signal, AbortSignal.timeout(3000)]), stdout, stderr }) === 0;
+      producer = available && await context.service.exec(workspace.name, ["bash", "-c", 'for file in taskContract.ts taskJournal.ts taskHttp.ts taskOwned.ts taskGuest.ts taskCli.ts taskInput.ts; do test -f "$HOME/.local/share/dim-agent-tools/execution/$file" || exit 1; done; command -v flock >/dev/null'], { workspaceId: workspace.id, signal: AbortSignal.any([context.signal, AbortSignal.timeout(3000)]), stdout, stderr }) === 0;
     } catch { context.signal.throwIfAborted(); }
     finally { stdout.destroy(); stderr.destroy(); }
   }
   return [
     { name: "coding-agent-execution-status", description: "Read bounded OpenCode task, child and team activity; unknown is not idle and completion is not assessed", state: available ? "available" : "blocked", access: available ? { kind: "guest-operation", operation: "execution-status" } : { kind: "none" },
       ...(available ? {} : { reason: { code: "execution-adapter-unavailable", message: "The running workspace needs the reviewed agent-tools execution adapter; discovery never deploys it." } }) },
-    { name: "coding-agent-task-submission", description: "Submit or message a coding-agent task", state: "unavailable", access: { kind: "none" }, reason: { code: "no-task-producer", message: "Agent-tools owns lifecycle and observation, but has no typed task-message submission operation. Direct OpenCode task delivery is not a DIM task API." } }
+    { name: "coding-agent-task-submission", description: "Submit explicit OpenCode task text with a durable no-resend request guard", state: producer ? "available" : "blocked", access: producer ? { kind: "guest-operation", operation: "task-submit" } : { kind: "none" }, ...(producer ? {} : { reason: { code: "task-producer-unavailable", message: "The reviewed task producer closure, server identity helper and flock must be installed; discovery does not deploy or repair them." } }) }
   ];
 }

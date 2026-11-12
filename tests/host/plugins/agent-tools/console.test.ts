@@ -133,13 +133,13 @@ it("exposes execution status through the scoped operation without deployment, se
   expect(execute).toHaveBeenCalledTimes(2);
 }));
 
-it("advertises the status adapter separately from the missing task-message producer", async () => fixture(async (context, workspace) => {
+it("advertises status and the guarded task-message producer only when their closures are present", async () => fixture(async (context, workspace) => {
   const execute = vi.spyOn(context.service, "exec").mockResolvedValue(0);
   expect(await hostPlugin.workspaceCapabilities?.(workspace, context)).toMatchObject([
     { name: "coding-agent-execution-status", state: "available", access: { kind: "guest-operation", operation: "execution-status" } },
-    { name: "coding-agent-task-submission", state: "unavailable", access: { kind: "none" }, reason: { code: "no-task-producer" } }
+    { name: "coding-agent-task-submission", state: "available", access: { kind: "guest-operation", operation: "task-submit" } }
   ]);
-  expect(execute).toHaveBeenCalledTimes(1);
+  expect(execute).toHaveBeenCalledTimes(2);
   execute.mockResolvedValue(1);
-  expect(await hostPlugin.workspaceCapabilities?.(workspace, context)).toMatchObject([{ state: "blocked", reason: { code: "execution-adapter-unavailable" } }, { state: "unavailable" }]);
+  expect(await hostPlugin.workspaceCapabilities?.(workspace, context)).toMatchObject([{ state: "blocked", reason: { code: "execution-adapter-unavailable" } }, { state: "blocked", reason: { code: "task-producer-unavailable" } }]);
 }));

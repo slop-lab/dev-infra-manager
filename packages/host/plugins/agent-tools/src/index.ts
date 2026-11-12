@@ -3,6 +3,8 @@ import { UserError } from "@slop-lab/dim-host-core/workspace";
 import { type WorkspaceHostPlugin } from "@slop-lab/dim-host-core/plugin-api";
 import { runToolsConsole } from "./console.js";
 import { executionCapabilities, executionStatus } from "./executionHost.js";
+import { taskWorkspaceOperation } from "./taskHost.js";
+export type { TaskRequest, TaskTarget, TaskLookup, TaskReceipt } from "./execution/taskContract.ts";
 
 export const hostPlugin: WorkspaceHostPlugin = {
   name: "agent-tools",
@@ -14,10 +16,16 @@ export const hostPlugin: WorkspaceHostPlugin = {
       { name: "dim-tools-setup", description: "Install opencode or codex explicitly; this may download pinned npm packages" },
       { name: "dim-agent", description: "Run opencode or codex when configured, with persistent continuation support" },
       { name: "dim-opencode-server", description: "Run the configured OpenCode Web backend" },
-      { name: "dim-agent-execution", description: "Read coding-agent task/subagent status or wait for a bounded semantic change" }
+      { name: "dim-agent-execution", description: "Read coding-agent task/subagent status or wait for a bounded semantic change" },
+      { name: "dim-agent-task", description: "Submit explicit task content or inspect its durable request receipt without blind retries" }
     ],
     inspect: inspectTools,
-    operations: [{ name: "execution-status", description: "Inspect an existing OpenCode task and subagents without starting or changing them", handle: executionStatus }]
+    operations: [
+      { name: "execution-status", description: "Inspect an existing OpenCode task and subagents without starting or changing them", handle: executionStatus },
+      { name: "task-identity", description: "Read the exact owned OpenCode server identity before task submission", handle: (input, workspace, context) => taskWorkspaceOperation("task.identity", input, workspace, context) },
+      { name: "task-submit", description: "Create or message a session with an explicit guarded request ID and task text", handle: (input, workspace, context) => taskWorkspaceOperation("task.submit", input, workspace, context) },
+      { name: "task-request", description: "Read a durable task request receipt without redelivering content", handle: (input, workspace, context) => taskWorkspaceOperation("task.request", input, workspace, context) }
+    ]
   },
   commands: [{ name: "tools", description: "Set up and run user-owned coding-agent tools without repository bootstrap files" }],
   async run(args, context) {
