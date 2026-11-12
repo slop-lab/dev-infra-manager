@@ -243,8 +243,11 @@ CPU/memory blindly. Check current generation/policy, protected/source refs,
 review inputs and Git proof/reconciliation load. A stale source needs a fresh
 review; repeated retries of old immutable input do not refresh it.
 
-Large repositories still receive strict full Git integrity verification. Proofs
-are reused only within one request and followed by current authority/ref/input
+Repositories retain incremental received-object integrity and bounded selected
+commit/tree/blob validation, not automatic whole-repository fsck or equivalent
+whole-history/object scans. First-import archive/bundle size and SHA-256 checks
+remain; ordinary reads do not rehash retained bundles or inventory all objects.
+Proofs are reused only within one request and followed by current authority/ref/input
 checks, never a cross-request stale authorization cache. Policy reconciliation
 uses its bounded retry mechanism rather than delaying the committed policy
 response on historical proposals. Git admission deadlines are nested beneath

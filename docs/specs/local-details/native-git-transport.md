@@ -109,17 +109,29 @@ deleted to regain capacity. Private staging recovery validates identity, inode,
 ownership and link count; uncommitted single-link staging is discarded without
 overwriting a canonical record, while published two-link staging is reconciled.
 
-The service MAY retain a process-local immutable-root attestation to avoid
-repeating the durable bundle SHA-256 and repository-wide strict `fsck`. Such an
-attestation MUST be scoped to the live storage owner and exact imported authority,
-including owner, registration, import generation/nonce/receipt and pinned Git
-executable. Reuse MUST also match the bundle and repository identities plus a
-recursively captured exact Git object-store metadata snapshot; an object-directory
-mtime alone is insufficient. There is no time-based or persisted validity:
-restart, replacement, in-place writes and trusted object mutations require a new
-complete proof. Activation, current database authority/policy/head, storage
-ownership, refs, exact commit/tree and ancestry remain live checks on every use,
-with pre/post storage and authority checks rejecting concurrent change.
+First import MUST verify the declared archive/bundle size and SHA-256 and retain
+safe extraction, immutable import intent, durable bundle/source binding and exact
+ref/commit/tree validation. Git receipt retains incremental received-object
+validation through `fetch.fsckObjects`, `transfer.fsckObjects` and
+`receive.fsckObjects` as appropriate. This is bounded input integrity, not a
+repository-wide scan.
+
+Ordinary import, startup, proof/read, review, candidate acquisition and export
+MUST NOT run whole-repository `git fsck` or an equivalent automatic whole-object
+scan. Ordinary reads MUST NOT rehash the full retained bundle or recursively
+inventory object storage, even to validate an attestation cache. Service-owned
+trusted storage relies on private bare-repository root/ancestor ownership,
+non-symlink/static path gates, exact live authority/ref/target validation and
+bounded selected commit/tree/blob integrity checks. Activation, generation,
+effective policy, protected heads, ownership and selected target identities
+remain live authority checks; removing whole-store scans does not waive them.
+Unrelated object-store or retained-bundle tamper detection is not claimed.
+
+Whole-repository integrity inspection belongs only to an explicit operator
+action or an already-defined genuine failure-recovery operation, never routine
+preparation. This contract adds no check CLI, automatic repair, replacement
+scan or compatibility attestation API. Real selected-object failure must fail
+clearly rather than silently repair or accept another source.
 
 An operator merge preparation may select an ordinary direct branch in the same
 owned repository as its source; only its target must be policy-managed. Source

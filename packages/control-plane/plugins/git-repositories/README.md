@@ -49,21 +49,15 @@ change policy or refs, or grant any new authority. Local Project names and
 configuration/default working repository choices belong to the host plugin and
 are not part of this service catalog.
 
-Attachment proof performs the complete read-only Git inspection, including full
-`fsck` and durable bundle SHA-256, on the first proof in each service process and
-after any meaningful immutable-root change. A process-local attestation may
-reuse only those two expensive results. It is scoped to the live state owner and
-binds the exact registration, owner, import generation/nonce/receipt, pinned Git
-executable, bundle inode metadata, repository inode and recursively captured Git
-object metadata. Replacement, in-place writes, trusted object installation and
-process restart therefore require a new complete proof; no TTL or persisted
-cache exists. Every request still checks exact activation, live database
-authority/policy/head, storage ownership and modes, bundle identity, the complete
-allowed ref namespace, commit/tree identity and ancestry, with pre/post storage
-snapshots and final authority rereads. A repository proof has a 30-second ceiling,
-while the complete HTTP attachment request has an 80-second deadline. The request
-deadline remains authoritative for a multi-repository Project, and disconnect
-cancels the active Git inspection.
+Attachment proof checks the durable import bundle's private path and recorded size,
+exact activation, live database authority/policy/head, private repository ownership, the complete
+allowed ref namespace, and the selected commit/tree identities and ancestry.
+Import validates received pack objects through Git's transfer fsck policy; later
+reads do not run whole-repository `fsck` or recursively attest unrelated object
+metadata. Final authority rereads detect concurrent state changes. A repository
+proof has a 30-second ceiling, while the complete HTTP attachment request has an
+80-second deadline. The request deadline remains authoritative for a
+multi-repository Project, and disconnect cancels the active Git inspection.
 
 `hostId` is a configured host authority. Exporting the same role bundle to
 multiple machines shares that authority; it does not create per-machine grants.

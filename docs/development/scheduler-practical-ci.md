@@ -40,8 +40,10 @@ parent baseline. A root commit cannot qualify an upgrade because it has no
 baseline. Git bundles do not preserve a repository’s shallow boundary. Canonical source
 manifests therefore carry optional `boundedParents` naming exactly every immediate
 parent. Both the operator validator and pristine guest importer verify that list
-against the raw candidate and reject extra commit ancestry before applying the
-boundary, fetching and running strict object verification. Full-history manifests
+against the raw candidate before accepting the selected source. The declared
+boundary permits a normal fetch with incremental received-object checks; no
+whole-repository fsck or all-object inventory is run. Any additional received
+objects are not selected source authority. Full-history manifests
 omit the field. This preserves exact commit/tree identity without inventing a
 snapshot commit or exposing history. The wrapper installs the pinned
 source tools, builds the exact source, then invokes the unmodified canonical
