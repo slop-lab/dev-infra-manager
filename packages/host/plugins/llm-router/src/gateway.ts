@@ -83,10 +83,14 @@ export async function createHostGateway(config: HostRouterConfig, store: Workspa
           routeId: text(row.routeId), principalId: text(row.principalId), cpToken: text(row.cpToken) };
         if (!/^[A-Za-z0-9_-]{43}$/.test(grant.cpToken) || (!await current(grant) || !await bound(grant, token))) return deny(response, 401);
       } catch { return deny(response, 401); }
+      const sessionHeaders = incoming.rawHeaders.filter((_, index) => index % 2 === 0 && incoming.rawHeaders[index]?.toLowerCase() === "x-dim-session-id");
+      const sessionId = incoming.headers["x-dim-session-id"];
+      if (sessionHeaders.length > 1 || sessionId !== undefined && (typeof sessionId !== "string" || !/^[A-Za-z0-9_.:-]{1,200}$/.test(sessionId))) return deny(response, 400);
       if (response.destroyed || closing !== undefined) return;
       const target = new URL(config.connection.endpoint + path);
       const remote = (target.protocol === "https:" ? httpsRequest : httpRequest)(target, { method: incoming.method, timeout: 0,
-        headers: { authorization: `Bearer ${grant.cpToken}`, "content-type": "application/json", accept: incoming.headers.accept ?? "application/json" } });
+        headers: { authorization: `Bearer ${grant.cpToken}`, "content-type": "application/json", accept: incoming.headers.accept ?? "application/json",
+          ...(sessionId === undefined ? {} : { "x-dim-session-id": sessionId }) } });
       let finished = false, checking = false;
       const stop = () => { remote.destroy(); incoming.unpipe(remote); if (!response.writableEnded) response.destroy(); };
       const cleanup = () => { if (finished) return; finished = true; clearInterval(watch); active.delete(stop);

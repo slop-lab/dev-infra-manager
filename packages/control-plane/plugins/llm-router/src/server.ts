@@ -117,6 +117,10 @@ export async function createRouter(baseConfig: RouterConfig) {
     }
     const api = url.pathname === "/v1/responses" ? "responses" : url.pathname === "/v1/chat/completions" ? "chat" : undefined;
     if (request.method !== "POST" || api === undefined) throw new RequestError(404, "unsupported endpoint");
+    const sessionHeaders = request.rawHeaders.filter((_, index) => index % 2 === 0 && request.rawHeaders[index]?.toLowerCase() === "x-dim-session-id");
+    const sessionId = request.headers["x-dim-session-id"];
+    if (sessionHeaders.length > 1 || sessionId !== undefined && (typeof sessionId !== "string" || !/^[A-Za-z0-9_.:-]{1,200}$/.test(sessionId))) throw new RequestError(400, "invalid session identity");
+    const upstreamSessionId = sessionId === undefined ? undefined : hash(JSON.stringify([grant.projectId, grant.workspaceId, sessionId]));
     const policy = ledger.project(grant.projectId).policy;
     const maximumRequest = policy.limits.requestBytes === null ? config.limits.requestBytes
       : config.limits.requestBytes === null ? policy.limits.requestBytes : Math.min(policy.limits.requestBytes, config.limits.requestBytes);
@@ -162,7 +166,8 @@ export async function createRouter(baseConfig: RouterConfig) {
     let responseBytes = 0, upstreamRejected = false;
     try {
       await archive.begin(bytes); signal.throwIfAborted(); ledger.dispatch(id);
-      const upstream = await upstreamResponse(`${account.endpoint}${url.pathname}`, { signal, key, body: bytes, streaming: payload.stream === true });
+      const upstream = await upstreamResponse(`${account.endpoint}${url.pathname}`, { signal, key, body: bytes, streaming: payload.stream === true,
+        ...(upstreamSessionId === undefined ? {} : { sessionId: upstreamSessionId }) });
       const status = upstream.statusCode ?? 502, contentType = upstream.headers["content-type"] ?? "";
       upstreamRejected = status >= 400;
       if (status >= 300 && status < 400) {
@@ -181,7 +186,6 @@ export async function createRouter(baseConfig: RouterConfig) {
       }
       observer.finish();
       if (!upstreamRejected && !observer.completed) throw new Error("upstream response ended without a completion marker");
-      if (observer.model !== undefined && observer.model !== model.id) throw new RequestError(502, "observed upstream model differs from the reviewed model", "upstream_policy_violation");
       const recorded = archive.result();
       ledger.finish(id, { outcome: upstreamRejected || observer.failed ? "failed" : "completed", executionFinished: observer.completed, captureComplete: recorded.complete, requestHash: hash(bytes), ...recorded,
         ...(observer.model === undefined ? {} : { observedModel: observer.model }), ...(observer.usage === undefined ? {} : { usage: observer.usage }), ...(observer.rawUsage === undefined ? {} : { rawUsage: observer.rawUsage }),

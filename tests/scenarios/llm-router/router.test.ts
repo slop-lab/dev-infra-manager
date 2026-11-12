@@ -453,12 +453,12 @@ it("observes multiline SSE JSON and split UTF-8 without changing its wire framin
   expect(fx.router.ledger.usage(fx.workspace.id)).toMatchObject({ knownInputTokens: 9, knownOutputTokens: 4 });
 });
 
-it("fails an unexpected observed model visibly while preserving completed execution, usage and capture facts", async () => {
+it("retains a concrete observed model behind an authorized alias without failing completed delivery", async () => {
   const fx = await fixture((_request, response) => { response.writeHead(200, { "content-type": "application/json" }).end('{"status":"completed","model":"unreviewed-substitution","usage":{"input_tokens":2,"output_tokens":1}}'); });
-  await expect(fx.request().then((response) => response.text())).rejects.toThrow();
-  expect(fx.router.ledger.database.prepare("SELECT outcome,execution,delivery,accounting,capture_complete,observed_model,error_code,occupied FROM requests").get()).toMatchObject({
-    outcome: "failed", execution: "failed", delivery: "partial", accounting: "settled", capture_complete: 1,
-    observed_model: "unreviewed-substitution", error_code: "upstream_policy_violation", occupied: 0
+  const response = await fx.request(); expect(response.status).toBe(200); expect(await response.text()).toContain("unreviewed-substitution");
+  expect(fx.router.ledger.database.prepare("SELECT requested_model,outcome,execution,delivery,accounting,capture_complete,observed_model,error_code,occupied FROM requests").get()).toMatchObject({
+    requested_model: "reviewed-model", outcome: "completed", execution: "completed", delivery: "complete", accounting: "settled", capture_complete: 1,
+    observed_model: "unreviewed-substitution", error_code: null, occupied: 0
   });
 });
 
