@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,7 +17,8 @@ const values = { DIM_TEST_KVM_IMAGE: requiredEnvironment("DIM_TEST_KVM_IMAGE"),
 if (process.platform !== "linux" || process.arch !== "x64") throw new Error("vm-runtime-acceptance requires Linux x86-64");
 const kvm = await lstat("/dev/kvm");
 if (!kvm.isCharacterDevice()) throw new Error("vm-runtime-acceptance requires the real /dev/kvm character device");
-await run("test", ["-r", "/dev/kvm"]); await run("test", ["-w", "/dev/kvm"]);
+const kvmHandle = await open("/dev/kvm", constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+await kvmHandle.close();
 const kvmDeviceId = (await capture("stat", ["-Lc", "%t:%T", "/dev/kvm"])).trim();
 if (!/^[a-f0-9]+:[a-f0-9]+$/.test(kvmDeviceId)) throw new Error("could not identify the real /dev/kvm device");
 await run("docker", ["info"]);
