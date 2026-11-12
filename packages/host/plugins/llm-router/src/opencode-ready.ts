@@ -18,7 +18,21 @@ export async function verifyOpenCodeServer(credentialsFile: string, port: number
   const config = object(await get("/config")), providers = object(config.provider);
   const mode = process.env.DIM_LLM_ROUTER_OPENCODE_MODE ?? "router";
   if (mode !== "router" && mode !== "providers") throw new Error("invalid DIM OpenCode routing mode");
-  const ids = mode === "providers" ? ["dim-responses", "dim-chat"] : ["openai"];
+  const tiers = "tiers" in connection && connection.tiers !== undefined ? object(connection.tiers) : undefined;
+  if (tiers) {
+    if (mode !== "router" || Object.keys(tiers).length !== 3 || !["quick", "standard", "deep"].every((tier) =>
+      typeof tiers[tier] === "string" && /^[^\s\x00-\x1f\x7f]{1,200}$/.test(String(tiers[tier])) && String(tiers[tier]).trim() === tiers[tier])) {
+      throw new Error("invalid owned OpenCode tier configuration");
+    }
+    const models = providers["dim-chat"] === undefined ? {} : object(object(providers["dim-chat"]).models);
+    if (!Array.isArray(config.enabled_providers) || config.enabled_providers.length !== 1 || config.enabled_providers[0] !== "dim-chat"
+      || Array.isArray(config.disabled_providers) && config.disabled_providers.includes("dim-chat")
+      || config.model !== "dim-chat/standard" || config.small_model !== "dim-chat/quick"
+      || !Object.entries(tiers).every(([tier, target]) => models[tier] !== undefined && object(models[tier]).id === target)) {
+      throw new Error("owned OpenCode server did not load the selected tiers without provider fallback");
+    }
+  }
+  const ids = tiers ? ["dim-chat"] : mode === "providers" ? ["dim-responses", "dim-chat"] : ["openai"];
   const routed = ids.some((id) => {
     if (providers[id] === undefined) return false;
     const options = object(object(providers[id]).options);
