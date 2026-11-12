@@ -166,6 +166,41 @@ and attachment disposition. Model bodies pass unchanged; unsupported provider
 continuation/account-routing fields fail explicitly. `x-dim-request-id` supplies
 a service ID without overwriting provider response or tool IDs.
 
+## Session affinity and upstream model aliases
+
+An inference request may supply one `x-dim-session-id` header containing
+1–200 characters from `[A-Za-z0-9_.:-]`. The host gateway validates and forwards
+only this session header in addition to its existing protocol headers; it still
+replaces guest authorization with the attachment's CP credential. Repeated or
+malformed session headers fail before upstream dispatch. The CP validates the
+header independently and sends `x-session-id` upstream as the SHA-256 hex digest
+of `JSON.stringify([projectId, workspaceId, sessionId])`, using the authenticated
+principal's project and immutable workspace UUID. Reissuing a principal for the
+same workspace does not change this namespace. Another workspace, project or
+child session has a different key. Session identity grants no authority to select
+an account, route or otherwise unauthorized model.
+
+Without `x-dim-session-id`, DIM omits the upstream session header and treats the
+call independently; it does not invent a session from request content. Caller
+`x-session-id`, arbitrary routing headers and caller credentials are not relayed.
+An upstream may implement its own behavior for headerless requests.
+
+Model authorization applies to the requested route selector. An authorized
+alias may resolve to a different concrete response `model`; DIM preserves the
+response and streaming frames unchanged, records both requested and observed
+model names, and does not fail a completed response merely because they differ.
+Usage, capture, termination and authorization checks still apply separately.
+
+For FreeLLMAPI, use a static account with its direct `endpoint` and private
+`keyFile` (omit `provider`, which selects a managed backend). Register its intended
+selectors in the route inventory. This gives the tested direct HTTP path for
+`x-session-id`; forwarding through a managed CLIProxyAPI account is unverified.
+The [reviewed FreeLLMAPI implementation](https://github.com/tashfeenahmed/freellmapi/blob/e03d74d9581f2f371306e6c269036b98c4d78083/server/src/routes/proxy.ts)
+prefers a sticky `model_db_id` with a 30-minute inactivity TTL held in process
+memory. A restart clears that preference, and availability/failover can change
+the selected model. Provider credential/key selection is independent. This is
+a model preference, not a guarantee of the exact same provider or API key.
+
 ## Backup and restore
 
 ```sh
