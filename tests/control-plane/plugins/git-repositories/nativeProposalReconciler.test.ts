@@ -1,12 +1,10 @@
 import { spawn } from "node:child_process";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { repositoryPolicyRevision as nativeRepositoryPolicyRevision } from "@slop-lab/gs-repository-contracts";
-import * as rootProofGit from "../../../../packages/control-plane/plugins/git-repositories/src/native-root-import-proof-git.js";
+import { afterEach, describe, expect, it } from "vitest";
 import { isCandidateAbsorbed, reconcileNativeProposalRefs, reconcileRegisteredNativeProposals } from "../../../../packages/control-plane/plugins/git-review/src/native-proposal-reconciler.js";
 import {
   readNativeProposalRefs
 } from "../../../../packages/control-plane/plugins/git-repositories/src/native-proposal-reconciler.js";
-import { authoritativePolicy, candidateContext } from "./authoritativeNativeCandidateFixture.js";
+import { candidateContext } from "./authoritativeNativeCandidateFixture.js";
 import {
   cleanupFinalizeFixtures,
   closeFinalizeService,
@@ -19,7 +17,7 @@ import {
   reviewWorkspaceId
 } from "../git-ci/nativeBundleReviewFixture.js";
 
-afterEach(async () => { vi.restoreAllMocks(); await cleanupFinalizeFixtures(); });
+afterEach(cleanupFinalizeFixtures);
 
 describe("native proposal ref reconciliation bounds", () => {
   it("skips absorbed proposal refs during startup while retaining fresh reconciliation and explicit retry", async () => {
@@ -45,34 +43,6 @@ describe("native proposal ref reconciliation bounds", () => {
     ));
     expect(retry).toHaveLength(1);
     expect(retry[0]?.review.proposalRef).toBe(reviewProposalRef);
-  });
-
-  it("shares immutable proof across branch reconciliation batches", async () => {
-    // Given: several proposals share the same two authoritative branch targets.
-    const policyInput = { ...authoritativePolicy(), defaultRef: "refs/heads/main", branches: {
-      "refs/heads/main": { review: true }, "refs/heads/development": { review: false }
-    } };
-    const policy = { ...policyInput, policyRevision: nativeRepositoryPolicyRevision(policyInput) };
-    const fixture = await nativeBundleReviewFixture("reconciliation-proof-reuse", undefined, policy);
-    const candidate = (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD"])).stdout.trim();
-    const refs = ["one", "two", "three"].map((name) => `refs/heads/proposals/${reviewWorkspaceId}/${name}`);
-    await runGitInput(rootRepository(fixture.root), refs.map((ref) => `update ${ref} ${candidate}\n`).join(""));
-    const proofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootReadOnly");
-
-    // When
-    const first = await fixture.service.context.serialize(() => reconcileNativeProposalRefs(
-      fixture.service.context.runtime, "project-a", "root", refs
-    ));
-
-    // Then: branch authority remains live while startup's unchanged immutable proof is reused.
-    expect(first).toHaveLength(6);
-    expect(proofs).not.toHaveBeenCalled();
-    proofs.mockClear();
-    const second = await fixture.service.context.serialize(() => reconcileNativeProposalRefs(
-      fixture.service.context.runtime, "project-a", "root", refs
-    ));
-    expect(second).toHaveLength(6);
-    expect(proofs).not.toHaveBeenCalled();
   });
 
   it("rejects more than ten thousand proposal refs", async () => {

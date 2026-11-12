@@ -19,7 +19,7 @@ import {
 } from "./native-project-root-import-state.js";
 import { nativeProjectStorageNames } from "./native-project-storage.js";
 import { assertRepositoryRefTransitions, repositoryRefTransitionSchema } from "./repository-ref-state.js";
-import { assertDurableNativeRootBundle } from "./native-root-import-storage.js";
+import { assertDurableNativeRootBundle, assertDurableNativeRootBundleStatic } from "./native-root-import-storage.js";
 import {
   inspectNativeRootImportStaging,
   type NativeRootImportReconciliation
@@ -73,8 +73,11 @@ export async function validateNativeGitBundleStateFiles(
     const persisted = assertDatabaseSchema(database, stateFormat);
     await assertKnownEntries(stateDirectory, entries, nativeProjectStorageNames(persisted.registrations));
     await Promise.all(persisted.imports.filter((entry) => entry.phase !== "intent").map((entry) =>
-      assertDurableNativeRootBundle(stateDirectory, entry.projectId, entry.repositoryId, entry.importNonce,
-        entry.bundleDigest, entry.bundleSize)));
+      entry.phase === "repository-imported"
+        ? assertDurableNativeRootBundleStatic(stateDirectory, entry.projectId, entry.repositoryId,
+          entry.importNonce, entry.bundleSize)
+        : assertDurableNativeRootBundle(stateDirectory, entry.projectId, entry.repositoryId, entry.importNonce,
+          entry.bundleDigest, entry.bundleSize)));
     if (marker.schemaManifestSha256 !== schemaManifestSha256(marker.stateFormat)) {
       throw new NativeGitBundleStateError("native Git bundle marker does not match the database schema manifest");
     }

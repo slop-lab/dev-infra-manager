@@ -14,7 +14,7 @@ import { dimWorkflowCompiler } from "../../../../packages/control-plane/plugins/
 
 afterEach(async () => { vi.restoreAllMocks(); await cleanupFinalizeFixtures(); });
 
-it("reuses immutable proof across required CI jobs while checking live storage on each HTTP request", async () => {
+it("revalidates selected-root authority on each CI status HTTP request without whole-store attestation", async () => {
   // Given: two required jobs have actual grant/result records from the authority HTTP API.
   const f = await nativeBundleReviewFixture("ci-status-proof-reuse");
   const envelope = (await publishedReviewEnvelopes(f.root))[0];
@@ -45,7 +45,6 @@ it("reuses immutable proof across required CI jobs while checking live storage o
   const read = () => fetch(`${f.service.origin}/v1/projects/project-a/repositories/root/reviews/${envelope.review.reviewId}/ci`, {
     headers: { authorization: humanReviewerAuthorization, "x-dim-generation-id": generationId }
   });
-  const proofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootReadOnly");
   const liveProofs = vi.spyOn(rootProofGit, "inspectImportedNativeRootLive");
 
   // When
@@ -54,11 +53,9 @@ it("reuses immutable proof across required CI jobs while checking live storage o
   // Then
   expect(first.status, await first.clone().text()).toBe(200);
   expect(await first.json()).toMatchObject({ state: "succeeded", requiredJobs: [{ status: "succeeded" }, { status: "succeeded" }] });
-  expect(proofs).not.toHaveBeenCalled();
   const firstLiveProofs = liveProofs.mock.calls.length;
   expect(firstLiveProofs).toBeGreaterThan(0);
   expect((await read()).status).toBe(200);
-  expect(proofs).not.toHaveBeenCalled();
   expect(liveProofs.mock.calls.length).toBeGreaterThan(firstLiveProofs);
   await expect(currentExecutionEvidence({ ...f.service.context.runtime,
     expectedGenerationId: "b".repeat(64), workflowCompiler: dimWorkflowCompiler }, rootRepository(f.root), envelope.events[0]!))

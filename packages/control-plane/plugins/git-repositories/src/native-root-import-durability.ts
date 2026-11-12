@@ -33,6 +33,24 @@ export async function syncNativeRootObjectStore(repository: string): Promise<voi
   await syncDirectory(repository);
 }
 
+export async function assertNativeRootObjectStoreRoots(repository: string): Promise<void> {
+  const objects = join(repository, "objects");
+  const info = join(objects, "info");
+  await assertOwnedDirectory(repository);
+  await assertOwnedDirectory(objects);
+  await assertOwnedDirectory(info);
+  await assertOwnedDirectory(join(objects, "pack"));
+  await Promise.all(["alternates", "http-alternates"].map(async (name) => {
+    try {
+      await lstat(join(info, name));
+      throw new NativeRootImportBundleError("native root alternate object storage is forbidden");
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+      throw error;
+    }
+  }));
+}
+
 export async function syncNativeRootProtectedRef(repository: string, protectedRef: string): Promise<void> {
   const path = join(repository, protectedRef);
   await syncOwnedFile(path);

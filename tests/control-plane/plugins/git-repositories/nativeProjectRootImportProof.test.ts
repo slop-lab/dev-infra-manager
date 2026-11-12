@@ -184,8 +184,8 @@ describe("native Project imported root proof", () => {
     expect(response.status).not.toBe(200);
   });
 
-  it.each(["moved ref", "reserved ref", "corrupt bundle", "corrupt graph",
-    "repository symlink", "missing owner marker"] as const)(
+  it.each(["moved ref", "reserved ref", "corrupt graph",
+    "repository symlink", "objects symlink", "missing owner marker"] as const)(
     "does not prove a %s",
     async (failure) => {
       // Given
@@ -200,15 +200,15 @@ describe("native Project imported root proof", () => {
       } else if (failure === "reserved ref") {
         await runGit("/usr/bin/git", ["--git-dir", repository, "update-ref", "refs/dim/unowned",
           fixture.bundle.commit, "0".repeat(40)]);
-      } else if (failure === "corrupt bundle") {
-        const path = bundlePath(fixture.root, fixture.receipt);
-        const bytes = await readFile(path);
-        bytes[bytes.length - 1] = (bytes[bytes.length - 1] ?? 0) ^ 1;
-        await writeFile(path, bytes, { mode: 0o600 });
       } else if (failure === "repository symlink") {
         const displaced = join(fixture.root, "detached-root.git");
         await rename(repository, displaced);
         await symlink(displaced, repository);
+      } else if (failure === "objects symlink") {
+        const objects = join(repository, "objects");
+        const displaced = join(repository, "detached-objects");
+        await rename(objects, displaced);
+        await symlink(displaced, objects);
       } else if (failure === "missing owner marker") {
         await rm(join(fixture.root, "project-a", ".dim-native-project-owner"));
       } else {
@@ -225,7 +225,7 @@ describe("native Project imported root proof", () => {
         () => proof(fixture.service.origin, "project-a", authorization));
 
       // Then
-      if (failure === "repository symlink" || failure === "missing owner marker") {
+      if (failure === "repository symlink" || failure === "objects symlink" || failure === "missing owner marker") {
         expect(response.status).toBe(409);
       } else {
         expect(response.status).not.toBe(200);

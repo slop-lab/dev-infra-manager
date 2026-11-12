@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { assertGitExecutableIdentity, type GitExecutableIdentity } from "./repository.js";
 import { NativeRootImportBundleError } from "./native-root-import-storage.js";
@@ -34,18 +35,6 @@ type NativeRootProofGitInput = {
   readonly signal: AbortSignal;
 };
 
-export async function inspectImportedNativeRootReadOnly(input: NativeRootProofGitInput): Promise<void> {
-  try {
-    await inspectImportedNativeRootLive(input);
-    await runPinned(input, ["-c", "fsck.fullPathname=error", "fsck", "--strict", "--full",
-      "--no-reflogs", "--no-progress", input.currentCommit]);
-    await inspectRefs(input);
-  } catch (error) {
-    if (error instanceof NativeRootImportBundleError) throw error;
-    throw new NativeRootImportBundleError("native imported root proof inspection failed", { cause: error });
-  }
-}
-
 export async function inspectImportedNativeRootLive(input: NativeRootProofGitInput): Promise<void> {
   try {
     const format = (await runPinned(input, ["rev-parse", "--show-object-format"])).stdout.trim();
@@ -58,19 +47,23 @@ export async function inspectImportedNativeRootLive(input: NativeRootProofGitInp
       throw new NativeRootImportBundleError("native root object format conflicts with imported root proof");
     }
     await inspectRefs(input);
-    const objectType = (await runPinned(input, ["cat-file", "-t", input.currentCommit])).stdout;
-    if (objectType !== "commit\n") {
-      throw new NativeRootImportBundleError("native root proof target is not a commit");
-    }
+    await assertObjectIdentity(input, format, input.currentCommit, "commit");
     const tree = (await runPinned(input, ["rev-parse", "--verify", `${input.currentCommit}^{tree}`])).stdout.trim();
     if (tree !== input.currentTree) {
       throw new NativeRootImportBundleError("native root current tree conflicts");
     }
+    await assertObjectIdentity(input, format, input.currentTree, "tree");
     await runPinned(input, ["merge-base", "--is-ancestor", input.importedCommit, input.currentCommit]);
     const importedTree = (await runPinned(input,
       ["rev-parse", "--verify", `${input.importedCommit}^{tree}`])).stdout.trim();
     if (importedTree !== input.importedTree) {
       throw new NativeRootImportBundleError("native root imported tree conflicts");
+    }
+    if (input.importedCommit !== input.currentCommit) {
+      await assertObjectIdentity(input, format, input.importedCommit, "commit");
+    }
+    if (input.importedTree !== input.currentTree) {
+      await assertObjectIdentity(input, format, input.importedTree, "tree");
     }
     await inspectRefs(input);
   } catch (error) {
@@ -85,16 +78,36 @@ export async function assertNativeRootSelectionFastForward(
   selectedTree: string
 ): Promise<void> {
   try {
+    const format = (await runPinned(input, ["rev-parse", "--show-object-format"])).stdout.trim();
+    if (format !== "sha1" && format !== "sha256") {
+      throw new NativeRootImportBundleError("native root object format is unsupported");
+    }
+    await assertObjectIdentity(input, format, selectedCommit, "commit");
     const tree = (await runPinned(input,
       ["rev-parse", "--verify", `${selectedCommit}^{tree}`])).stdout.trim();
     if (tree !== selectedTree) {
       throw new NativeRootImportBundleError("native root selected tree conflicts");
     }
+    await assertObjectIdentity(input, format, selectedTree, "tree");
     await runPinned(input, ["merge-base", "--is-ancestor", selectedCommit, input.currentCommit]);
   } catch (error) {
     if (error instanceof NativeRootImportBundleError) throw error;
     throw new NativeRootImportBundleError("native root selection is not a fast-forward", { cause: error });
   }
+}
+
+async function assertObjectIdentity(
+  input: NativeRootProofGitInput,
+  algorithm: "sha1" | "sha256",
+  objectId: string,
+  type: "commit" | "tree"
+): Promise<void> {
+  const content = await runPinnedBytes(input, ["cat-file", type, objectId], 8 * 1024 * 1024);
+  const actual = createHash(algorithm)
+    .update(`${type} ${String(content.length)}\0`)
+    .update(content)
+    .digest("hex");
+  if (actual !== objectId) throw new NativeRootImportBundleError(`native root selected ${type} identity is invalid`);
 }
 
 async function inspectRefs(input: NativeRootProofGitInput): Promise<void> {
@@ -140,4 +153,17 @@ async function runPinned(
     { ...gitOptions, maxBuffer, signal: input.signal });
   await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
   return result;
+}
+
+async function runPinnedBytes(
+  input: Pick<NativeRootProofGitInput, "gitExecutable" | "gitIdentity" | "repository" | "signal">,
+  arguments_: readonly string[],
+  maxBuffer: number
+): Promise<Buffer> {
+  await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
+  const result = await execute(input.gitExecutable,
+    ["--no-replace-objects", "--git-dir", input.repository, ...arguments_],
+    { ...gitOptions, encoding: "buffer", maxBuffer, signal: input.signal });
+  await assertGitExecutableIdentity(input.gitExecutable, input.gitIdentity);
+  return result.stdout;
 }

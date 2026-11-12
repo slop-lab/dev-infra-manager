@@ -22,7 +22,8 @@ import {
   publishNativeRootRef,
   verifyNativeRootBundle
 } from "./native-root-import-git.js";
-import { assertDurableNativeRootBundle, rootBundleDirectory, rootBundlePath } from "./native-root-import-storage.js";
+import { assertDurableNativeRootBundle, assertDurableNativeRootBundleStatic,
+  rootBundleDirectory, rootBundlePath } from "./native-root-import-storage.js";
 
 type FinalizeOptions = {
   readonly state: NativeGitBundleState;
@@ -49,16 +50,21 @@ export async function finalizeNativeProjectRootImport(
     signal: options.signal
   };
   if (rootImport.phase !== "intent") {
-    await assertDurableNativeRootBundle(options.stateDirectory, options.projectId, options.repositoryId, rootImport.importNonce,
-      rootImport.bundleDigest, rootImport.bundleSize);
-    await verifyNativeRootBundle({
-      ...git,
-      directory: rootBundleDirectory(options.stateDirectory, options.projectId, options.repositoryId),
-      canonicalRepository: repository,
-      bundlePath,
-      protectedRef: rootImport.protectedRef,
-      expectedCommit: rootImport.expectedCommit
-    });
+    if (completedImport) {
+      await assertDurableNativeRootBundleStatic(options.stateDirectory, options.projectId, options.repositoryId,
+        rootImport.importNonce, rootImport.bundleSize);
+    } else {
+      await assertDurableNativeRootBundle(options.stateDirectory, options.projectId, options.repositoryId,
+        rootImport.importNonce, rootImport.bundleDigest, rootImport.bundleSize);
+      await verifyNativeRootBundle({
+        ...git,
+        directory: rootBundleDirectory(options.stateDirectory, options.projectId, options.repositoryId),
+        canonicalRepository: repository,
+        bundlePath,
+        protectedRef: rootImport.protectedRef,
+        expectedCommit: rootImport.expectedCommit
+      });
+    }
   }
   if (rootImport.phase === "bundle-durable" || rootImport.phase === "installing") {
     await assertNativeRootRefUnborn({ ...git, repository, protectedRef: rootImport.protectedRef });

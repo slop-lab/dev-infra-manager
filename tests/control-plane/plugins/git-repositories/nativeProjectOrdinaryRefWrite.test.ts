@@ -59,6 +59,9 @@ describe("native Project ordinary ref writes", () => {
     expect(await refValue(fixture.root, "refs/heads/topic")).toBeUndefined();
     expect(await refValue(fixture.root, "refs/tags/lightweight")).toBeUndefined();
     expect((await proof(fixture.service.origin)).status).toBe(200);
+    const sentinelDirectory = join(rootRepository(fixture.root), "objects", "ff");
+    await mkdir(sentinelDirectory, { recursive: true });
+    await writeFile(join(sentinelDirectory, "f".repeat(38)), "unrelated corrupt loose object\n", { mode: 0o444 });
     await closeFinalizeService(fixture.service);
     const restarted = await startFinalizeService(fixture.root);
     await activateFinalizeService(restarted.origin);
