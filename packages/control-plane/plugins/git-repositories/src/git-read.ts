@@ -76,13 +76,11 @@ export type BlobMetadata = { readonly blobId: string; readonly lineCount: number
 export async function readTreeFile(input: RepositoryReadGit, commit: string, path: string): Promise<BlobMetadata | null> {
   assertCommit(commit);
   if (path.includes("\0") || path.length === 0) throw new RepositoryReadError("invalid file path");
-  const result = await gitBytes(input, ["ls-tree", "-z", "--full-tree", commit, "--", `:(literal)${path}`]);
-  if (result.length === 0) return null;
-  const tab = result.indexOf(9);
-  const match = /^(\d{6}) (blob|commit) ([0-9a-f]{40}|[0-9a-f]{64})$/.exec(result.subarray(0, tab).toString("ascii"));
-  if (!match || !result.subarray(tab + 1, -1).equals(Buffer.from(path))) throw new RepositoryReadError("tree file is ambiguous");
-  const blobId = match[3]!;
-  if (match[2] === "commit") return { blobId, mode: match[1]!, byteLength: 0, lineCount: null };
+  const entry = await selectedTreeEntry(input, commit, path);
+  if (entry === undefined) return null;
+  const blobId = entry.objectId;
+  if (entry.mode === "160000") return { blobId, mode: entry.mode, byteLength: 0, lineCount: null };
+  if (!["100644", "100755", "120000"].includes(entry.mode)) throw new RepositoryReadError("tree file is ambiguous");
   const content = await gitBytes(input, ["cat-file", "blob", blobId]);
   assertObjectIdentity(blobId, "blob", content);
   let lineCount: number | null = null;
@@ -92,10 +90,48 @@ export async function readTreeFile(input: RepositoryReadGit, commit: string, pat
       lineCount = content.length === 0 ? 0 : content.reduce((count, byte) => count + (byte === 10 ? 1 : 0), 0) + (content.at(-1) === 10 ? 0 : 1);
     } catch { /* Non-UTF8 blobs have no text anchors. */ }
   }
-  return { blobId, mode: match[1]!, byteLength: content.length, lineCount };
+  return { blobId, mode: entry.mode, byteLength: content.length, lineCount };
 }
 
-function assertObjectIdentity(objectId: string, type: "blob" | "commit", content: Buffer): void {
+type TreeEntry = { readonly mode: string; readonly objectId: string };
+
+async function selectedTreeEntry(input: RepositoryReadGit, commit: string, path: string): Promise<TreeEntry | undefined> {
+  const content = await gitBytes(input, ["cat-file", "commit", commit]);
+  assertObjectIdentity(commit, "commit", content);
+  const newline = content.indexOf(10);
+  const root = newline < 0 ? null : /^tree ([0-9a-f]{40}|[0-9a-f]{64})$/.exec(content.subarray(0, newline).toString("ascii"));
+  let tree = root?.[1];
+  if (tree === undefined || tree.length !== commit.length) throw new RepositoryReadError("repository commit tree identity is invalid");
+  const parts = path.split("/");
+  let remaining = maximumBytes;
+  for (const [index, part] of parts.entries()) {
+    if (remaining <= 0) throw new RepositoryReadError("selected path trees exceed the repository read bound");
+    const bytes = await gitBytes(input, ["cat-file", "tree", tree], remaining);
+    assertObjectIdentity(tree, "tree", bytes);
+    remaining -= bytes.length;
+    const entry = findTreeEntry(bytes, Buffer.from(part), commit.length / 2);
+    if (entry === undefined || index < parts.length - 1 && entry.mode !== "40000") return undefined;
+    if (index === parts.length - 1) return entry;
+    tree = entry.objectId;
+  }
+  return undefined;
+}
+
+function findTreeEntry(content: Buffer, name: Buffer, objectBytes: number): TreeEntry | undefined {
+  let offset = 0;
+  while (offset < content.length) {
+    const space = content.indexOf(32, offset), nul = space < 0 ? -1 : content.indexOf(0, space + 1);
+    const end = nul + 1 + objectBytes;
+    if (space <= offset || nul <= space + 1 || end > content.length) throw new RepositoryReadError("repository tree entry is malformed");
+    if (content.subarray(space + 1, nul).equals(name)) {
+      return { mode: content.subarray(offset, space).toString("ascii"), objectId: content.subarray(nul + 1, end).toString("hex") };
+    }
+    offset = end;
+  }
+  return undefined;
+}
+
+function assertObjectIdentity(objectId: string, type: "blob" | "commit" | "tree", content: Buffer): void {
   const algorithm = objectId.length === 40 ? "sha1" : objectId.length === 64 ? "sha256" : undefined;
   if (algorithm === undefined) throw new RepositoryReadError("repository object identity is invalid");
   const actual = createHash(algorithm)

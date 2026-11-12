@@ -101,6 +101,26 @@ it("rejects a matcher path traversing a valid altered subtree under its stale ob
   await expect(read).rejects.toBeDefined();
 });
 
+it.each(["added", "deleted"] as const)("preserves optional file absence across an %s directory", async (directory) => {
+  const fixture = await reviewFixture("direct", true);
+  const read = (candidateCommit: string) => readAuthoritativeCandidateFile({
+    reader: fixture.openReader(), access: fixture.access, candidateCommit,
+    path: `${directory}/optional.md`, signal: AbortSignal.timeout(30_000),
+  });
+  const present = directory === "added" ? fixture.candidateCommit : fixture.baseCommit;
+  const missing = directory === "added" ? fixture.baseCommit : fixture.candidateCommit;
+  await expect(read(present)).resolves.toEqual(Buffer.from("optional\n"));
+  await expect(read(missing)).resolves.toBeUndefined();
+});
+
+it("treats a non-tree intermediate as ordinary optional-file absence", async () => {
+  const fixture = await reviewFixture();
+  await expect(readAuthoritativeCandidateFile({
+    reader: fixture.openReader(), access: fixture.access, candidateCommit: fixture.candidateCommit,
+    path: "src/README.md/optional.md", signal: AbortSignal.timeout(30_000),
+  })).resolves.toBeUndefined();
+});
+
 function recordingReader(reader: RepositoryReadService, commands: string[][]): RepositoryReadService {
   return {
     ...reader,
@@ -111,7 +131,7 @@ function recordingReader(reader: RepositoryReadService, commands: string[][]): R
   };
 }
 
-async function reviewFixture(transport: "direct" | "push" = "direct"): Promise<{
+async function reviewFixture(transport: "direct" | "push" = "direct", optionalDirectories = false): Promise<{
   readonly worktree: string;
   readonly gitDirectory: string;
   readonly openReader: () => RepositoryReadService;
@@ -135,11 +155,22 @@ async function reviewFixture(transport: "direct" | "push" = "direct"): Promise<{
   await mkdir(join(worktree, "src"));
   await writeFile(join(worktree, "src/README.md"), "base\n");
   await git(worktree, ["add", "src/README.md"]);
+  if (optionalDirectories) {
+    await mkdir(join(worktree, "deleted"));
+    await writeFile(join(worktree, "deleted/optional.md"), "optional\n");
+    await git(worktree, ["add", "deleted/optional.md"]);
+  }
   await git(worktree, ["commit", "-m", "base"]);
   const baseCommit = await git(worktree, ["rev-parse", "HEAD"]);
   const baseTree = await git(worktree, ["rev-parse", "HEAD^{tree}"]);
   const baseSubtree = await git(worktree, ["rev-parse", "HEAD:src"]);
   await writeFile(join(worktree, "src/README.md"), "candidate\n");
+  if (optionalDirectories) {
+    await rm(join(worktree, "deleted"), { recursive: true });
+    await mkdir(join(worktree, "added"));
+    await writeFile(join(worktree, "added/optional.md"), "optional\n");
+    await git(worktree, ["add", "--all"]);
+  }
   await git(worktree, ["commit", "-am", "candidate"]);
   const candidateCommit = await git(worktree, ["rev-parse", "HEAD"]);
   const candidateTree = await git(worktree, ["rev-parse", "HEAD^{tree}"]);
