@@ -15,6 +15,15 @@ export class ExecutorRunner implements StreamingCommandRunner {
   output = "executor-output\n";
   exitCode = 0;
   beforeLaunch: ((args: readonly string[]) => Promise<void>) | undefined;
+  archive: Buffer = Buffer.alloc(1024);
+  copyExitCode = 0;
+  stopExitCode = 0;
+  runningAfterStop = false;
+  inspectedId = "c".repeat(64);
+  onCopy: (() => Promise<void>) | undefined;
+  afterRemoval: (() => Promise<void>) | undefined;
+  copyThrows = false;
+  copyStderr: Buffer = Buffer.alloc(0);
   private labels: readonly string[] = [];
 
   async run(command: string, args: string[], options?: RunOptions): Promise<CommandResult> {
@@ -42,14 +51,21 @@ export class ExecutorRunner implements StreamingCommandRunner {
       }
       const values = this.labels.map((label) => label.slice(label.indexOf("=") + 1));
       if (this.foreignOwnership) values[1] = "foreign";
-      return result(command, args, `${"c".repeat(64)}|${values.join("|")}\n`);
+      const state = args.some(arg => arg.includes(".State.Status")) ? (this.runningAfterStop ? "|running|true|false|123" : "|exited|false|false|0") : "";
+      return result(command, args, `${this.inspectedId}|${values.join("|")}${state}\n`);
     }
-    if (args[0] === "container" && args[1] === "rm") return result(command, args, "", this.failRemoval ? 1 : 0);
+    if (args[0] === "stop") return result(command, args, "", this.stopExitCode);
+    if (args[0] === "container" && args[1] === "rm") { await this.afterRemoval?.(); return result(command, args, "", this.failRemoval ? 1 : 0); }
     return result(command, args);
   }
 
   async runStreaming(command: string, args: string[], options?: RunOptions): Promise<number> {
     this.calls.push({ command, args: [...args] });
+    if (args[0] === "cp") {
+      await this.onCopy?.(); options?.stdout?.end(this.archive); options?.stderr?.end(this.copyStderr);
+      if (this.copyThrows) throw new Error("private export failure detail");
+      return this.copyExitCode;
+    }
     options?.stdout?.write(this.output);
     if (this.logsWaitForAbort && !options?.signal?.aborted) {
       await new Promise<void>((resolve) => options?.signal?.addEventListener("abort", () => resolve(), { once: true }));

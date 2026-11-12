@@ -70,9 +70,11 @@ is implied by these source changes.
   `dim-ci` integration. Retain bounded full logs and explicitly selected files
   after runtime cleanup, resume interrupted uploads without rerunning candidate
   code, and connect the private execution query role during local installation.
-  Classify manifest-producing artifact capture failures by closed filesystem
-  operation and errno without exposing raw errors or changing source permissions;
-  retain valid logs when later file capture fails.
+  Preserve guest-root-owned private container artifacts through an exact-owned
+  stopped-runtime archive handoff before removal, without changing source
+  permissions. Validate bounded archives and single-link metadata before exposing
+  files, keep QEMU's shared-file path unchanged, and retain valid logs with closed
+  export/capture failure diagnostics independently of command success.
   Offer an explicit Ubuntu hardware execution profile with nested KVM and
   disk-backed temporary storage and explicit bounded source manifests for exact
   scheduled practical VM validation, with temporary host-loopback emergency SSH

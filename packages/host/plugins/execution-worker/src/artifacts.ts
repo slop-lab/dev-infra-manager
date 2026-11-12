@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import { executionArtifactLimits, executionArtifactSchema, executionArtifactManifestSchema, type ExecutionArtifactManifest, type ExecutionArtifact } from "@slop-lab/dim-contracts-execution";
 import type { ExecutionResult } from "@slop-lab/dim-contracts-ci/aggregate";
 import type { ExecutionWorkerClient, WorkerAssignment } from "./client.js";
+import { ArtifactHandoffError, type BackendArtifactSource } from "./artifact-source.js";
+import { captureArchiveArtifacts } from "./artifact-archive.js";
 export const jobArtifactsDirectory = "/workspace/.dim-ci-artifacts";
 const digest = (bytes: Buffer) => "sha256:" + createHash("sha256").update(bytes).digest("hex");
 type CaptureOperation = "source-open" | "source-stat" | "source-read" | "source-close" | "file-validation" | "file-integrity"
@@ -20,7 +22,7 @@ async function captureOperation<T>(operation: CaptureOperation, action: () => Pr
   try { return await action(); } catch (failure) { throw new ArtifactCaptureError(operation, failure); }
 }
 /** Called after backend cleanup has stopped every untrusted runtime writer. */
-export async function captureExecutionArtifacts(input: { root: string; pending: string; result: ExecutionResult }): Promise<ExecutionArtifactManifest> {
+export async function captureExecutionArtifacts(input: { root: string; pending: string; result: ExecutionResult; artifactSource?: BackendArtifactSource; artifactNonce?: string }): Promise<ExecutionArtifactManifest> {
   await mkdir(input.pending, { mode: 0o700 });
   const captured: ExecutionArtifact[] = []; let total = 0, entries = 0;
   async function add(source: string, name: string, expected?: {bytes:string;sha256:string}) {
@@ -63,11 +65,20 @@ export async function captureExecutionArtifacts(input: { root: string; pending: 
         const empty=join(input.pending,"empty-"+stream);await writeFile(empty,Buffer.alloc(0),{flag:"wx",mode:0o600});await add(empty,"logs/"+stream+".log",input.result[stream]);
       }
     }
+    if (input.artifactSource !== undefined) {
+      if (input.artifactSource.nonce !== input.artifactNonce) throw new ArtifactHandoffError();
+      switch (input.artifactSource.kind) {
+        case "archive": captured.push(...await captureArchiveArtifacts({ root: input.root, pending: input.pending, source: input.artifactSource }, captured)); break;
+        case "unavailable": error="artifact-capture-failed:"+input.artifactSource.error; break;
+        default: input.artifactSource satisfies never;
+      }
+    } else {
     const directory=join(input.root,"workspace",".dim-ci-artifacts");
     let present=true;
     try {await lstat(directory);}catch(failure){if(failure instanceof Error && "code" in failure && failure.code === "ENOENT")present=false;else throw new ArtifactCaptureError("directory-stat",failure);}
     if(present)await visit(directory,"",0);
-  } catch (failure) { error=failure instanceof ArtifactCaptureError?failure.message:"artifact-capture-failed"; }
+    }
+  } catch (failure) { error=failure instanceof ArtifactCaptureError?failure.message:failure instanceof ArtifactHandoffError?"artifact-capture-failed:archive:rejected":"artifact-capture-failed"; }
   const manifest=executionArtifactManifestSchema.parse({executionId:input.result.executionId,descriptorDigest:input.result.descriptorDigest,
     availability:error?"unavailable":"complete",...(error?{error}:{}),artifacts:captured});
   const file=await open(join(input.pending,"manifest.json"),constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);

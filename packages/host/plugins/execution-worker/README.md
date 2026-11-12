@@ -115,16 +115,52 @@ to its owning outer verification guest, not public host ports.
 
 CI backends spool the complete accepted stdout/stderr within the reviewed output bound, alongside existing64KiB diagnostics. Jobs opt into file capture by writing regular files below the fixed `DIM_ARTIFACTS_DIR=/workspace/.dim-ci-artifacts`; they appear as `files/<relative-path>`, with reserved `logs/stdout.log` and `logs/stderr.log`. Symlinks, special files, changed files, traversal and oversized collections are rejected. Limits are128files,128MiB/file and256MiB/job.
 
-After backend cleanup stops untrusted writers, capture copies bytes into a private pending directory outside the runtime root. The durable worker journal records the completed command before lease-bound chunk upload; uncertain upload restarts reuse those bytes without executing candidate code again. The private runtime root is cleaned even when upload is interrupted. Artifact availability is independent of command success: capture errors are explicit and already captured valid diagnostics remain downloadable. No host keys, user homes or arbitrary configured paths are swept into artifacts.
+Backends stop untrusted writers before handing files to the worker. Sysbox verifies
+the launched CID and exact ownership labels, stops that CID, and rechecks exited,
+not-running/not-paused state with PID zero. Before removing it, the adapter spools
+only `CID:/workspace/.dim-ci-artifacts` through Docker's stopped-container archive
+operation, without link following. No helper container, source chmod/chown, new
+mount or guest execution identity is needed. QEMU retains its existing shared-file
+capture path.
+
+Tar does not attest source link counts. The Sysbox adapter therefore checks only
+the exact owned artifact tree with no-follow host metadata traversal before and
+after export, requiring unchanged regular single-link files. File contents do
+not need to be host-readable: guest-root-owned `0600` files are supported through
+the archive. Directories must remain readable/searchable by the host worker for
+this metadata check; inaccessible directories fail closed, without bypasses.
+Symlink ancestors, links outside the selected tree, special files and changed
+metadata are rejected before an archive can become public artifacts.
+
+The worker binds the handoff to its fresh attempt nonce, validates a bounded
+USTAR/PAX stream without generic extraction, and writes only flat, hashed,
+worker-owned `0600` copies into private pending storage. Path traversal, duplicate
+or missing entries, link records, unknown types, sparse records, invalid framing,
+checksums, truncation and nonzero trailing bytes are rejected. Per-entry PAX path
+and timestamp records are bounded; numeric UID/GID and Moby's binary capability
+metadata are accepted but discarded, never restored. Other xattrs are rejected.
+Raw archive bytes, metadata count/depth, file bytes and total collection bytes
+are independently bounded. Partial invalid Sysbox file sets are discarded while
+valid stdout/stderr remain available.
+
+The durable worker journal records the completed command before lease-bound
+chunk upload; uncertain upload restarts reuse those bytes without executing
+candidate code again. Nonces and host inode metadata stay out of results,
+journals and timeout receipts. The private runtime root is cleaned even when
+upload is interrupted. Artifact availability is independent of command success:
+export/capture failure is explicit and does not rewrite the command exit.
+Uncertain exact runtime removal still fences the slot. No host keys, user homes
+or arbitrary configured paths are swept into artifacts. The existing crash
+boundary before pending-result journaling remains: an interrupted pre-journal
+capture is recovered/cleaned rather than resumed from its archive.
 
 Manifest-producing capture failures identify a closed operation and errno in
 `error`, for example `artifact-capture-failed:source-open:EACCES` or
 `artifact-capture-failed:file-validation:rejected`. Unlisted filesystem codes
 become `unknown`; unclassified failures retain `artifact-capture-failed`.
-Raw errors, paths and credentials are not included. Files must be readable by
-the host worker after backend cleanup; same-worker-owned mode-0600 files are
-supported. Capture does not change source ownership, modes or link counts to
-make unreadable or unsafe files acceptable. Failure to create or persist the
+Raw errors, paths and credentials are not included. Direct-directory capture
+still requires host-readable files; Sysbox archive capture does not. Capture
+does not change source ownership, modes or link counts. Failure to create or persist the
 pending manifest itself is not diagnosable through that manifest.
 
 Upload has a five-minute worker-owned deadline persisted in the journal; a worker
