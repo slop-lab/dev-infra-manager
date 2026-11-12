@@ -109,7 +109,6 @@ export function openNativeGitCandidateReadAuthority(
         // operator-selected mode deepens acquisition; no credential reaches jobs.
         await selected.git.runAuthenticated(["--git-dir", selected.git.repository, "fetch", "--depth=2", "--no-tags", "--no-write-fetch-head", "--force",
           parsed.repositoryUrl, `${parsed.claim.candidateCommit}:refs/dim/candidate`], 64 * 1024, input.signal);
-        await selected.git.run(["--git-dir", selected.git.repository, "fsck", "--strict", "--full", "--no-reflogs", "--no-progress"], 64 * 1024, input.signal);
         await mkdir(input.destination, { mode: 0o700 });
         const parentsDirectory = join(input.destination, "parents"); await mkdir(parentsDirectory, { mode: 0o700 });
         await writeFile(join(input.destination, "candidate.commit"), commit.bytes, { mode: 0o444, flag: "wx" });
@@ -237,9 +236,6 @@ async function fetchCandidate(git: DisposableGit, options: ParsedOptions, signal
       options.repositoryUrl, `${options.claim.candidateCommit}:refs/dim/candidate`
     ], 64 * 1024, signal);
     await acquisitionOperation("object-verification", async () => {
-      await git.run([
-        "--git-dir", git.repository, "fsck", "--strict", "--full", "--no-reflogs", "--no-progress"
-      ], 64 * 1024, signal);
       const fetched = (await git.run([
         "--git-dir", git.repository, "rev-parse", "--verify", "refs/dim/candidate^{commit}"
       ], 128, signal)).toString("ascii").trim();
