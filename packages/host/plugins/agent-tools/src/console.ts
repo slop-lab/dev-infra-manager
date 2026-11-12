@@ -8,8 +8,10 @@ import { projectTeamMetadata } from "./teamMetadata.js";
 import { executionOperation } from "./executionHost.js";
 import { formatExecutionStatus } from "./execution/status.ts";
 import { parseExecutionStatus } from "./execution/parse.ts";
+import { formatTaskReceipt, taskConsoleOperation } from "./taskHost.js";
+import { parseTaskReceipt } from "./execution/taskContract.ts";
 
-const operations = ["tools.status", "tools.setup", "server.start", "server.status", "server.stop", "server.credentials", "server.password", "server.team-metadata", "execution.status", "execution.wait"];
+const operations = ["tools.status", "tools.setup", "server.start", "server.status", "server.stop", "server.credentials", "server.password", "server.team-metadata", "execution.status", "execution.wait", "task.identity", "task.submit", "task.request"];
 
 /** Capture only bounded machine output; guest stderr and installer logs never become Web responses. */
 async function execute(context: WorkspaceHostPluginContext, workspace: WorkspaceRecord, command: string[], json = true, input?: unknown, timeoutMilliseconds = 175_000) {
@@ -30,6 +32,7 @@ async function execute(context: WorkspaceHostPluginContext, workspace: Workspace
 
 export async function invokeToolsConsole(operation: string, input: unknown, context: WorkspaceHostPluginContext) {
   if (!operations.includes(operation)) throw new UserError("Unknown tools operation");
+  if (operation.startsWith("task.")) return taskConsoleOperation(operation, input, context);
   if (typeof input !== "object" || input === null || Array.isArray(input)) throw new UserError("Tools input must be an object");
   const value = input as Record<string, unknown>;
   const allowed = operation.startsWith("execution.") ? ["workspace", "workspaceId", "sessionId", ...(operation === "execution.wait" ? ["since", "timeoutSeconds"] : [])] : operation === "server.team-metadata" ? ["workspace", "workspaceId", "directory"] : operation === "tools.setup" ? ["workspace", "workspaceId", "tool"] : operation === "server.password" ? ["workspace", "workspaceId", "password"] : ["workspace", "workspaceId"];
@@ -81,21 +84,25 @@ export async function runToolsConsole(args: string[], context: WorkspaceHostPlug
   const stdin = positional.length === 3 && positional[2] === "--input-stdin";
   if (positional[0] !== "invoke" || (!stdin && (positional.length !== 4 || positional[2] !== "--input"))) throw new UserError("usage: dim tools console describe|invoke OPERATION --input-stdin --json");
   let source = stdin ? "" : positional[3]!;
+  const inputLimit = positional[1]?.startsWith("task.") ? 16384 : 4096;
+  if (positional[1] === "task.submit" && !stdin) throw new UserError("Task text input must use --input-stdin");
   if (stdin) {
     let bytes = 0; const chunks: Buffer[] = [];
     for await (const chunk of process.stdin) {
       bytes += Buffer.byteLength(chunk as Buffer);
-      if (bytes > 4096) throw new UserError("Tools input is too large");
+      if (bytes > inputLimit) throw new UserError("Tools input is too large");
       chunks.push(Buffer.from(chunk as Buffer));
     }
-    source = Buffer.concat(chunks).toString("utf8");
+    try { source = positional[1]?.startsWith("task.") ? new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)) : Buffer.concat(chunks).toString("utf8"); }
+    catch { throw new UserError("Task input must be valid UTF-8"); }
   }
-  if (Buffer.byteLength(source, "utf8") > 4096) throw new UserError("Tools input is too large");
+  if (Buffer.byteLength(source, "utf8") > inputLimit) throw new UserError("Tools input is too large");
   if (positional[1] === "server.password" && !stdin) throw new UserError("Password input must use --input-stdin");
   let input: unknown;
   try { input = JSON.parse(source) as unknown; } catch { throw new UserError("Tools input must be valid JSON"); }
   const result = await invokeToolsConsole(positional[1]!, input, context);
   if (!args.includes("--json") && positional[1]?.startsWith("execution.") && typeof result === "object" && result !== null && "evidence" in result) {
     process.stdout.write((result.evidence === null ? "unknown; no observation before deadline; completion not assessed" : formatExecutionStatus(parseExecutionStatus(result.evidence))) + ("outcome" in result ? `; wait ${result.outcome}` : "") + "\n");
-  } else process.stdout.write(JSON.stringify(result) + "\n");
+  } else if (!args.includes("--json") && ["task.submit", "task.request"].includes(positional[1] ?? "")) process.stdout.write(formatTaskReceipt(parseTaskReceipt(result)) + "\n");
+  else process.stdout.write(JSON.stringify(result) + "\n");
 }
