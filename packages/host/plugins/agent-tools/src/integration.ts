@@ -13,7 +13,7 @@ export async function deployToolHelpers(workspace: WorkspaceRecord, context: Wor
   const runtime = await readFile(new URL("./assets/opencode-runtime.bash", import.meta.url));
   const managedService = await readFile(new URL("./assets/opencode-service.bash", import.meta.url));
   const server = await readFile(new URL("./assets/opencode-server.bash", import.meta.url));
-  const execution = await Promise.all(["monitor.ts", "monitorMetadata.ts", "monitorClient.ts", "status.ts", "projection.ts", "guest.ts", "cli.ts"].map(async name => ({
+  const execution = await Promise.all(["monitor.ts", "monitorMetadata.ts", "monitorClient.ts", "status.ts", "projection.ts", "guest.ts", "cli.ts", "taskContract.ts", "taskJournal.ts", "taskHttp.ts", "taskOwned.ts", "taskGuest.ts", "taskCli.ts", "taskInput.ts"].map(async name => ({
     path: `.local/share/dim-agent-tools/execution/${name}`, contents: await readFile(new URL(`./execution/${name}`, import.meta.url)), mode: 0o700 as const
   })));
   await deployGuestIntegration({ service: context.service, workspace, signal: context.signal }, {
@@ -30,6 +30,7 @@ export async function deployToolHelpers(workspace: WorkspaceRecord, context: Wor
       { path: ".local/bin/dim-agent", contents: agent, mode: 0o700 },
       { path: ".local/bin/dim-opencode-server", contents: server, mode: 0o700 },
       { path: ".local/bin/dim-agent-execution", contents: '#!/bin/sh\nexec node "$HOME/.local/share/dim-agent-tools/execution/cli.ts" "$@"\n', mode: 0o700 },
+      { path: ".local/bin/dim-agent-task", contents: '#!/bin/sh\nexec node "$HOME/.local/share/dim-agent-tools/execution/taskCli.ts" "$@"\n', mode: 0o700 },
       { path: ".local/bin/dim-tools-setup", contents: '#!/bin/sh\nexec bash "$HOME/.local/share/dim-agent-tools/tool-setup.bash" "$@"\n', mode: 0o700 }
     ]
   });

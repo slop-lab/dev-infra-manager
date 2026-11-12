@@ -342,8 +342,11 @@ is implied by these source changes.
   bounded task/subagent/team observation through agent-tools' scoped execution
   status operation, selected-host console and concise workspace client. Wait for
   semantic change under one bounded deadline without minute-by-minute coordinator
-  polling; unavailable team discovery never means idle and task submission is
-  explicitly unavailable until an owning producer is installed. Incomplete monitoring and failed or absent host-doctor
+  polling; unavailable team discovery never means idle. Submit explicit task
+  content through a typed, exact-workspace/server-bound OpenCode producer without
+  changing agent/model preferences. Durable request claims prevent blind
+  duplicate delivery after uncertain acceptance, and receipt lookup never
+  resends. Missing installed producers remain explicitly blocked. Incomplete monitoring and failed or absent host-doctor
   checks cannot count as successful selected-host verification; task completion
   remains independently unassessed. Verify explicitly selected hosts through
   real disposable workspace Git, LLM, helper, ingress and reconnect flows;

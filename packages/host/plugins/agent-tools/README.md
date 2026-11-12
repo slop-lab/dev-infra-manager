@@ -119,18 +119,106 @@ their payloads. Completion is always `not-assessed`, not task acceptance.
 
 Discovery advertises `coding-agent-execution-status` only when the reviewed
 adapter is present; absent installed helpers remain blocked without automatic
-repair. It separately reports `coding-agent-task-submission` as unavailable,
-reason `no-task-producer`. DIM currently has no typed task-message submission
-operation. A direct OpenCode adapter can deliver a task under its own authority,
-but that is not a DIM task API. Submission/correlation and authorization belong
-to an explicit future agent-tools producer adapter, not the workspace bridge,
-CI scheduler or a new policy engine.
+repair. It separately advertises `coding-agent-task-submission` only when the
+reviewed task producer closure and `flock` are present. Older installations
+without the producer remain blocked with `task-producer-unavailable`; discovery
+never repairs them or silently substitutes direct OpenCode delivery.
 
 Installed metadata returning `source: "unavailable"`, `enabled: null`,
 `unreadable: true`, `teams: []` remains real negative evidence even when main
 sessions run and OpenCode's `team_list` succeeds. These observations do not
 establish team idleness or diagnose the installed configuration. This status
 interface preserves that distinction rather than manufacturing metadata.
+
+## Explicit task submission and messaging
+
+Agent-tools owns the typed OpenCode producer, not host core, CI scheduling or
+repository workflow policy. First read `task.identity` with the exact workspace
+UUID and `runtime: "opencode"`. It returns the current `serverIdentity` binding
+the helper-owned PID, birth identity, instance, port and directory. Submission
+requires that exact binding. Unsupported runtimes are explicit, never rerouted.
+
+The normal selected-host API is:
+
+```sh
+dim tools console invoke task.identity --input '{"workspace":"development","workspaceId":"EXACT_UUID","runtime":"opencode"}' --json
+# Pipe the request JSON below into this command, not into its arguments:
+dim tools console invoke task.submit --input-stdin --json
+dim tools console invoke task.request --input '{"workspace":"development","workspaceId":"EXACT_UUID","requestId":"REQUEST_UUID"}' --json
+```
+
+The workspace equivalents are `dim-agent-task identity|submit|request
+--input-stdin [--json]`. Scoped guest operations `task-identity`, `task-submit`
+and `task-request` use the existing plugin operation boundary and require the
+matching workspace UUID. The host console also requires its display name;
+workspace-local input omits only that name. Public TypeScript request/receipt
+types are exported by the agent-tools package.
+
+For task content, use the dedicated CLI or host console stdin form. The generic
+`dim-workspace plugin NAME OPERATION JSON` client places its JSON in process
+arguments and is not the task-text CLI. The scoped `task-submit` operation is
+also available to programmatic clients that send a JSON request body rather
+than interpolating it into shell arguments.
+
+```json
+{
+  "workspaceId": "EXACT_UUID",
+  "requestId": "UNIQUE_LOWERCASE_UUID",
+  "runtime": "opencode",
+  "serverIdentity": "EXACT_SHA256_FROM_TASK_IDENTITY",
+  "target": { "kind": "new" },
+  "mode": "record-only",
+  "text": "The explicit user task content"
+}
+```
+
+`target: {"kind":"session","sessionId":"ses_EXACT"}` resumes or messages
+that existing session rather than creating another. Its directory must match
+the owned server. `mode: "execute"` requests normal asynchronous execution;
+`record-only` sets OpenCode's `noReply` and requests no inference. Neither mode
+supplies an agent, model, variant, system prompt, tools or configuration override.
+Configured primary-agent and role/model preferences remain OpenCode's choices.
+Text is limited to 8 KiB UTF-8 and the serialized task payload to 12 KiB, including
+escaping. The complete host/guest envelope stays within the existing 16 KiB
+bridge limit. Through the dedicated task CLI and host console, task text travels
+on stdin/private memory and OpenCode's intended user-message body, never in
+diagnostic logs, receipts or process arguments.
+
+The guest journals each `(workspaceId, requestId)` under the fixed private
+`$HOME/.local/state/dim-agent-tools/tasks` root, independent of XDG overrides.
+It syncs an exclusive claim and a canonical hash covering every delivery field,
+including exact text, before any mutating HTTP. Append-only, synced phase
+records distinguish possible create dispatch, a known created session and
+possible prompt dispatch. A shared launch lock fences helper-managed server
+replacement; identity is checked before each mutation and after acceptance.
+Credentials remain guest-local and are read before taking that lock.
+
+Matching replay returns the durable receipt without delivering again, including
+after server restart or adapter loss. Different content or targeting under the
+same ID returns `conflict`. Empty/incomplete claims, connection loss, malformed
+responses, process death and uncertain acceptance remain `outcome-unknown` and
+guarded. **Never allocate a new request ID merely to retry an uncertain task.**
+Inspect `task.request` and the known session first. No automatic reconciliation,
+receipt deletion, retry, task cancellation or cleanup is performed. A rejected
+or unknown prompt after session creation retains that session ID.
+
+`accepted` means exact HTTP background acceptance plus stable identity and a
+durably published receipt, not completed inference or task success. Completion
+is always `not-assessed`. Local CLI exit 0 means accepted (or successful identity
+inspection), 2 means a nonaccepted receipt, and 1 means invalid/unavailable input
+or transport. Host transport loss reports unknown rather than encouraging retry.
+
+The journal is durable workspace-user state, not a hostile-guest security
+boundary: deleting or altering it defeats the guard. The launch lock fences
+cooperating DIM helpers, not arbitrary guest process manipulation. DIM does not
+claim transactional exactly-once semantics from OpenCode's message-ID upserts.
+
+For a controlled installed-boundary check, use
+`node scripts/checks/agent-task-submission-smoke.ts --help`. Its default
+preflight is read-only. With `--run`, an exact workspace/server/request identity
+permits one tiny explicit record-only message, then receipt lookup. Missing
+installed source is BLOCKED; the check never installs helpers, calls direct
+OpenCode as a fallback or submits DIM CI.
 
 The optional `@slop-lab/dim-web-plugin-agent-tools` package adds a **Workspace
 tools** section in each DIM Web workspace management row. It discovers this host plugin automatically through
