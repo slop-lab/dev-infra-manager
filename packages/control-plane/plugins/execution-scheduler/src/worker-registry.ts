@@ -51,8 +51,7 @@ export class WorkerRegistry {
   }
 
   export(workerId: string): WorkerEnrollment {
-    const enrolled = readWorkerEnrollments(this.database)
-      .find((worker) => worker.workerId === workerId && worker.generationId === this.generationId);
+    const enrolled = this.workers().find((worker) => worker.workerId === workerId);
     if (enrolled === undefined) throw new ExecutionConflictError("worker is not enrolled");
     return enrolled;
   }

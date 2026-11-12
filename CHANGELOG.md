@@ -304,7 +304,8 @@ is implied by these source changes.
   and transactional install/activation recovery. Prepare initial CI capacity
   and connect generation-bound worker configuration without hand-writing
   credentials. Explicitly enroll additional trusted workers into an existing
-  generation, export private worker configuration and discover recent contact
+  generation, export private configuration for static or enrolled workers
+  without rotating their authority, and discover recent contact
   without redeploying the control plane or interrupting unrelated workspaces.
   Keep runtime images and bounds operator-owned and require explicit repository
   CI policy before successful DIM execution becomes a promotion gate.

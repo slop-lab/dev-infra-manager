@@ -20,6 +20,13 @@ rollback without adding fields that strict format-102 execution readers reject.
 Rows from previous generations remain available to the matching generation;
 unrecognized metadata namespaces are preserved.
 
+The current-generation operator can export private worker configuration for
+both statically configured and dynamically enrolled workers. Export preserves
+the existing token and exact slot profiles; it does not enroll or rotate a
+worker. Static registrations bind to the serving generation, while dynamic
+registrations from other generations remain unavailable. Query credentials
+cannot export worker secrets.
+
 Trusted host execution is supplied separately by `@slop-lab/dim-host-plugin-execution-worker`. Generic transport, configuration and task plugin interfaces belong to `@slop-lab/dim-contracts-execution`; CI-specific grants/results belong to `@slop-lab/dim-contracts-ci`; the coordinator does not import a host worker or backend.
 
 General task slots specify `{id, taskType, handlerRevision}` instead of a CI

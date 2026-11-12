@@ -9,6 +9,7 @@ import { executionWorkerConfigSchema, executionWorkerEnrollmentSecretSchema } fr
 import { executionWorkerClient } from "../../../../packages/host/plugins/execution-worker/src/client.js";
 import { runExecutionWorker } from "../../../../packages/host/plugins/execution-worker/src/worker.js";
 import { DatabaseSync } from "node:sqlite";
+import type { ExecutionServiceConfig } from "../../../../packages/control-plane/plugins/execution-scheduler/src/config.js";
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
@@ -29,11 +30,11 @@ const capacity = {
   } }]
 } as const;
 
-async function fixture(root: string, now?: () => number, selectedGeneration = generationId) {
+async function fixture(root: string, now?: () => number, selectedGeneration = generationId, staticWorkers: ExecutionServiceConfig["workers"] = []) {
   const activationToken = randomBytes(32).toString("base64url");
   const service = configuredExecutionServer({ config: { schemaVersion: 1, claimLeaseMilliseconds: 30_000,
     nativeGit: { endpoint: "http://127.0.0.1:9", grantIssuer: credential("grants", 5), candidateReader: credential("reader", 6), resultReporter: credential("results", 7) },
-    credentials: { operator, query, tasks, webhook }, workers: [] }, stateDirectory: root,
+    credentials: { operator, query, tasks, webhook }, workers: staticWorkers }, stateDirectory: root,
     readinessToken: randomBytes(32).toString("base64url"), activationToken, expectedGenerationId: selectedGeneration,
     ...(now === undefined ? {} : { now }) });
   await new Promise<void>((resolve) => service.server.listen(0, "127.0.0.1", resolve));
@@ -51,6 +52,28 @@ function headers(selected = operator, generation = generationId) {
   return { authorization: `Basic ${Buffer.from(`${selected.username}:${selected.password}`).toString("base64")}`,
     "x-dim-generation-id": generation, "content-type": "application/json" };
 }
+
+it("exports static capacity only to the current-generation operator without enrollment or token rotation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dim-worker-static-export-")); roots.push(root);
+  const configured = { id: "ci-static", token: credential("static-worker", 8).password, slots: capacity.slots };
+  for (const selectedGeneration of [generationId, "b".repeat(64)]) {
+    const running = await fixture(root, undefined, selectedGeneration, [configured]);
+    try {
+      const route = `${running.endpoint}/v1/operator/workers/ci-static/export`;
+      const request = (selected = operator, generation = selectedGeneration) => fetch(route, { method: "POST", headers: headers(selected, generation), body: "{}" });
+      const denied = await request(query);
+      expect(denied.status).toBe(401);expect(await denied.text()).not.toContain(configured.token);
+      expect((await request(operator, "f".repeat(64))).status).toBe(409);
+      const exported = await request();expect(exported.status).toBe(200);
+      const expected = { schemaVersion: 1, workerId: configured.id, generationId: selectedGeneration, token: configured.token, slots: configured.slots };
+      expect(executionWorkerEnrollmentSecretSchema.parse(await exported.json())).toEqual(expected);
+      expect(await (await request()).json()).toEqual(expected);
+      // Export reads the same static authority; it must not mint enrollment records.
+      expect(running.service.store.database.prepare("SELECT key FROM metadata WHERE key LIKE 'execution-scheduler/enrollment/%'").all()).toEqual([]);
+      expect((await fetch(`${running.endpoint}/v1/operator/workers/missing/export`, { method: "POST", headers: headers(operator, selectedGeneration), body: "{}" })).status).toBe(409);
+    } finally { await running.service.close(); }
+  }
+});
 
 it("enrolls operator-reviewed capacity and persists it across scheduler restart", async () => {
   const root = await mkdtemp(join(tmpdir(), "dim-worker-enrollment-")); roots.push(root);
@@ -89,6 +112,10 @@ it("retains enrollment identities for previous generations without changing the 
 
   const nextGeneration = "b".repeat(64);
   const second = await fixture(root, undefined, nextGeneration);
+  const absentInCurrentGeneration = await fetch(`${second.endpoint}/v1/operator/workers/ci-added/export`, {
+    method: "POST", headers: headers(operator, nextGeneration), body: "{}"
+  });
+  expect(absentInCurrentGeneration.status).toBe(409);
   const reenrolled = await fetch(`${second.endpoint}/v1/operator/workers/enroll`, {
     method: "POST", headers: headers(operator, nextGeneration), body: JSON.stringify(capacity)
   });
