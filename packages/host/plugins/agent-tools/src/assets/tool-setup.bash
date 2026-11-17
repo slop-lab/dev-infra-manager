@@ -5,6 +5,13 @@ readonly OPENCODE_VERSION="1.18.31"
 readonly OMO_VERSION="4.19.4"
 readonly JSONC_PARSER_VERSION="3.3.1"
 readonly CODEX_VERSION="0.156.1"
+readonly CONTEXT_MODE_VERSION="2.2.0"
+readonly CAVEMAN_VERSION="4.1.0"
+readonly CAVEMAN_COMMIT="1e91f1306d602d4ca23618701b1185575ae1869b"
+readonly SERENA_AGENT_VERSION="2.1.0"
+readonly UV_VERSION="0.13.8"
+readonly UV_SHA256_X86_64="61fb26dabc4f0cf1d050fc6c67d40e43e4fae2994af21ebc1e050b233bf2b5ed"
+readonly UV_SHA256_AARCH64="0c6f8593fcf1eadfc60e663b685c408267559d7c5d61c689bbb9f3a7e369ba32"
 
 fail() {
   printf 'workspace-user-setup: %s\n' "$*" >&2
@@ -208,7 +215,8 @@ if [[ "$selected_tool" = opencode ]]; then
   npm install --global --prefix "$install_prefix" --no-progress --loglevel=error \
     "opencode-ai@1.18.31" \
     "oh-my-openagent@4.19.4" \
-    "jsonc-parser@3.3.1"
+    "jsonc-parser@3.3.1" \
+    "context-mode@2.2.0"
 else
   CI=1 \
   NPM_CONFIG_AUDIT=false \
@@ -224,10 +232,55 @@ if [[ "$selected_tool" = opencode ]]; then
   [[ -f "$availability_helper" ]] || availability_helper="$(dirname -- "${BASH_SOURCE[0]}")/omo-model-availability.mjs"
   node "$availability_helper" "$install_prefix/lib/node_modules/oh-my-openagent"
 
+  # Caveman's OpenCode payload installs from a commit-verified clone of its
+  # release tag. Only the local plugin/AGENTS.md path runs; the interactive
+  # agent/login discovery, routing CLI and MCP-shrink middleware stay out.
+  caveman_root="$install_prefix/share/dim-agent-tools/caveman-v$CAVEMAN_VERSION"
+  [[ ! -L "$caveman_root" ]] || fail "unsafe caveman payload target: $caveman_root"
+  if [[ ! -d "$caveman_root" ]] || [[ "$(git -C "$caveman_root" rev-parse HEAD 2>/dev/null)" != "$CAVEMAN_COMMIT" ]]; then
+    rm -rf "$caveman_root"
+    git clone --quiet --depth 1 --branch "v$CAVEMAN_VERSION" \
+      https://github.com/JuliusBrussee/caveman.git "$caveman_root"
+    [[ "$(git -C "$caveman_root" rev-parse HEAD)" = "$CAVEMAN_COMMIT" ]] \
+      || fail "caveman v$CAVEMAN_VERSION does not match the pinned commit $CAVEMAN_COMMIT"
+  fi
+  PATH="$install_prefix/bin:$PATH" XDG_CONFIG_HOME="$(dirname -- "$config_dir")" \
+    node "$caveman_root/installer/install.js" --non-interactive --only opencode \
+    || fail 'caveman OpenCode payload installation failed'
+
+  # Serena is a Python MCP server; its pinned install uses a checksum-verified
+  # uv release so no unpinned installer script runs.
+  case "$(uname -m)" in
+    x86_64) uv_target=x86_64-unknown-linux-musl uv_sha256="$UV_SHA256_X86_64" ;;
+    aarch64) uv_target=aarch64-unknown-linux-musl uv_sha256="$UV_SHA256_AARCH64" ;;
+    *) fail "no pinned uv build for architecture: $(uname -m)" ;;
+  esac
+  uv_binary="$install_prefix/bin/uv"
+  [[ ! -L "$uv_binary" ]] || fail "unsafe uv target: $uv_binary"
+  if [[ "$("$uv_binary" --version 2>/dev/null)" != "uv $UV_VERSION"* ]]; then
+    uv_work="$(mktemp -d "${TMPDIR:-/tmp}/dim-uv.XXXXXX")"
+    curl -fsSL --proto '=https' --tlsv1.2 \
+      "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-$uv_target.tar.gz" \
+      -o "$uv_work/uv.tar.gz"
+    printf '%s  %s\n' "$uv_sha256" "$uv_work/uv.tar.gz" | sha256sum -c --quiet - \
+      || { rm -rf "$uv_work"; fail "uv $UV_VERSION download failed its pinned checksum"; }
+    tar -xzf "$uv_work/uv.tar.gz" -C "$uv_work" "uv-$uv_target/uv"
+    install -m 0755 "$uv_work/uv-$uv_target/uv" "$uv_binary"
+    rm -rf "$uv_work"
+    [[ "$("$uv_binary" --version)" = "uv $UV_VERSION"* ]] || fail 'installed uv reports an unexpected version'
+  fi
+  serena_binary="$install_prefix/bin/serena"
+  if ! "$uv_binary" tool list 2>/dev/null | grep -q "^serena-agent v$SERENA_AGENT_VERSION\$"; then
+    "$uv_binary" tool install --quiet --force "serena-agent==$SERENA_AGENT_VERSION"
+    "$uv_binary" tool list | grep -q "^serena-agent v$SERENA_AGENT_VERSION\$" \
+      || fail "serena-agent $SERENA_AGENT_VERSION is not the installed version after installation"
+  fi
+  [[ -x "$serena_binary" ]] || fail "serena executable missing after installation: $serena_binary"
+
   parser_path="$install_prefix/lib/node_modules/jsonc-parser"
   [[ -d "$parser_path" ]] || fail "JSONC parser installation is missing: $parser_path"
 
-  node - "$parser_path" "$config_dir" "$omo_dir/omo.jsonc" "$install_prefix/lib/node_modules/oh-my-openagent/dist/index.js" <<'NODE'
+  node - "$parser_path" "$config_dir" "$omo_dir/omo.jsonc" "$install_prefix/lib/node_modules/oh-my-openagent/dist/index.js" "$install_prefix/lib/node_modules/context-mode/opencode/plugin.js" "$serena_binary" <<'NODE'
 const crypto = require("node:crypto")
 const fs = require("node:fs")
 const path = require("node:path")
@@ -237,6 +290,10 @@ const configDir = process.argv[3]
 const omoPath = process.argv[4]
 const { applyEdits, modify, parse, printParseErrorCode } = require(parserPath)
 const exactPlugin = require("node:url").pathToFileURL(process.argv[5]).href
+const contextModeEntry = process.argv[6]
+if (!fs.statSync(contextModeEntry).isFile()) throw new Error(`context-mode plugin entry is missing: ${contextModeEntry}`)
+const exactContextModePlugin = require("node:url").pathToFileURL(contextModeEntry).href
+const serenaExecutable = process.argv[7]
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -276,20 +333,46 @@ function isOmoPlugin(value) {
   return typeof value === "string" && (/^(oh-my-openagent|oh-my-opencode)(@.*)?$/.test(value) || value === exactPlugin)
 }
 
-function normalizePluginSource(source, plugins, filePath) {
-  if (plugins === undefined) return setValue(source, ["plugin"], [exactPlugin])
+function isContextModePlugin(value) {
+  return typeof value === "string" && (/^context-mode(@.*)?$/.test(value) || value === exactContextModePlugin)
+}
+
+function normalizeOnePlugin(source, plugins, filePath, matchesManaged, exactEntry) {
+  if (plugins === undefined) return setValue(source, ["plugin"], [exactEntry])
   if (!Array.isArray(plugins)) throw new Error(`OpenCode plugin must be an array: ${filePath}`)
   const matches = plugins
     .map((entry, index) => ({ entry, index }))
-    .filter(({ entry }) => isOmoPlugin(entry) || (Array.isArray(entry) && isOmoPlugin(entry[0])))
-  if (matches.length === 0) return setValue(source, ["plugin", -1], exactPlugin)
+    .filter(({ entry }) => matchesManaged(entry) || (Array.isArray(entry) && matchesManaged(entry[0])))
+  if (matches.length === 0) return setValue(source, ["plugin", -1], exactEntry)
   let output = Array.isArray(matches[0].entry)
-    ? setValue(source, ["plugin", matches[0].index, 0], exactPlugin)
-    : setValue(source, ["plugin", matches[0].index], exactPlugin)
+    ? setValue(source, ["plugin", matches[0].index, 0], exactEntry)
+    : setValue(source, ["plugin", matches[0].index], exactEntry)
   for (const { index } of matches.slice(1).reverse()) {
     output = setValue(output, ["plugin", index], undefined)
   }
   return output
+}
+
+function reparse(source, filePath) {
+  const errors = []
+  const value = parse(source ?? "{}", errors, { allowTrailingComma: true, disallowComments: false })
+  if (errors.length > 0 || !isObject(value)) throw new Error(`configuration normalization produced malformed JSON: ${filePath}`)
+  return value
+}
+
+function normalizePluginSource(source, plugins, filePath) {
+  let output = normalizeOnePlugin(source, plugins, filePath, isOmoPlugin, exactPlugin)
+  output = normalizeOnePlugin(output, reparse(output, filePath).plugin, filePath, isContextModePlugin, exactContextModePlugin)
+  const serenaServer = {
+    type: "local",
+    command: [serenaExecutable, "start-mcp-server", "--context", "ide-assistant"],
+    enabled: true,
+  }
+  const mcp = reparse(output, filePath).mcp
+  if (mcp !== undefined && !isObject(mcp)) throw new Error(`OpenCode mcp must be an object: ${filePath}`)
+  return mcp === undefined
+    ? setValue(output, ["mcp"], { serena: serenaServer })
+    : setValue(output, ["mcp", "serena"], serenaServer)
 }
 
 const openCodeCandidates = ["opencode.jsonc", "opencode.json"]
@@ -396,7 +479,7 @@ const path = require("node:path")
 const prefix = process.argv[2]
 const selectedTool = process.argv[3]
 const expected = selectedTool === "opencode"
-  ? { "opencode-ai": "1.18.31", "oh-my-openagent": "4.19.4", "jsonc-parser": "3.3.1" }
+  ? { "opencode-ai": "1.18.31", "oh-my-openagent": "4.19.4", "jsonc-parser": "3.3.1", "context-mode": "2.2.0" }
   : { "@openai/codex": "0.156.1" }
 for (const [name, version] of Object.entries(expected)) {
   const installed = JSON.parse(fs.readFileSync(path.join(prefix, "lib", "node_modules", name, "package.json"), "utf8")).version
@@ -436,6 +519,7 @@ NODE
 if [[ "$selected_tool" = opencode ]]; then
   printf '%s\n' \
     "Installed opencode-ai@$OPENCODE_VERSION and oh-my-openagent@$OMO_VERSION under $install_prefix." \
+    "Installed context-mode@$CONTEXT_MODE_VERSION (plugin), caveman v$CAVEMAN_VERSION (plugin + AGENTS.md ruleset) and serena-agent $SERENA_AGENT_VERSION (MCP server via uv $UV_VERSION)." \
     "OpenCode configuration updated under $config_dir; OMO configuration updated at $omo_dir/omo.jsonc." \
     "Start a new login shell so $install_prefix/bin is on PATH; OpenCode was not started."
 else

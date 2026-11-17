@@ -18,7 +18,27 @@ dim tools setup development codex
 dim tools run development codex
 ```
 
-Setup pins OpenCode 1.18.31, oh-my-openagent 4.19.4 and Codex 0.156.1. The OMO
+Setup pins OpenCode 1.18.31, oh-my-openagent 4.19.4 and Codex 0.156.1. OpenCode
+setup additionally installs three pinned context/efficiency tools and wires them
+into the same owned OpenCode configuration:
+
+- **context-mode 2.2.0** installs through the same global npm prefix; its
+  OpenCode plugin entry is referenced by exact file URL in the `plugin` array,
+  so OpenCode never fetches an unpinned plugin at launch.
+- **caveman 4.1.0** installs from a commit-verified clone of its release tag
+  (`1e91f130…`), running only its non-interactive `--only opencode` path. That
+  path copies the local plugin payload and AGENTS.md ruleset. Its interactive
+  agent/login discovery, model-routing CLI and MCP-shrink middleware are not
+  installed; model selection stays with the operator and the LLM router.
+- **serena-agent 2.1.0** installs through a checksum-verified pinned uv 0.13.8
+  release binary (`uv tool install`), and is registered as the `serena` local
+  MCP server with the `ide-assistant` context. Serena needs a Python 3.11–3.14
+  interpreter; uv resolves the workspace Python and may fetch a managed
+  CPython when none is compatible.
+
+Re-running setup is idempotent: managed plugin entries are deduplicated by
+exact reference, the `mcp.serena` entry is rewritten deterministically, and
+other operator-added plugin or MCP entries are preserved. The OMO
 plugin is loaded from its verified local installation, rather than installing a
 second runtime copy. Agent-tools applies an explicit, source-guarded 4.19.4
 compatibility patch: initial default selection and foreground/background retries
