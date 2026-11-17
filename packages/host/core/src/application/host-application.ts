@@ -12,6 +12,7 @@ import { acquireWorkspaceSource } from "../workspace/source.js";
 import { checkWorkspaceHost, workspaceRuntimeFailureCheck } from "../workspace/doctor.js";
 import { createWorkspaceOnHost, type WorkspaceHostCreateInput } from "./workspace-composition.js";
 import { composeWorkspaceRuntime, loadHostPlugins, resolveHostExecutionRouting, hostPluginExtensions } from "./host-plugins.js";
+import { bindNameServiceForOwner } from "../workspace/nameServiceAttachment.js";
 import { ensureWorkspaceAgent } from "./workspace-agent.js";
 import { installRequiredPlugins, workspaceRequirements } from "./workspace-requirements.js";
 import { workspaceCopyGuest, workspaceCopyMarker } from "../workspace/copy.js";
@@ -79,7 +80,8 @@ async function dispatchHostOperation(request: HostOperationRequest, signal: Abor
       const installed = await loadHostPlugins();
       const plugin = installed.find((plugin) => plugin.commands?.some(({ name }) => name === args[0]));
       if (!plugin?.run) throw new UserError(`unknown command '${args[0] ?? ""}'; use 'dim plugins' to inspect installed host commands`);
-      await plugin.run(args, { ...context, extensions: hostPluginExtensions(installed), stateRoot: store.root, service }); return;
+      await plugin.run(args, { ...context, extensions: hostPluginExtensions(installed), stateRoot: store.root, service,
+        nameService: bindNameServiceForOwner(plugin.name, { stateRoot: store.root, signal, service }) }); return;
     }
     case "image.build": {
       result = await buildWorkspaceImage(runner, {

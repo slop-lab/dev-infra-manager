@@ -11,6 +11,8 @@ export interface MirrorRelayConfig {
   listen: string; endpoints: CacheEndpoints;
   controlToken: string; configurationId: string;
   adapterModules?: readonly MirrorAdapterModule[];
+  /** Per-kind fixed Host forwarded to the cache, never the guest's own Host; absent kinds keep forwarding the upstream's own host. */
+  publicHosts?: Readonly<Record<string, string>>;
 }
 export async function createMirrorRelay(config: MirrorRelayConfig) {
   const store = new WorkspaceStore(config.workspaceStateRoot), sockets = new Set<Socket>();
@@ -80,7 +82,9 @@ export async function createMirrorRelay(config: MirrorRelayConfig) {
     if (inflight >= 32) { response.writeHead(429); response.end(); return; }
     inflight++;
     const upstream = new URL(endpoint), clientOrigin = `http://${config.listen}:${serverPort(kind)}`;
-    const headers: Record<string, string> = { host: upstream.host };
+    // A fixed, relay-config-owned host (never the guest's own Host header) lets the cache emit
+    // already-reachable artifact URLs itself, so no response body needs rewriting for this kind.
+    const headers: Record<string, string> = { host: config.publicHosts?.[kind] ?? upstream.host };
     for (const name of ["accept", "range", "if-none-match", "if-modified-since", "user-agent"]) {
       const value = request.headers[name]; if (typeof value === "string") headers[name] = value;
     }

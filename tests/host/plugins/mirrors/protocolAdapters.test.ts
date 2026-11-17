@@ -8,8 +8,8 @@ import { mirrorAdapter as npm } from "../../../../packages/host/plugins/mirrors/
 import { mirrorAdapter as pypi } from "../../../../packages/host/plugins/mirrors/src/adapters/pypi/index.js";
 const dockerTarget = docker.target;
 function packageTarget(kind: "npm" | "pypi", path: string, endpoint: string) { return ({ npm, pypi })[kind].target(path, endpoint); }
-function rewritePackageMetadata(kind: "npm" | "pypi", contents: string, upstream: URL, endpoint: string, clientOrigin: string) {
-  return ({ npm, pypi })[kind].metadata!.rewrite(contents, { upstream, endpoint, clientOrigin });
+function rewritePackageMetadata(contents: string, upstream: URL, endpoint: string, clientOrigin: string) {
+  return pypi.metadata!.rewrite(contents, { upstream, endpoint, clientOrigin });
 }
 import { resolveMirrorRouting, parseCacheCatalog } from "../../../../packages/host/plugins/mirrors/src/provider.js";
 
@@ -30,20 +30,17 @@ it("retains npm scoped package paths but prevents normalized and encoded reposit
   expect(dockerTarget("/v2/library/debian/manifests/stable", "https://nas.example/docker/")?.pathname).toBe("/docker/v2/library/debian/manifests/stable");
   expect(dockerTarget("/admin", "https://nas.example/")).toBeUndefined();
 });
-it("rewrites npm artifact URLs within a configured repository and rejects CDN bypasses", () => {
-  const endpoint = "https://nas.example/npm/";
-  const result: unknown = JSON.parse(rewritePackageMetadata("npm", JSON.stringify({ versions: { "1.0": { dist: { tarball: endpoint + "pkg/-/pkg.tgz", integrity: "sha512-example" } } } }), new URL(endpoint + "pkg"), endpoint, "http://guest:8000"));
-  expect(result).toMatchObject({ versions: { "1.0": { dist: { tarball: "http://guest:8000/pkg/-/pkg.tgz", integrity: "sha512-example" } } } });
-  expect(() => rewritePackageMetadata("npm", '{"dist":{"tarball":"https://cdn.example/pkg.tgz"}}', new URL(endpoint), endpoint, "http://guest:8000")).toThrow(/outside/);
+it("no longer rewrites npm packuments: the relay forwards a fixed public Host to the cache instead (see relay.ts publicHosts)", () => {
+  expect(npm.metadata).toBeUndefined();
 });
 it("preserves PEP 503 hash fragments and PEP 691 hashes while relaying cached PyPI files", () => {
   const endpoint = "https://nas.example/root/pypi/+simple/", upstream = new URL(endpoint + "package/");
   const file = "https://nas.example/root/pypi/+f/abc/package.whl";
-  const html = rewritePackageMetadata("pypi", `<a href="../../+f/abc/package.whl#sha256=1234">wheel</a>`, upstream, endpoint, "http://guest:8001");
+  const html = rewritePackageMetadata(`<a href="../../+f/abc/package.whl#sha256=1234">wheel</a>`, upstream, endpoint, "http://guest:8001");
   const href = /href="([^"]+)"/.exec(html)![1]!;
   expect(new URL(href).hash).toBe("#sha256=1234");
   expect(packageTarget("pypi", new URL(href).pathname, endpoint)?.href).toBe(file);
-  const json: unknown = JSON.parse(rewritePackageMetadata("pypi", JSON.stringify({ files: [{ url: file, hashes: { sha256: "1234" } }] }), upstream, endpoint, "http://guest:8001"));
+  const json: unknown = JSON.parse(rewritePackageMetadata(JSON.stringify({ files: [{ url: file, hashes: { sha256: "1234" } }] }), upstream, endpoint, "http://guest:8001"));
   expect(json).toMatchObject({ files: [{ url: `http://guest:8001/__dim/file/${encodeURIComponent(file)}`, hashes: { sha256: "1234" } }] });
   expect(packageTarget("pypi", "/__dim/file/" + encodeURIComponent("https://nas.example/admin"), endpoint)).toBeUndefined();
   expect(packageTarget("pypi", "/__dim/file/" + encodeURIComponent("https://other.example/root/pypi/+f/file"), endpoint)).toBeUndefined();

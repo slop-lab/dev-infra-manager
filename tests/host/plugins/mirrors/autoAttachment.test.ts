@@ -57,11 +57,11 @@ it("passes Docker upgrade streams in both directions including final bytes after
     client.on("connect", () => client.end(Buffer.concat([Buffer.from("POST /v1.53/exec/id/start HTTP/1.1\r\nHost: docker\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n"), bytes])));
   }); expect(response.subarray(response.indexOf("\r\n\r\n") + 4)).toEqual(bytes);
 });
-async function relayFixture(upstream: (request: IncomingMessage, response: ServerResponse) => void) {
+async function relayFixture(upstream: (request: IncomingMessage, response: ServerResponse) => void, publicHosts?: Record<string, string>) {
   const directory = await root(), store = new WorkspaceStore(join(directory, "workspaces")), workspace = workspaceRecord(); await store.write(workspace);
   const server = createServer(upstream), origin = await listen(server);
   const endpoints = { docker: origin + "/", apt: origin + "/", npm: origin + "/", pypi: origin + "/root/pypi/+simple/" };
-  const relay = await createMirrorRelay({ workspaceStateRoot: store.root, workspaceId: workspace.id, workspaceName: workspace.name, listen: "127.0.0.1", endpoints, controlToken: "a".repeat(43), configurationId: randomUUID() });
+  const relay = await createMirrorRelay({ workspaceStateRoot: store.root, workspaceId: workspace.id, workspaceName: workspace.name, listen: "127.0.0.1", endpoints, controlToken: "a".repeat(43), configurationId: randomUUID(), ...(publicHosts ? { publicHosts } : {}) });
   cleanup.push(() => relay.close()); return { relay, store, workspace, registry: `http://127.0.0.1:${relay.ports.docker}`, apt: `http://127.0.0.1:${relay.ports.apt}`, npm: `http://127.0.0.1:${relay.ports.npm}`, pypi: `http://127.0.0.1:${relay.ports.pypi}` };
 }
 it("limits cache access to fixed public reads, strips credentials and rejects APT SSRF/CONNECT", async () => {
@@ -134,27 +134,57 @@ it("reuses a detached UUID relay across pause/resume and atomically refreshes ca
   expect(await (await fetch(endpoint)).text()).toBe("replacement cache");
 });
 
-it("serves npm and PyPI metadata plus artifact bytes through the workspace relay without origin bypass", async () => {
+it("serves PyPI metadata plus artifact bytes through the workspace relay without origin bypass", async () => {
   const bytes = Buffer.from([0, 255, 128, 42]);
   const received: string[] = [];
   const f = await relayFixture((request, response) => {
     const path = request.url ?? ""; received.push(path);
-    if (path === "/package") {
-      response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({ dist: { tarball: `http://${request.headers.host}/package/-/package.tgz` } }));
-    } else if (path === "/root/pypi/+simple/example/") {
+    if (path === "/root/pypi/+simple/example/") {
       response.setHeader("content-type", "text/html");
       response.end('<a href="../../+f/example.whl#sha256=1234">example</a>');
-    } else if (path === "/package/-/package.tgz" || path === "/root/pypi/+f/example.whl") {
+    } else if (path === "/root/pypi/+f/example.whl") {
       response.setHeader("content-type", "application/octet-stream"); response.end(bytes);
     } else { response.writeHead(404); response.end(); }
   });
-  const manifest: unknown = await (await fetch(f.npm + "/package")).json();
-  expect(manifest).toEqual({ dist: { tarball: f.npm + "/package/-/package.tgz" } });
-  expect(Buffer.from(await (await fetch(f.npm + "/package/-/package.tgz")).arrayBuffer())).toEqual(bytes);
   const index = await (await fetch(f.pypi + "/example/")).text();
   const file = new URL(/href="([^"]+)"/.exec(index)![1]!);
   expect(file.origin).toBe(f.pypi); expect(file.hash).toBe("#sha256=1234");
   expect(Buffer.from(await (await fetch(file)).arrayBuffer())).toEqual(bytes);
   expect(received).toContain("/root/pypi/+f/example.whl");
+});
+
+it("forwards a fixed public Host to npm's cache instead of rewriting its packument, ignoring any Host the guest sends", async () => {
+  const bytes = Buffer.from([0, 255, 128, 42]);
+  const receivedHosts: (string | undefined)[] = [];
+  const f = await relayFixture((request, response) => {
+    receivedHosts.push(request.headers.host);
+    if (request.url === "/package") {
+      response.setHeader("content-type", "application/json");
+      // Verdaccio-like behavior: tarball URLs are derived straight from the received Host header.
+      response.end(JSON.stringify({ dist: { tarball: `http://${request.headers.host}/package/-/package.tgz` } }));
+    } else if (request.url === "/package/-/package.tgz") {
+      response.setHeader("content-type", "application/octet-stream"); response.end(bytes);
+    } else { response.writeHead(404); response.end(); }
+  }, { npm: "npm.cache.dim.internal:8053" });
+  const npmOrigin = new URL(f.npm);
+  const body = await new Promise<string>((resolve, reject) => {
+    // fetch() forbids setting a Host header directly; use the raw client to simulate a hostile guest Host.
+    const outgoing = request({ hostname: npmOrigin.hostname, port: npmOrigin.port, path: "/package", headers: { host: "attacker-controlled.example" } }, (response) => {
+      const chunks: Buffer[] = []; response.on("data", (chunk: Buffer) => chunks.push(chunk)); response.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    }); outgoing.on("error", reject); outgoing.end();
+  });
+  const manifest: unknown = JSON.parse(body);
+  // Never the client-supplied Host, never the relay's own client-facing origin: always the fixed configured value.
+  expect(manifest).toEqual({ dist: { tarball: "http://npm.cache.dim.internal:8053/package/-/package.tgz" } });
+  expect(receivedHosts.every((host) => host === "npm.cache.dim.internal:8053")).toBe(true);
+  expect(Buffer.from(await (await fetch(f.npm + "/package/-/package.tgz")).arrayBuffer())).toEqual(bytes);
+});
+
+it("streams an npm packument far larger than the old 16 MiB rewrite buffer without buffering or failing", async () => {
+  const large = JSON.stringify({ versions: Object.fromEntries(Array.from({ length: 400_000 }, (_, index) => [`1.0.${index}`, { dist: { tarball: `http://pad-${"x".repeat(64)}/pkg-${index}.tgz` } }])) });
+  expect(large.length).toBeGreaterThan(16 * 1024 * 1024);
+  const f = await relayFixture((_request, response) => { response.setHeader("content-type", "application/json"); response.end(large); }, { npm: "npm.cache.dim.internal:8053" });
+  const response = await fetch(f.npm + "/package");
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe(large);
 });

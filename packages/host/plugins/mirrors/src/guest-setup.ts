@@ -17,11 +17,17 @@ function object(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("invalid workspace mirror input");
   return value as Record<string, unknown>;
 }
+// This file ships to the guest as plain source text (no node_modules available there), so these
+// cannot be imported from @slop-lab/dim-host-core/workspace; keep them equal to its
+// DIM_INTERNAL_SUFFIX and DIM_NAME_SERVICE_INGRESS_PORT.
+const DIM_INTERNAL_SUFFIX = ".dim.internal", DIM_NAME_SERVICE_PORT = "8053";
 function endpoint(value: unknown): string {
   if (typeof value !== "string") throw new Error("invalid workspace cache endpoint");
   const url = new URL(value);
-  if (url.protocol !== "http:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash
-    || !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(url.hostname) || url.hostname.split(".").some((part) => Number(part) > 255)) throw new Error("cache endpoint must be a private host HTTP origin");
+  if (url.protocol !== "http:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("cache endpoint must be a private host HTTP origin");
+  const privateHost = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(url.hostname) && url.hostname.split(".").every((part) => Number(part) <= 255);
+  const nameServiceHost = url.hostname.endsWith(DIM_INTERNAL_SUFFIX) && url.port === DIM_NAME_SERVICE_PORT;
+  if (!privateHost && !nameServiceHost) throw new Error("cache endpoint must be a private host HTTP origin, or a workspace-internal name on the fixed name-service port");
   return url.origin;
 }
 export function parseGuestMirrorPayload(input: unknown): GuestMirrorPayload {

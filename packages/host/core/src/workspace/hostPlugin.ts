@@ -2,6 +2,7 @@ import type { CommandRunner, StreamingCommandRunner } from "../types.js";
 import type { WorkspaceRuntime, WorkspaceService, CreateWorkspaceInput } from "./service.js";
 import type { WorkspaceStore } from "./store.js";
 import type { AcquiredWorkspaceSource, WorkspaceRecord } from "./models.js";
+import type { WorkspaceNameRegistration } from "./nameRegistration.js";
 
 /** Named code contributions from explicitly enabled host plugins. */
 export interface HostPluginExtension {
@@ -45,6 +46,10 @@ export interface WorkspaceHostPluginContext extends WorkspaceSourceProviderConte
   /** Disposable verification cleanup has a fresh bounded lifetime after caller cancellation. */
   cleanupWorkspace?(name: string, workspaceId?: string): Promise<void>;
   hostGateway?(workspace: WorkspaceRecord): Promise<string>;
+  /** Registers this plugin's complete set of workspace-internal names each call; core namespaces by caller. */
+  readonly nameService?: {
+    reconcile(workspace: WorkspaceRecord, registrations: readonly WorkspaceNameRegistration[]): Promise<{ readonly resolver: string }>;
+  };
 }
 
 export type WorkspaceCapabilityAccess =

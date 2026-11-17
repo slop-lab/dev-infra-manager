@@ -25,3 +25,16 @@ export { resolveHostPluginModule } from "./pluginModule.js";
 
 export type { WorkspaceRuntimeDevice, ContainerWorkspaceRuntimeOptions } from "./workspace/runtime.js";
 export { workspaceServiceEndpoint, workspaceServicePort } from "./workspace/serviceEndpoint.js";
+
+export { DIM_INTERNAL_SUFFIX, validateWorkspaceInternalName, validateWorkspaceUpstream, validateNameRegistration } from "./workspace/nameRegistration.js";
+export type { WorkspaceNameRegistration } from "./workspace/nameRegistration.js";
+export { reconcileNameTable, flattenNameTable, parseNameTable } from "./workspace/nameTable.js";
+export type { WorkspaceNameTable } from "./workspace/nameTable.js";
+export { parseDnsQuery, encodeDnsResponse, createNameResolver } from "./workspace/nameResolver.js";
+export type { ParsedDnsQuery, NameResolverConfig, NameResolverHandle } from "./workspace/nameResolver.js";
+export { createNameIngress } from "./workspace/nameIngress.js";
+export type { NameIngressConfig, NameIngressHandle } from "./workspace/nameIngress.js";
+export { runGuestNameService, startGuestNameService, DIM_NAME_SERVICE_INGRESS_PORT } from "./workspace/nameServiceGuestMain.js";
+export type { GuestNameServiceOptions, GuestNameServiceHandle } from "./workspace/nameServiceGuestMain.js";
+export { reconcileWorkspaceNames, bindNameServiceForOwner } from "./workspace/nameServiceAttachment.js";
+export type { WorkspaceNameServiceContext } from "./workspace/nameServiceAttachment.js";

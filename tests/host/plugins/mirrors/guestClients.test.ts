@@ -25,6 +25,16 @@ it("accepts independent reviewed client modules and rejects nonlocal relay endpo
   expect(parseGuestMirrorPayload({ ...payload, clients: [{ ...client, kind: "future-protocol" }] }).clients).toHaveLength(1);
 });
 
+it("accepts the fixed-port workspace-internal name form and rejects any other port, path or suffix on it", () => {
+  const client = { kind: "npm", endpoint: "http://npm.cache.dim.internal:8053/", source: "reviewed module" };
+  const payload = { clients: [client], proxy: "reviewed code", setup: "reviewed code" };
+  expect(parseGuestMirrorPayload(payload).clients[0]?.endpoint).toBe("http://npm.cache.dim.internal:8053");
+  for (const endpoint of ["http://npm.cache.dim.internal:9999/", "http://npm.cache.dim.internal/", "http://npm.cache.example.com:8053/",
+    "http://dim.internal:8053/", "http://npm.cache.dim.internal:8053/escape", "http://user@npm.cache.dim.internal:8053/", "http://npm.cache.dim.internal:8053/?x=1"]) {
+    expect(() => parseGuestMirrorPayload({ ...payload, clients: [{ ...client, endpoint }] }), endpoint).toThrow();
+  }
+});
+
 it("builds protocol settings at their owning client boundary for both CI and nested containers", () => {
   const endpoint = "http://172.20.0.1:4873";
   expect(npmConfiguration(endpoint)).toEqual({ files: [{ target: "/etc/npmrc", contents: `registry=${endpoint}/\n` }], environmentDefaults: { NPM_CONFIG_GLOBALCONFIG: "/etc/npmrc" } });

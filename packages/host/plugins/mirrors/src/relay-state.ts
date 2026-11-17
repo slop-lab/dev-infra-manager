@@ -26,8 +26,16 @@ export function parseRelayConfig(input: unknown): MirrorRelayConfig {
       adapterModules.push({ kind: entry.kind, moduleUrl: entry.moduleUrl });
     }
   }
+  let publicHosts: Record<string, string> | undefined;
+  if (value.publicHosts !== undefined) {
+    const suppliedHosts = object(value.publicHosts), hostEntries = Object.entries(suppliedHosts);
+    if (hostEntries.length > 32 || hostEntries.some(([kind, host]) => !(kind in endpoints) || typeof host !== "string"
+      || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*:[0-9]{1,5}$/.test(host))) throw new Error("invalid mirror relay public hosts");
+    publicHosts = Object.fromEntries(hostEntries) as Record<string, string>;
+  }
   return { workspaceStateRoot: value.workspaceStateRoot, workspaceName: value.workspaceName, workspaceId: value.workspaceId,
-    listen: value.listen, controlToken: value.controlToken, configurationId: value.configurationId, endpoints, adapterModules };
+    listen: value.listen, controlToken: value.controlToken, configurationId: value.configurationId, endpoints, adapterModules,
+    ...(publicHosts ? { publicHosts } : {}) };
 }
 export async function privateJson(file: string): Promise<unknown> {
   const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);

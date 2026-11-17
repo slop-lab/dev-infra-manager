@@ -7,12 +7,17 @@ import { request } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireLifecycleLock, atomicWrite } from "@slop-lab/dim-host-core";
-import type { WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
+import { DIM_NAME_SERVICE_INGRESS_PORT, type WorkspaceRecord } from "@slop-lab/dim-host-core/workspace";
 import type { WorkspaceHostPluginContext } from "@slop-lab/dim-host-core/plugin-api";
 import type { MirrorRelayConfig } from "./relay.js";
 import { object, parseRelayConfig, privateJson } from "./relay-state.js";
 import { mirrorRouting } from "./cache-routing.js";
 import { adapterModules, loadMirrorAdapters } from "./registry.js";
+
+// Only kinds confirmed to honor the forwarded Host header (verdaccio does; devpi/apt-cacher-ng/registry:2 are not
+// confirmed) are moved onto the name service. Everything else keeps its existing gateway-port endpoint unchanged.
+const DIM_NAMED_KINDS = new Set(["npm"]);
+function cacheInternalName(kind: string): string { return `${kind}.cache.dim.internal`; }
 
 interface RelayReady { controlPort: number; ports: Record<string, number> }
 async function control(config: MirrorRelayConfig, port: number, close = false) {
@@ -49,7 +54,8 @@ export async function ensureWorkspaceRelay(root: string, input: Omit<MirrorRelay
         if (isDeepStrictEqual(previous, input)) return current;
         if (previous.listen === input.listen && previous.workspaceId === input.workspaceId && previous.workspaceStateRoot === input.workspaceStateRoot && previous.workspaceName === input.workspaceName
           && isDeepStrictEqual(Object.keys(previous.endpoints).sort(), Object.keys(input.endpoints).sort())
-          && isDeepStrictEqual(previous.adapterModules ?? [], input.adapterModules ?? [])) {
+          && isDeepStrictEqual(previous.adapterModules ?? [], input.adapterModules ?? [])
+          && isDeepStrictEqual(previous.publicHosts ?? {}, input.publicHosts ?? {})) {
           const next = { ...input, controlToken: old.controlToken, configurationId: randomUUID() };
           await atomicWrite(join(root, "relay.json"), next);
           for (let attempt = 0; attempt < 100; attempt++) { const updated = await ready(root, next); if (updated) return updated; await new Promise<void>((resolve) => setTimeout(resolve, 50)); }
@@ -77,6 +83,7 @@ export async function ensureWorkspaceRelay(root: string, input: Omit<MirrorRelay
 export async function attachWorkspaceMirrors(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext, endpoints: Pick<MirrorRelayConfig, "endpoints">): Promise<void> {
   if (!workspace.initialized || workspace.phase !== "running") return;
   if (!context.hostGateway) throw new Error("workspace runtime does not provide a private mirror gateway");
+  if (!context.nameService) throw new Error("workspace runtime does not provide a workspace name service");
   const attachmentRoot = join(context.stateRoot, "plugins/host-mirrors/workspaces", workspace.id);
   const release = await acquireLifecycleLock({ root: attachmentRoot, name: "attachment", description: "workspace mirror attachment", options: { signal: context.signal } });
   try {
@@ -85,15 +92,22 @@ export async function attachWorkspaceMirrors(workspace: WorkspaceRecord, context
     const listen = await context.hostGateway(workspace);
     const { endpoints: targets } = endpoints;
     const modules = adapterModules(context.extensions), adapters = await loadMirrorAdapters(modules);
+    const namedKinds = Object.keys(targets).filter((kind) => DIM_NAMED_KINDS.has(kind));
+    const publicHosts = Object.fromEntries(namedKinds.map((kind) => [kind, `${cacheInternalName(kind)}:${DIM_NAME_SERVICE_INGRESS_PORT}`]));
     const relay = await ensureWorkspaceRelay(attachmentRoot, {
-      workspaceStateRoot: context.store.root, workspaceName: workspace.name, workspaceId: workspace.id, listen, endpoints: targets, adapterModules: modules
+      workspaceStateRoot: context.store.root, workspaceName: workspace.name, workspaceId: workspace.id, listen, endpoints: targets, adapterModules: modules,
+      ...(namedKinds.length ? { publicHosts } : {})
     }, context.signal);
+    // The guest's own resolver/ingress must already route the stable name before its client config
+    // (below) starts using it; an empty set here tears down a no-longer-configured name cleanly.
+    await context.nameService.reconcile(workspace, namedKinds.map((kind) => ({ name: cacheInternalName(kind), upstream: `http://${listen}:${relay.ports[kind]}/` })));
     const proxy = await readFile(new URL("./guest-proxy.js", import.meta.url), "utf8"), setup = await readFile(new URL("./guest-setup.js", import.meta.url), "utf8");
     const clients = await Promise.all(Object.keys(targets).map(async (kind) => {
       const adapter = adapters.get(kind);
       if (!adapter) throw new Error(`mirror adapter '${kind}' is unavailable`);
       const source = await readFile(new URL(adapter.guestModuleUrl), "utf8");
-      return { kind, endpoint: `http://${listen}:${relay.ports[kind]}/`, source };
+      const endpoint = DIM_NAMED_KINDS.has(kind) ? `http://${cacheInternalName(kind)}:${DIM_NAME_SERVICE_INGRESS_PORT}/` : `http://${listen}:${relay.ports[kind]}/`;
+      return { kind, endpoint, source };
     }));
     mirrorRouting(Object.fromEntries(clients.map(({ kind, endpoint }) => [kind, endpoint])), adapters);
     const payload = { clients, proxy, setup };
