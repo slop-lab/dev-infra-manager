@@ -30,6 +30,7 @@ if [[ "${1:-}" = omp ]]; then
   cp "$HOME/.omp/agent/mcp.json" "$work_dir/mcp-first.json"
   bash "$setup_script" omp
   cmp "$HOME/.omp/agent/mcp.json" "$work_dir/mcp-first.json"
+  test "$(grep -Fxc '.serena/' "$XDG_CONFIG_HOME/git/ignore")" = 1
   node - "$HOME" <<'NODE'
 const assert = require("node:assert/strict")
 const fs = require("node:fs")
@@ -595,6 +596,7 @@ grep -Fqx '    "channel" : "stable",' "$HOME/.omo/omo.jsonc"
 assert_no_opencode_runtime
 grep -Fxq 'existing-entry' "$HOME/.config/git/existing-ignore"
 grep -Fxq '.omo/' "$HOME/.config/git/existing-ignore"
+grep -Fxq '.serena/' "$HOME/.config/git/existing-ignore"
 test "$(sha256sum "$GIT_CONFIG_GLOBAL")" = "$git_config_before"
 
 mapfile -t npm_paths <"$HOME/.workspace-setup-npm-paths"

@@ -39,7 +39,8 @@ it("prepares helpers without repository configuration or npm installation and di
     expect((await stat(helper)).mode & 0o777).toBe(0o700);
     expect((await stat(join(home, ".local/share/dim-agent-tools/opencode-runtime.bash"))).mode & 0o777).toBe(0o700);
     expect(await readFile(setup, "utf8")).toContain("tool-setup.bash");
-    expect(await hostPlugin.guest!.inspect!(workspace, context)).toMatchObject({ state: "unconfigured", message: expect.stringContaining("no npm tools were installed automatically") });
+    expect((await stat(join(home, ".local/bin/dim-git-ignore"))).mode & 0o777).toBe(0o700);
+    expect(await hostPlugin.guest!.inspect!(workspace, context)).toMatchObject({ state: "unconfigured", message: expect.stringContaining("no tools were installed automatically") });
     await expect(stat(join(home, ".local/state/dim/services/dim-agent-tools-opencode.json"))).rejects.toThrow();
     expect((await stat(join(home, ".local/share/dim-agent-tools/opencode-team-metadata.mjs"))).mode & 0o777).toBe(0o700);
     const inode = (await stat(helper)).ino;

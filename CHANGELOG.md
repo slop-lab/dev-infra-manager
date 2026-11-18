@@ -10,6 +10,8 @@ is implied by these source changes.
 - Install and run Oh My Pi in persistent workspaces through agent-tools.
   Explicit setup verifies the pinned Bun release, honors the workspace npm
   mirror, and configures pinned Context Mode, Caveman and Serena integrations.
+  OMP and OpenCode ignore Serena's generated directory across workspace
+  worktrees. Other tools can add workspace-wide Git rules with `dim-git-ignore`.
   Incus VM workspaces resolve user-installed launchers in non-login commands.
   Incus guest preparation leaves piped input available for the requested
   command, and graceful VM shutdown allows up to two minutes.

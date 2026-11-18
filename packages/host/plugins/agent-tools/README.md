@@ -83,9 +83,13 @@ be revalidated or removed when changing the OMO pin; changed source is rejected.
 
 OMO team
 mode is configured in the user's home; reviewed repository-specific tool
-settings remain in the repository. OpenCode/OMO setup adds `.omo/` to the
-workspace user's global Git ignore file, preserving existing entries and a
-configured `core.excludesFile` path. Provider authentication is an explicit
+settings remain in the repository. OpenCode setup adds `.omo/`, and both
+OpenCode and OMP setup add Serena's `.serena/` to the workspace user's global
+Git ignore file. The rules apply across repositories and worktrees for that
+user. Other tools can invoke `dim-git-ignore PATTERN [PATTERN ...]` inside the
+workspace to append rules. The helper preserves existing entries and uses the
+configured global `core.excludesFile`, or Git's XDG ignore file by default.
+Provider authentication is an explicit
 user action. Setup neither logs in nor copies credentials from the DIM host.
 `dim tools setup` works on the selected local or SSH host and streams its
 progress through the normal workspace transport.

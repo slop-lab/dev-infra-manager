@@ -628,27 +628,6 @@ try {
   throw error
 }
 NODE
-
-  node - "$config_dir" <<'GITIGNORE'
-const fs = require("node:fs")
-const path = require("node:path")
-const { spawnSync, execFileSync } = require("node:child_process")
-const configured = spawnSync("git", ["config", "--global", "--path", "--get", "core.excludesFile"], { encoding: "utf8" })
-if (configured.error) throw configured.error
-if (configured.status !== 0 && configured.status !== 1) throw new Error("cannot read Git global ignore configuration")
-const existing = configured.status === 0 ? configured.stdout.replace(/\n$/, "") : undefined
-if (existing === "") throw new Error("Git core.excludesFile is empty; select a global ignore file")
-const ignore = existing ?? path.join(path.dirname(process.argv[2]), "git", "ignore")
-fs.mkdirSync(path.dirname(ignore), { recursive: true })
-let source = ""
-try { source = fs.readFileSync(ignore, "utf8") }
-catch (error) { if (error.code !== "ENOENT") throw error }
-if (!source.split(/\r?\n/).some((line) => line === ".omo/" || line === ".omo")) {
-  fs.appendFileSync(ignore, `${source && !source.endsWith("\n") ? "\n" : ""}.omo/\n`, { mode: 0o600 })
-}
-if (existing === undefined) execFileSync("git", ["config", "--global", "core.excludesFile", ignore])
-GITIGNORE
-
 fi
 
 if [[ "$selected_tool" != omp ]]; then
@@ -668,6 +647,13 @@ NODE
 fi
 
 asset_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "$selected_tool" = opencode ]]; then
+  node "$asset_dir/git-ignore.mjs" '.omo/' '.serena/'
+elif [[ "$selected_tool" = omp ]]; then
+  node "$asset_dir/git-ignore.mjs" '.serena/'
+fi
+[[ ! -L "$install_prefix/bin/dim-git-ignore" ]] || fail 'unsafe Git ignore helper target'
+install -m 0700 "$asset_dir/git-ignore.mjs" "$install_prefix/bin/dim-git-ignore"
 [[ -f "$asset_dir/agent.mjs" ]] || fail 'agent launcher asset is missing'
 [[ ! -L "$tool_launcher" && (! -e "$tool_launcher" || -f "$tool_launcher") ]] || fail 'unsafe agent launcher target'
 install -m 0700 "$asset_dir/agent.mjs" "$tool_launcher"
