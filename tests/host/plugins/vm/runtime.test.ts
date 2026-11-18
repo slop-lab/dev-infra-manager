@@ -92,11 +92,14 @@ describe("Incus VM workspace runtime", () => {
     await expect(machines.updateAllocation(workspace(), { cpuCount: 8, memory: "16GiB" })).rejects.toThrow("stop the VM");
     expect(runner.calls.some((call) => call[0] === "config")).toBe(false);
   });
-  it("uses one exec path for streams and does not wrap arbitrary commands in a shell", async () => {
+  it("uses one exec path for streams and passes arbitrary arguments literally after changing PATH", async () => {
     const { runner, machines } = fixture(); await machines.create(workspace()); await machines.startReady(workspace());
     const runtime = new IncusWorkspaceRuntime(machines);
     expect(await runtime.exec(workspace(), ["printf", "%s", "$(dangerous)"])).toBe(0);
-    expect(runner.calls.at(-1)?.slice(-4)).toEqual(["--", "printf", "%s", "$(dangerous)"]);
+    expect(runner.calls.at(-1)?.slice(-8)).toEqual([
+      "--", "/bin/sh", "-c", 'export PATH="/home/dim/.local/bin${PATH:+:$PATH}"; exec "$@"',
+      "dim-vm-exec", "printf", "%s", "$(dangerous)",
+    ]);
     await expect(runtime.connect(workspace(), 65536)).rejects.toThrow("invalid VM forwarding port");
   });
   it("rejects floating image aliases before creating anything", async () => {
