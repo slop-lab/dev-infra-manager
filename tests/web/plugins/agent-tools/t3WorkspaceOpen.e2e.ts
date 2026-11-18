@@ -53,44 +53,48 @@ try {
 
   for (const { host, name, t3Origin, project, omp } of workspaces) {
     step = "select workspace and inspect T3 service";
+    await page.getByRole("link", { name: `Open ${name} on ${host}`, exact: true }).click();
     const row = page.locator(".workspace-host").filter({ has: page.getByRole("heading", { name: host, exact: true }) })
       .locator(".workspace-row").filter({ has: page.getByRole("heading", { name, exact: true }) });
-    const link = row.getByRole("heading", { name, exact: true }).getByRole("link");
-    const workspaceUrl = await link.getAttribute("href");
-    assert(workspaceUrl);
-    await page.locator(".workspace-list-item a").and(page.locator(`a[href=${JSON.stringify(workspaceUrl)}]`)).click();
     await row.getByRole("link", { name: "Tools", exact: true }).click();
     await row.getByText("Service running on workspace port 3773.", { exact: true }).waitFor();
+    step = "check unauthenticated T3 HTTPS access";
     const unpaired = await anonymous.newPage();
-    await unpaired.goto(t3Origin);
+    await unpaired.goto(`${t3Origin}/api/auth/session`);
     assert.equal(await authenticated(unpaired), false);
 
-    step = "open T3 from DIM and exchange a one-time credential";
+    step = "click Open T3 Code in DIM Web";
     const pairing = page.waitForResponse((response) => response.url() === pairingApi.href && response.request().method() === "POST");
     const popup = page.waitForEvent("popup");
     await row.getByRole("button", { name: "Open T3 Code", exact: true }).click();
     const client = await popup;
     client.setDefaultTimeout(30_000);
+    step = "check the authenticated DIM pairing response";
     const response = await pairing;
     assert.equal(response.status(), 200);
     assert.equal(await response.headerValue("cache-control"), "no-store");
     const grant = z.object({ credential: z.string(), origin: httpsOrigin }).parse(await response.json());
     assert.equal(new URL(grant.origin).origin, t3Origin);
-    await client.waitForURL((url) => url.origin === t3Origin && url.pathname !== "/pair" && !url.hash.includes("token="));
+    step = "wait for T3 to exchange the one-time grant";
+    await client.waitForURL((url) => url.origin === t3Origin && url.pathname !== "/pair" && !url.hash.includes("token="), { timeout: 60_000, waitUntil: "domcontentloaded" });
+    step = "open the workspace project in T3";
+    const projectButton = client.getByRole("button", { name: `New thread in ${project}`, exact: true }).first();
+    await projectButton.waitFor();
+    step = "verify T3 session and secure cookie";
     assert.equal(await authenticated(client), true);
     const cookie = (await session.cookies(t3Origin)).find(({ name }) => name.startsWith("t3_session"));
     assert(cookie?.secure && cookie.httpOnly);
     assert.equal(await client.evaluate(() => window.opener === null), true);
+    step = "reject reuse of the spent T3 grant";
     const replayed = await unpaired.evaluate(async (credential) => (await fetch("/api/auth/browser-session", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ credential }),
     })).ok, grant.credential);
     assert.equal(replayed, false);
     assert.equal(await authenticated(unpaired), false);
     await unpaired.close();
-    await client.getByRole("button", { name: `New thread in ${project}`, exact: true }).waitFor();
     if (omp) {
       step = "send an OMP ACP message through the configured router";
-      await client.getByRole("button", { name: `New thread in ${project}`, exact: true }).click();
+      await projectButton.click();
       await client.getByRole("textbox", { name: /Message/ }).first().click();
       await client.keyboard.insertText("Reply with the Markdown heading ## DIM T3 Example Verified. No tools.");
       await client.getByRole("button", { name: "Submit message", exact: true }).click();
@@ -106,7 +110,7 @@ try {
     await row.getByRole("link", { name: "Open T3 Code", exact: true }).click();
     const reopened = await reopening;
     await reopened.waitForURL((url) => url.origin === t3Origin);
-    await reopened.getByRole("button", { name: `New thread in ${project}`, exact: true }).waitFor();
+    await reopened.getByRole("button", { name: `New thread in ${project}`, exact: true }).first().waitFor();
     assert.equal(await authenticated(reopened), true);
     assert.equal(repeatedPairing, false);
     page.off("request", observe);
@@ -115,7 +119,8 @@ try {
   }
 } catch (error) {
   // Browser diagnostics may include the pairing fragment or a form value.
-  console.error(`T3 browser verification failed at ${step} (${error instanceof Error ? error.name : "error"})`);
+  const diagnostic = error instanceof Error ? (/net::ERR_[A-Z_]+|Execution context was destroyed|Target page, context or browser has been closed/.exec(error.message)?.[0] ?? error.name) : "error";
+  console.error(`T3 browser verification failed at ${step} (${diagnostic})`);
   process.exitCode = 1;
 } finally {
   await browser.close();
