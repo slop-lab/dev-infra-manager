@@ -1,5 +1,6 @@
 import { mkdir, readFile, realpath, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { RunOptions, WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 
 export interface VmBudget {
@@ -98,8 +99,20 @@ export class LinuxVmBudget implements VmBudget {
     let group: string;
     try { group = await this.group(instance, false); }
     catch (error) { if (error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT") return; throw error; }
-    if ((await readFile(path.join(group, "cgroup.procs"), "utf8")).trim() !== "") throw new Error("cannot remove a VM cgroup with live processes");
-    await rmdir(group);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        if ((await readFile(path.join(group, "cgroup.procs"), "utf8")).trim() !== "") throw new Error("cannot remove a VM cgroup with live processes");
+        await rmdir(group);
+        return;
+      } catch (error) {
+        const code = error !== null && typeof error === "object" && "code" in error ? error.code : undefined;
+        if (code === "ENOENT") return;
+        // Incus can report the VM stopped before the kernel finishes tearing
+        // down its empty cgroup. Recheck membership before each removal.
+        if (code !== "EBUSY" || attempt >= 20) throw error;
+        await delay(100);
+      }
+    }
   }
   private async group(instance: string, create: boolean): Promise<string> {
     if (!/^dim-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(instance)) throw new Error("invalid VM cgroup identity");
