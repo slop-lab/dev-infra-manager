@@ -63,6 +63,10 @@ mutations are never retried. Deadline diagnostics retain the actual last known
 transport exit and line. Neither reconnect nor cancellation extends the budget;
 cleanup retains its independent bound.
 
+`dim stop`, `dim restart` and keep-data `dim recreate` allow up to 120
+seconds for a graceful Incus VM shutdown. A timeout is reported before DIM
+releases the VM budget or proceeds to the next lifecycle step.
+
 The normal host CLI does not need to run as root. Install the matching plugin's
 root budget helper once on that selected host, using a reviewed root-owned
 Node.js 24 or 26 executable and a root configuration such as:

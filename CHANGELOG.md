@@ -11,6 +11,8 @@ is implied by these source changes.
   Explicit setup verifies the pinned Bun release, honors the workspace npm
   mirror, and configures pinned Context Mode, Caveman and Serena integrations.
   Incus VM workspaces resolve user-installed launchers in non-login commands.
+  Incus guest preparation leaves piped input available for the requested
+  command, and graceful VM shutdown allows up to two minutes.
   The OMP launcher finds workspace language projects from source subdirectories,
   and Serena activates the current project automatically.
 

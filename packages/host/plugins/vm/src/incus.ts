@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { UserError, type CommandRunner, type StreamingCommandRunner, type RunOptions, type WorkspaceResources } from "@slop-lab/dim-host-core/workspace";
 import { fingerprint, object, uuid, parseVmHostConfig, type VmHostConfig } from "./config.js";
 import type { VmBudget } from "./budget.js";
@@ -7,6 +8,9 @@ import { VmStartupDeadline } from "./startup.js";
 
 export interface VmIdentity { source?: { workingDirectory?: string; checkouts?: readonly { directory: string }[] }; id: string; image: string; initialized: boolean; resources: WorkspaceResources }
 export interface VmInspection { running: boolean; pid: number }
+
+// Allow a slow guest service to finish shutting down before reporting failure.
+const VM_GRACEFUL_STOP_SECONDS = "120";
 
 type ReadinessTransportFailure = { kind: "tls-record" | "operation-eof"; exitCode: number; stderr: string };
 
@@ -110,7 +114,7 @@ export class IncusMachines {
   }
   async stop(record: VmIdentity): Promise<void> {
     const actual = await this.inspect(record);
-    if (actual?.running) await this.checked(["stop", this.name(record), "--timeout", "30"]);
+    if (actual?.running) await this.checked(["stop", this.name(record), "--timeout", VM_GRACEFUL_STOP_SECONDS]);
     await this.budget.release?.(this.name(record));
   }
   async remove(record: VmIdentity, options: { keepData: boolean }): Promise<void> {
@@ -148,10 +152,15 @@ export class IncusMachines {
   async exec(record: VmIdentity, command: string[], options: RunOptions = {}): Promise<number> {
     if (command.length === 0 || command.some((argument) => argument.includes("\0"))) throw new UserError("provide a VM command");
     await this.enforce(record);
+    // An Incus exec opens a stdin stream even for guest probes. Give probes
+    // EOF so they cannot consume input meant for the next command.
+    const streams = options.stdin === undefined && !options.terminal
+      ? { ...options, stdin: Readable.from([]) }
+      : options;
     return this.runner.runStreaming("incus", this.args(["exec", this.name(record),
       "--cwd", `/workspace${record.source?.workingDirectory ? `/${record.source.workingDirectory}` : ""}`, "--env", "HOME=/home/dim", "--env", "TMPDIR=/mnt/dim-tmp", "--env", "DIM_WORKSPACE_TMPDIR=/mnt/dim-tmp",
       "--mode", options.terminal ? "interactive" : "non-interactive", "--", "runuser", "--user", "dim", "--preserve-environment", "--",
-      "/bin/sh", "-c", 'export PATH="/home/dim/.local/bin${PATH:+:$PATH}"; exec "$@"', "dim-vm-exec", ...command]), options);
+      "/bin/sh", "-c", 'export PATH="/home/dim/.local/bin${PATH:+:$PATH}"; exec "$@"', "dim-vm-exec", ...command]), streams);
   }
   private async waitForReadinessProbe(record: VmIdentity, deadline: VmStartupDeadline, probe: "agent" | "Docker"): Promise<void> {
     let lastTransportFailure: ReadinessTransportFailure | undefined;

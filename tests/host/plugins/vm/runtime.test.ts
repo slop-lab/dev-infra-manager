@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { Readable } from "node:stream";
 import { IncusMachines } from "../../../../packages/host/plugins/vm/src/incus.js";
 import { IncusWorkspaceRuntime } from "../../../../packages/host/plugins/vm/src/runtime.js";
 import { budgetValues, type VmBudget } from "../../../../packages/host/plugins/vm/src/budget.js";
 import { config, FakeIncus, workspace } from "./fixture.js";
 import { parseVmHostConfig } from "../../../../packages/host/plugins/vm/src/config.js";
-import type { StreamingCommandRunner } from "../../../../packages/host/core/src/types.js";
+import type { RunOptions, StreamingCommandRunner } from "../../../../packages/host/core/src/types.js";
 
 const id = "12345678-1234-1234-1234-123456789abc";
 function fixture(budget: VmBudget = { apply: async () => {}, verify: async () => {} }) {
@@ -59,6 +60,24 @@ describe("Incus VM workspace runtime", () => {
     await machines.abortStart(workspace());
     expect(releases).toEqual([`dim-${id}`]);
   });
+  it("allows a graceful VM stop and keeps the budget if it times out", async () => {
+    class SlowStop extends FakeIncus {
+      override async run(command: string, args: string[], options?: import("../../../../packages/host/core/src/types.js").RunOptions) {
+        if (args[2] === "stop") {
+          this.calls.push(args.slice(2));
+          return { command, args, stdout: "", stderr: "context deadline exceeded", exitCode: 1 };
+        }
+        return super.run(command, args, options);
+      }
+    }
+    const runner = new SlowStop(); runner.exists = true; runner.running = true;
+    const releases: string[] = [];
+    const machines = new IncusMachines(config, runner, { apply: async () => {}, verify: async () => {},
+      release: async (instance) => { releases.push(instance); } });
+    await expect(machines.stop(workspace())).rejects.toThrow("context deadline exceeded");
+    expect(runner.calls.at(-1)).toEqual(["stop", `dim-${id}`, "--timeout", "120"]);
+    expect(releases).toEqual([]);
+  });
   it("uses independent cleanup inspection and budget release after the operation runner is cancelled", async () => {
     const cleanup = new FakeIncus(); cleanup.exists = true; cleanup.running = true;
     const cancelled: StreamingCommandRunner = {
@@ -101,6 +120,23 @@ describe("Incus VM workspace runtime", () => {
       "dim-vm-exec", "printf", "%s", "$(dangerous)",
     ]);
     await expect(runtime.connect(workspace(), 65536)).rejects.toThrow("invalid VM forwarding port");
+  });
+  it("closes stdin for incidental VM execs and preserves caller-supplied input", async () => {
+    const { machines, runner } = fixture();
+    runner.exists = true;
+    runner.running = true;
+    const executions: (RunOptions | undefined)[] = [];
+    runner.runStreaming = async (_command, _args, options) => {
+      executions.push(options);
+      return 0;
+    };
+    await machines.exec(workspace(), ["probe"]);
+    const probeInput = executions[0]?.stdin;
+    expect(probeInput).toBeInstanceOf(Readable);
+    expect(await probeInput?.toArray()).toEqual([]);
+    const interactiveInput = Readable.from(["request"]);
+    await machines.exec(workspace(), ["agent"], { stdin: interactiveInput });
+    expect(executions[1]?.stdin).toBe(interactiveInput);
   });
   it("rejects floating image aliases before creating anything", async () => {
     const { runner, machines } = fixture();
