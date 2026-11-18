@@ -1,7 +1,7 @@
 // @ts-check
 import { buildWorkspaceClientLink } from './workspace-link.js';
 /** @typedef {{name:string,id:string,phase:string}} Workspace */
-/** @typedef {{id:string,title:string,status:'ready'|'unavailable',workspaces:Workspace[],tools:Array<'opencode'|'codex'>}} Controller */
+/** @typedef {{id:string,title:string,status:'ready'|'unavailable',workspaces:Workspace[],tools:Array<'opencode'|'codex'|'omp'>}} Controller */
 /** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginWorkspaceBrowserContext} Context */
 /** @typedef {{state:'running'|'stopped',port:number,url:string,directory:string,username:string,credentialsFile:string,logFile:string,externalUrls?:Array<{url:string,permalink?:string,ingress:string,approval:string}>,externalUrlsAvailable?:boolean}} Server */
 /** @param {HTMLElement} container @param {Context} context */
@@ -64,7 +64,7 @@ export function mount(container, context) {
     /** @param {unknown} result */
     function renderTools(result) {
       if (!scoped()) return;
-      const value = /** @type {{tools:Array<{name:'opencode'|'codex',installed:boolean,version:string}>}} */ (result);
+      const value = /** @type {{tools:Array<{name:'opencode'|'codex'|'omp',installed:boolean,version:string}>}} */ (result);
       tools.replaceChildren(element('h4', 'Installed tools'));
       for (const tool of value.tools) tools.append(element('p', `${tool.name}: ${tool.installed ? tool.version || 'installed' : 'not installed'}`));
     }

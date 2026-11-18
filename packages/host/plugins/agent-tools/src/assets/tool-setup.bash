@@ -5,6 +5,8 @@ readonly OPENCODE_VERSION="1.18.31"
 readonly OMO_VERSION="4.19.4"
 readonly JSONC_PARSER_VERSION="3.3.1"
 readonly CODEX_VERSION="0.156.1"
+readonly OMP_VERSION="18.22.0"
+readonly BUN_VERSION="1.4.4"
 readonly CONTEXT_MODE_VERSION="2.2.0"
 readonly CAVEMAN_VERSION="4.1.0"
 readonly CAVEMAN_COMMIT="1e91f1306d602d4ca23618701b1185575ae1869b"
@@ -38,6 +40,12 @@ case "$selected_tool" in
   codex)
     selected_version="$CODEX_VERSION"
     selected_executable_name=codex
+    ;;
+  omp)
+    require_command git
+    require_command python3
+    selected_version="$OMP_VERSION"
+    selected_executable_name=omp
     ;;
   *) fail "unsupported tool selection: $selected_tool" ;;
 esac
@@ -150,10 +158,21 @@ if (selectedTool === "opencode") {
   openCodeDirectory = ensureDirectory(path.join(configHome, "opencode"), "OpenCode configuration directory")
   ensureDirectory(path.join(cacheHome, "opencode"), "OpenCode cache directory")
 }
+if (selectedTool === "omp") {
+  ensureDirectory(path.join(home, ".omp"), "Caveman OMP plugin directory")
+  ensureDirectory(path.join(home, process.env.PI_CONFIG_DIR || ".omp"), "OMP configuration root")
+  if (process.env.PI_CODING_AGENT_DIR) {
+    if (!path.isAbsolute(process.env.PI_CODING_AGENT_DIR)) throw new Error("PI_CODING_AGENT_DIR must be absolute")
+    ensureDirectory(rebaseFromRequestedHome(process.env.PI_CODING_AGENT_DIR), "OMP agent directory")
+  }
+}
 const dataHome = ensureDirectory(rebaseFromRequestedHome(requestedDataHome), "XDG data directory")
 const stateHome = ensureDirectory(rebaseFromRequestedHome(requestedStateHome), "XDG state directory")
 const npmStateDirectory = ensureDirectory(path.join(installPrefix, "share", "workspace-user-setup"), "npm state directory")
 const npmCache = ensureDirectory(path.join(npmStateDirectory, "cache"), "npm cache directory")
+const bunHome = selectedTool === "omp"
+  ? ensureDirectory(path.join(installPrefix, "share", "dim-agent-tools", "bun"), "Bun installation directory")
+  : ""
 const npmUserconfig = path.join(npmStateDirectory, "npmrc")
 try {
   const npmUserconfigStat = fs.lstatSync(npmUserconfig)
@@ -174,13 +193,14 @@ process.stdout.write([
   npmCache,
   npmUserconfig,
   path.join(toolLauncherDirectory, "dim-agent"),
+  bunHome,
   path.join(toolStateDirectory, `${selectedTool}.json`),
 ].join("\n"))
 NODE
 )"
 
 mapfile -t setup_paths <<<"$preflight_output"
-(( ${#setup_paths[@]} == 11 )) || fail 'internal path preflight returned an invalid result'
+(( ${#setup_paths[@]} == 12 )) || fail 'internal path preflight returned an invalid result'
 canonical_home="${setup_paths[0]}"
 install_prefix="${setup_paths[1]}"
 omo_dir="${setup_paths[2]}"
@@ -191,7 +211,8 @@ state_home="${setup_paths[6]}"
 npm_cache="${setup_paths[7]}"
 npm_userconfig="${setup_paths[8]}"
 tool_launcher="${setup_paths[9]}"
-tool_manifest="${setup_paths[10]}"
+bun_home="${setup_paths[10]}"
+tool_manifest="${setup_paths[11]}"
 
 HOME="$canonical_home"
 export HOME
@@ -203,38 +224,7 @@ export npm_config_userconfig="$npm_userconfig"
 export NPM_CONFIG_CACHE="$npm_cache"
 export npm_config_cache="$npm_cache"
 
-if [[ "$selected_tool" = opencode ]]; then
-  runtime_helper="$HOME/.local/share/dim-agent-tools/opencode-runtime.bash"
-  [[ -f "$runtime_helper" ]] || runtime_helper="$(dirname -- "${BASH_SOURCE[0]}")/opencode-runtime.bash"
-  bash "$runtime_helper" >/dev/null
-  CI=1 \
-  NPM_CONFIG_AUDIT=false \
-  NPM_CONFIG_FUND=false \
-  NPM_CONFIG_UPDATE_NOTIFIER=false \
-  NPM_CONFIG_YES=true \
-  npm install --global --prefix "$install_prefix" --no-progress --loglevel=error \
-    "opencode-ai@1.18.31" \
-    "oh-my-openagent@4.19.4" \
-    "jsonc-parser@3.3.1" \
-    "context-mode@2.2.0"
-else
-  CI=1 \
-  NPM_CONFIG_AUDIT=false \
-  NPM_CONFIG_FUND=false \
-  NPM_CONFIG_UPDATE_NOTIFIER=false \
-  NPM_CONFIG_YES=true \
-  npm install --global --prefix "$install_prefix" --no-progress --loglevel=error \
-    "@openai/codex@0.156.1"
-fi
-
-if [[ "$selected_tool" = opencode ]]; then
-  availability_helper="$HOME/.local/share/dim-agent-tools/omo-model-availability.mjs"
-  [[ -f "$availability_helper" ]] || availability_helper="$(dirname -- "${BASH_SOURCE[0]}")/omo-model-availability.mjs"
-  node "$availability_helper" "$install_prefix/lib/node_modules/oh-my-openagent"
-
-  # Caveman's OpenCode payload installs from a commit-verified clone of its
-  # release tag. Only the local plugin/AGENTS.md path runs; the interactive
-  # agent/login discovery, routing CLI and MCP-shrink middleware stay out.
+prepare_caveman() {
   caveman_root="$install_prefix/share/dim-agent-tools/caveman-v$CAVEMAN_VERSION"
   [[ ! -L "$caveman_root" ]] || fail "unsafe caveman payload target: $caveman_root"
   if [[ ! -d "$caveman_root" ]] || [[ "$(git -C "$caveman_root" rev-parse HEAD 2>/dev/null)" != "$CAVEMAN_COMMIT" ]]; then
@@ -244,10 +234,9 @@ if [[ "$selected_tool" = opencode ]]; then
     [[ "$(git -C "$caveman_root" rev-parse HEAD)" = "$CAVEMAN_COMMIT" ]] \
       || fail "caveman v$CAVEMAN_VERSION does not match the pinned commit $CAVEMAN_COMMIT"
   fi
-  PATH="$install_prefix/bin:$PATH" XDG_CONFIG_HOME="$(dirname -- "$config_dir")" \
-    node "$caveman_root/installer/install.js" --non-interactive --only opencode \
-    || fail 'caveman OpenCode payload installation failed'
+}
 
+install_serena() {
   # Serena is a Python MCP server; its pinned install uses a checksum-verified
   # uv release so no unpinned installer script runs.
   case "$(uname -m)" in
@@ -271,11 +260,200 @@ if [[ "$selected_tool" = opencode ]]; then
   fi
   serena_binary="$install_prefix/bin/serena"
   if ! "$uv_binary" tool list 2>/dev/null | grep -q "^serena-agent v$SERENA_AGENT_VERSION\$"; then
-    "$uv_binary" tool install --quiet --force "serena-agent==$SERENA_AGENT_VERSION"
+    (
+      python_args=()
+      if command -v apk >/dev/null 2>&1 && apk info --exists musl >/dev/null 2>&1; then
+        # Serena pins psutil 7.0.0, which has no musllinux wheel. Match
+        # Alpine's Python headers and remove the temporary build dependencies.
+        apk_command=(apk)
+        [[ "$(id -u)" = 0 ]] || apk_command=(sudo -n apk)
+        build_deps=".dim-serena-build-$BASHPID"
+        trap '"${apk_command[@]}" del "$build_deps" >&2' EXIT
+        "${apk_command[@]}" add --no-cache --virtual "$build_deps" gcc musl-dev python3-dev linux-headers >&2
+        python_args=(--python /usr/bin/python3)
+      fi
+      "$uv_binary" tool install --quiet --force "${python_args[@]}" "serena-agent==$SERENA_AGENT_VERSION"
+    )
     "$uv_binary" tool list | grep -q "^serena-agent v$SERENA_AGENT_VERSION\$" \
       || fail "serena-agent $SERENA_AGENT_VERSION is not the installed version after installation"
   fi
   [[ -x "$serena_binary" ]] || fail "serena executable missing after installation: $serena_binary"
+}
+
+install_omp() (
+  cd "$bun_home"
+  export PATH="$install_prefix/bin:$PATH"
+  export BUN_INSTALL_GLOBAL_DIR="$bun_home/global"
+  export BUN_INSTALL_BIN="$install_prefix/bin"
+  # The mirrors integration configures /etc/npmrc, which Bun does not read.
+  if [[ -z "${BUN_CONFIG_REGISTRY:-}" && -z "${NPM_CONFIG_REGISTRY:-}" ]]; then
+    npm_registry="$(npm config get registry)"
+    if [[ "$npm_registry" = http://npm.cache.dim.internal:8053/ ]]; then
+      export BUN_CONFIG_REGISTRY="$npm_registry"
+    fi
+  fi
+
+  local_libc="$(node -p 'process.report.getReport().header.glibcVersionRuntime ? "glibc" : "musl"')"
+  architecture="$(uname -m)"
+  bun_binary="$install_prefix/bin/bun"
+  [[ ! -L "$bun_binary" && (! -e "$bun_binary" || -f "$bun_binary") ]] || fail 'unsafe Bun executable target'
+  if [[ "$("$bun_binary" --version 2>/dev/null)" != "$BUN_VERSION" ]]; then
+    case "$architecture:$local_libc" in
+      x86_64:glibc) target=linux-x64-baseline checksum=e0446eb55995772eb9894bebae9a6be368d985a8b9271ee124486f9946eedd76 ;;
+      x86_64:musl) target=linux-x64-musl-baseline checksum=6e9c37098b293920aed28bfb51ab240e26d23bfdd9bbfecb3ad428ac166549bc ;;
+      aarch64:glibc) target=linux-aarch64 checksum=baa6bb36f51d6e58561e02bbea825038a9df454f673d6d776e8bbf86f8c7850e ;;
+      aarch64:musl) target=linux-aarch64-musl checksum=57f01b02ac7113c61c935f28f38c2eab849e3c970dab21f8b640a87b1ef65009 ;;
+      *) fail "no pinned Bun build for architecture and libc: $architecture:$local_libc" ;;
+    esac
+    work="$(mktemp -d "${TMPDIR:-/tmp}/dim-bun.XXXXXX")"
+    trap 'rm -rf -- "$work"' EXIT
+    curl -fsSL --proto '=https' --tlsv1.2 \
+      "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-$target.zip" -o "$work/bun.zip"
+    printf '%s  %s\n' "$checksum" "$work/bun.zip" | sha256sum -c --quiet - \
+      || fail "Bun $BUN_VERSION download failed its pinned checksum"
+    python3 -m zipfile -e "$work/bun.zip" "$work"
+    install -m 0755 "$work/bun-$target/bun" "$bun_binary"
+    [[ "$("$bun_binary" --version)" = "$BUN_VERSION" ]] || fail 'installed Bun reports an unexpected version'
+  fi
+  omp="$install_prefix/bin/omp"
+  if [[ "$local_libc" = musl ]]; then
+    # The npm distribution only ships glibc native addons. The standalone
+    # musl executable embeds its platform addon and Bun for plugin installs.
+    case "$architecture" in
+      x86_64) target=linux-musl-x64 checksum=79ec62c929e1b341c14a5dff35c480dc2db5bbd3740b31c4f1b854c075ae4806 ;;
+      aarch64) target=linux-musl-arm64 checksum=6292b4f1be508599a415f98c960d3ea52835a6b103967b316b8708263b283d8b ;;
+      *) fail "no pinned OMP build for architecture: $architecture" ;;
+    esac
+    [[ ! -L "$omp" && (! -e "$omp" || -f "$omp") ]] || fail 'unsafe OMP executable target'
+    if ! printf '%s  %s\n' "$checksum" "$omp" | sha256sum -c --quiet - 2>/dev/null; then
+      if [[ -z "${work:-}" ]]; then
+        work="$(mktemp -d "${TMPDIR:-/tmp}/dim-omp.XXXXXX")"
+        trap 'rm -rf -- "$work"' EXIT
+      fi
+      curl -fsSL --proto '=https' --tlsv1.2 \
+        "https://github.com/can1357/oh-my-pi/releases/download/v$OMP_VERSION/omp-$target" -o "$work/omp"
+      printf '%s  %s\n' "$checksum" "$work/omp" | sha256sum -c --quiet - \
+        || fail "OMP $OMP_VERSION download failed its pinned checksum"
+      install -m 0755 "$work/omp" "$omp"
+    fi
+  else
+    "$bun_binary" add --global --exact --ignore-scripts --no-env-file "@oh-my-pi/pi-coding-agent@$OMP_VERSION"
+    node -e 'if (require(process.argv[1]).version !== process.argv[2]) throw new Error("unexpected OMP package version")' \
+      "$BUN_INSTALL_GLOBAL_DIR/node_modules/@oh-my-pi/pi-coding-agent/package.json" "$OMP_VERSION"
+  fi
+  [[ "$("$omp" --version)" = "omp/$OMP_VERSION" ]] || fail 'installed OMP reports an unexpected version'
+  prepare_caveman
+  "$omp" plugin install "context-mode@$CONTEXT_MODE_VERSION"
+  node "$caveman_root/installer/install.js" --non-interactive --only omp \
+    || fail 'caveman OMP payload installation failed'
+  "$omp" plugin list --json | node -e '
+    const { npm } = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+    const [contextVersion, cavemanVersion] = process.argv.slice(1);
+    for (const [name, version] of [["context-mode", contextVersion], ["caveman", cavemanVersion]]) {
+      if (!npm.some((plugin) => plugin.name === name && plugin.version === version && plugin.enabled)) {
+        throw new Error(`expected enabled OMP plugin ${name}@${version}`);
+      }
+    }
+  ' "$CONTEXT_MODE_VERSION" "$CAVEMAN_VERSION"
+  install_serena
+  omp_config_dir="$("$omp" config path)"
+  node --input-type=module - "$canonical_home" "$omp_config_dir" "$serena_binary" <<'NODE'
+import { constants } from "node:fs";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+
+const [home, directory, command] = process.argv.slice(2);
+const relative = path.relative(home, directory);
+if (!path.isAbsolute(directory) || !relative || relative === ".." ||
+    relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  throw new Error("OMP configuration directory must be inside HOME");
+}
+let current = home;
+for (const component of relative.split(path.sep)) {
+  current = path.join(current, component);
+  await fs.mkdir(current, { mode: 0o700 }).catch(error => {
+    if (error.code !== "EEXIST") throw error;
+  });
+  if (!(await fs.lstat(current)).isDirectory()) throw new Error(`unsafe OMP configuration directory: ${current}`);
+}
+const file = path.join(directory, "mcp.json");
+async function readConfig() {
+  let handle;
+  try {
+    handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    if (!(await handle.stat()).isFile()) throw new Error(`OMP MCP configuration must be a regular file: ${file}`);
+    return await handle.readFile("utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  } finally {
+    await handle?.close();
+  }
+}
+const original = await readConfig();
+const config = JSON.parse(original ?? "{}");
+const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
+if (!object(config) || (config.mcpServers !== undefined && !object(config.mcpServers))) {
+  throw new Error(`invalid OMP MCP configuration: ${file}`);
+}
+const serena = {
+  type: "stdio",
+  command,
+  args: ["start-mcp-server", "--context", "ide-assistant"],
+  enabled: true,
+};
+config.mcpServers = { ...config.mcpServers, serena };
+const output = JSON.stringify(config, null, 2) + "\n";
+if (output !== original) {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(temporary, output, { flag: "wx", mode: 0o600 });
+    if (await readConfig() !== original) throw new Error(`OMP MCP configuration changed concurrently: ${file}`);
+    await fs.rename(temporary, file);
+  } finally {
+    await fs.rm(temporary, { force: true });
+  }
+}
+NODE
+)
+
+if [[ "$selected_tool" = opencode ]]; then
+  runtime_helper="$HOME/.local/share/dim-agent-tools/opencode-runtime.bash"
+  [[ -f "$runtime_helper" ]] || runtime_helper="$(dirname -- "${BASH_SOURCE[0]}")/opencode-runtime.bash"
+  bash "$runtime_helper" >/dev/null
+  CI=1 \
+  NPM_CONFIG_AUDIT=false \
+  NPM_CONFIG_FUND=false \
+  NPM_CONFIG_UPDATE_NOTIFIER=false \
+  NPM_CONFIG_YES=true \
+  npm install --global --prefix "$install_prefix" --no-progress --loglevel=error \
+    "opencode-ai@1.18.31" \
+    "oh-my-openagent@4.19.4" \
+    "jsonc-parser@3.3.1" \
+    "context-mode@2.2.0"
+elif [[ "$selected_tool" = codex ]]; then
+  CI=1 \
+  NPM_CONFIG_AUDIT=false \
+  NPM_CONFIG_FUND=false \
+  NPM_CONFIG_UPDATE_NOTIFIER=false \
+  NPM_CONFIG_YES=true \
+  npm install --global --prefix "$install_prefix" --no-progress --loglevel=error \
+    "@openai/codex@0.156.1"
+else
+  install_omp
+fi
+
+if [[ "$selected_tool" = opencode ]]; then
+  availability_helper="$HOME/.local/share/dim-agent-tools/omo-model-availability.mjs"
+  [[ -f "$availability_helper" ]] || availability_helper="$(dirname -- "${BASH_SOURCE[0]}")/omo-model-availability.mjs"
+  node "$availability_helper" "$install_prefix/lib/node_modules/oh-my-openagent"
+
+  prepare_caveman
+  PATH="$install_prefix/bin:$PATH" XDG_CONFIG_HOME="$(dirname -- "$config_dir")" \
+    node "$caveman_root/installer/install.js" --non-interactive --only opencode \
+    || fail 'caveman OpenCode payload installation failed'
+  install_serena
 
   parser_path="$install_prefix/lib/node_modules/jsonc-parser"
   [[ -d "$parser_path" ]] || fail "JSONC parser installation is missing: $parser_path"
@@ -473,6 +651,7 @@ GITIGNORE
 
 fi
 
+if [[ "$selected_tool" != omp ]]; then
 node - "$install_prefix" "$selected_tool" <<'NODE'
 const fs = require("node:fs")
 const path = require("node:path")
@@ -486,6 +665,7 @@ for (const [name, version] of Object.entries(expected)) {
   if (installed !== version) throw new Error(`expected ${name}@${version}, found ${installed}`)
 }
 NODE
+fi
 
 asset_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$asset_dir/agent.mjs" ]] || fail 'agent launcher asset is missing'
@@ -522,8 +702,12 @@ if [[ "$selected_tool" = opencode ]]; then
     "Installed context-mode@$CONTEXT_MODE_VERSION (plugin), caveman v$CAVEMAN_VERSION (plugin + AGENTS.md ruleset) and serena-agent $SERENA_AGENT_VERSION (MCP server via uv $UV_VERSION)." \
     "OpenCode configuration updated under $config_dir; OMO configuration updated at $omo_dir/omo.jsonc." \
     "Start a new login shell so $install_prefix/bin is on PATH; OpenCode was not started."
-else
+elif [[ "$selected_tool" = codex ]]; then
   printf '%s\n' \
     "Installed @openai/codex@$CODEX_VERSION under $install_prefix." \
     "Start a new login shell so $install_prefix/bin is on PATH; Codex was not started."
+else
+  printf '%s\n' \
+    "Installed @oh-my-pi/pi-coding-agent@$OMP_VERSION with Bun $BUN_VERSION under $install_prefix." \
+    "Installed context-mode@$CONTEXT_MODE_VERSION, caveman v$CAVEMAN_VERSION and serena-agent $SERENA_AGENT_VERSION for OMP."
 fi

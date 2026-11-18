@@ -5,7 +5,7 @@ import type { WebPlugin, WebPluginContext, WebPluginRuntime } from "@slop-lab/di
 const controllerId = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
 const workspace = z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,47}$/);
 const workspaceId = z.string().uuid();
-const tool = z.enum(["opencode", "codex"]);
+const tool = z.enum(["opencode", "codex", "omp"]);
 const selection = z.object({ workspace, workspaceId }).strict();
 const browserSelection = selection.extend({ controllerId });
 const password = z.string().min(12).max(128).regex(/^[\x20-\x7e]+$/);
@@ -20,13 +20,13 @@ const routes = selection.extend({
   routes: z.array(z.object({ id: z.string().uuid(), url: z.string().max(4096), permalink: z.string().max(4096).optional(), ingress: controllerId,
     approval, port: z.number().int().min(1).max(65535), containers: z.array(z.string().max(128)).max(128), protocol: z.enum(["http", "https", "tcp"]) }).strict()).max(1000)
 });
-const toolsStatus = selection.extend({ tools: z.array(z.object({ name: tool, version: z.string().max(1024), installed: z.boolean() }).strict()).max(2) });
+const toolsStatus = selection.extend({ tools: z.array(z.object({ name: tool, version: z.string().max(1024), installed: z.boolean() }).strict()).max(tool.options.length) });
 const serverStatus = selection.extend({ state: z.enum(["running", "stopped"]), port: z.number().int().min(1).max(65535),
   directory: z.string().max(4096).refine((value) => value === "/workspace" || (value.startsWith("/workspace/") && !value.split("/").some((part) => part === "." || part === "..") && !/[\x00-\x1f\x7f]/.test(value))),
   url: z.string().max(256).refine((value) => /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(value)),
   username: z.string().max(128), credentialsFile: z.string().max(4096), logFile: z.string().max(4096),
   externalUrls: z.array(externalUrl).max(1000).optional(), externalUrlsAvailable: z.boolean().optional() });
-const discoverySchema = z.object({ schemaVersion: z.literal(1), workspaces: z.array(z.object({ name: workspace, id: workspaceId, phase: z.string().min(1).max(64) }).strict()).max(1000), tools: z.array(tool).max(2) }).strict();
+const discoverySchema = z.object({ schemaVersion: z.literal(1), workspaces: z.array(z.object({ name: workspace, id: workspaceId, phase: z.string().min(1).max(64) }).strict()).max(1000), tools: z.array(tool).max(tool.options.length) }).strict();
 const controllerSchema = discoverySchema.omit({ schemaVersion: true }).extend({ id: controllerId, title: z.string().min(1).max(256), status: z.enum(["ready", "unavailable"]) });
 const catalog: Operation = { name: "controllers.list", description: "Discover workspace tool controllers", access: "read",
   parseInput: (value) => z.object({}).strict().default({}).parse(value), parseOutput: (value) => z.object({ controllers: z.array(controllerSchema).max(64) }).strict().parse(value) };

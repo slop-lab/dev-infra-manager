@@ -1,5 +1,5 @@
 #!/usr/bin/env -S tsx
-/** Four-endpoint workspace attachment with disposable nested Docker/APT checks.
+/** Workspace npm attachment with Bun, then four-endpoint attachment and nested Docker/APT checks.
  * npm/PyPI artifact reuse is checked separately by package-cache-smoke.mts. */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -13,6 +13,7 @@ import { ContainerWorkspaceRuntime } from "../../packages/host/core/src/workspac
 import { acquireWorkspaceSource } from "../../packages/host/core/src/workspace/source.js";
 import type { WorkspaceHostPluginContext } from "../../packages/host/core/src/workspace/hostPlugin.js";
 import { bindNameServiceForOwner } from "../../packages/host/core/src/workspace.js";
+import { hostPlugin as agentTools } from "../../packages/host/plugins/agent-tools/src/index.js";
 const image = process.argv[2]; if (!image) throw new Error("usage: tsx auto-host-mirrors-smoke.mts WORKSPACE_IMAGE");
 const artifact: typeof import("../../packages/host/plugins/mirrors/src/attachment.js") = await import(new URL("../../packages/host/plugins/mirrors/dist/attachment.js", import.meta.url).href);
 const npmAdapter: typeof import("../../packages/host/plugins/cache-server/src/services/npm.js") = await import(new URL("../../packages/host/plugins/cache-server/dist/services/npm.js", import.meta.url).href);
@@ -42,7 +43,8 @@ async function startPackageCache(name: string, definition: import("../../package
   const configuration = join(root, name); await mkdir(configuration);
   const mounts: string[] = [];
   for (const file of definition.configFiles ?? []) {
-    const source = join(configuration, file.name); await writeFile(source, file.contents, { mode: 0o644 });
+    const contents = name === npm ? file.contents.replace("level: warn", "level: http") : file.contents;
+    const source = join(configuration, file.name); await writeFile(source, contents, { mode: 0o644 });
     mounts.push("--mount", `type=bind,src=${source},dst=${file.target},readonly`);
   }
   const args = ["create", "--name", name, "--network", network, "--mount", `type=volume,src=${volume},dst=${definition.dataTarget}`,
@@ -51,12 +53,14 @@ async function startPackageCache(name: string, definition: import("../../package
   args.push(definition.image, ...(definition.entrypoint?.slice(1) ?? []), ...(definition.command ?? []));
   await run(args); await run(["network", "connect", egress, name]); await run(["start", name]);
 }
+function hostContext(timeoutMilliseconds = 60_000): WorkspaceHostPluginContext {
+  const signal = AbortSignal.timeout(timeoutMilliseconds);
+  return { runner, cleanupRunner: runner, stateRoot: root, store, service, signal, hostGateway: (record) => runtime.hostGateway(record),
+    nameService: bindNameServiceForOwner("host-mirrors", { stateRoot: root, signal, service }) };
+}
 async function attach(endpoints?: Record<string, string>) {
   assert(workspace);
-  const signal = AbortSignal.timeout(60_000);
-  const context: WorkspaceHostPluginContext = { runner, cleanupRunner: runner, stateRoot: root, store, service, signal, hostGateway: (record) => runtime.hostGateway(record),
-    nameService: bindNameServiceForOwner("host-mirrors", { stateRoot: root, signal, service }) };
-  await artifact.attachWorkspaceMirrors(workspace, context, { endpoints: endpoints ?? {
+  await artifact.attachWorkspaceMirrors(workspace, hostContext(), { endpoints: endpoints ?? {
     docker: `http://${await address(registry)}:5000/`, apt: `http://${await address(apt)}:3142/`,
     npm: `http://${await address(npm)}:4873/`, pypi: `http://${await address(pypi)}:3141/root/pypi/+simple/`
   } });
@@ -76,13 +80,38 @@ try {
   await run(["network", "create", "--internal", "--subnet", subnet, network]);
   await run(["network", "create", egress]);
   for (const volume of volumes) await run(["volume", "create", volume]);
+  await startPackageCache(npm, npmAdapter.npmService.definition(pin("npm")), volumes[2]!);
+  workspace = await service.create({ name: prefix, source: { url: source }, image, resources: { cpuCount: "2", memory: "3g", pidsLimit: "2048" } });
+  await attach({ npm: `http://${await address(npm)}:4873/` });
+  const previousExitCode = process.exitCode;
+  try {
+    await agentTools.run!(["tools", "setup", workspace.name, "omp"], hostContext(180_000));
+    assert.equal(process.exitCode, 0, "dim tools setup must install OMP in the workspace");
+  } finally {
+    process.exitCode = previousExitCode;
+  }
+  assert.equal((await guest(["dim-agent", "omp", "--version"])).stdout.trim(), "omp/18.22.0");
+  // OMP's npm distribution contains glibc-only addons. Download it with Bun
+  // independently of the standalone musl executable used by this workspace.
+  await guest(["bash", "-ceu", `
+    scratch="$(mktemp -d)"
+    trap 'rm -rf -- "$scratch"' EXIT
+    cd "$scratch"
+    export BUN_CONFIG_REGISTRY="$(sed -n 's/^registry=//p' /etc/npmrc)"
+    export BUN_INSTALL_CACHE_DIR="$scratch/cache"
+    "$HOME/.local/bin/bun" add --exact --ignore-scripts --no-env-file @oh-my-pi/pi-coding-agent@18.22.0
+  `]);
+  const npmLog = await run(["logs", npm]);
+  const npmRequests = `${npmLog.stdout}\n${npmLog.stderr}`.replace(/%2f/gi, "/").replace(/%40/gi, "@");
+  assert.match(npmRequests, /\/context-mode(?:[\s"?]|$)/i, "OMP must request context-mode from the workspace npm cache");
+  assert.match(npmRequests, /\/@oh-my-pi\/pi-coding-agent(?:[\s"?]|$)/i, "Bun must request the OMP packument from the workspace npm cache");
+  assert.match(npmRequests, /\/@oh-my-pi\/pi-coding-agent\/-\/pi-coding-agent-18\.22\.0\.tgz/i, "Bun must request the pinned OMP tarball from the workspace npm cache");
+  console.log("OMP setup and Bun packument + tarball fetch through the npm name service: PASS");
   await run(["create", "--name", registry, "--network", network, "--mount", `type=volume,src=${volumes[0]},dst=/var/lib/registry`, "--env", "REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io", "--env", "REGISTRY_LOG_LEVEL=warn", registryImage]);
   await run(["network", "connect", egress, registry]);
   await run(["start", registry]);
   await startApt();
-  await startPackageCache(npm, npmAdapter.npmService.definition(pin("npm")), volumes[2]!);
   await startPackageCache(pypi, pypiAdapter.pypiService.definition(pin("pypi")), volumes[3]!);
-  workspace = await service.create({ name: prefix, source: { url: source }, image, resources: { cpuCount: "2", memory: "3g", pidsLimit: "2048" } });
   await attach();
   {
     // opencode-ai's packument is ~20-32 MiB: the exact size that 502'd under the old 16 MiB relay
@@ -175,6 +204,8 @@ try {
   console.log("four-to-npm-only attachment restores host clients, updates existing bind contents without inode/process replacement and configures only npm in new nested containers: PASS");
 } catch (error) {
   if (workspace) {
+    const relayLog = await readFile(join(root, "plugins", "host-mirrors", "workspaces", workspace.id, "relay.log"), "utf8").catch(() => "");
+    if (relayLog) console.error(relayLog.slice(-8192));
     const diagnostic = await runtime.run(workspace, ["sh", "-c", "cat /home/dim/.local/state/dim/services/host-mirrors.log; docker info --format '{{json .RegistryConfig}}'; sudo cat /var/log/dockerd.log | tail -30; ls -l /var/run/*sock"], { signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
     if (diagnostic) console.error(diagnostic.stdout, diagnostic.stderr);
     const api = await runtime.run(workspace, ["node", "--input-type=module", "-e", `import {request} from 'node:http';const r=request({socketPath:'/var/run/docker.sock',path:'/v1.44/info'},s=>{console.log(s.statusCode,s.headers);let x='';s.on('data',c=>x+=c);s.on('end',()=>console.log(JSON.parse(x).RegistryConfig));});r.on('error',console.error);r.end();`]);

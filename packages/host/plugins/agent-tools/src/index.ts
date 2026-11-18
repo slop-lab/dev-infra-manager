@@ -11,10 +11,10 @@ export const hostPlugin: WorkspaceHostPlugin = {
   workspaceCapabilities: executionCapabilities,
   workspaceReady: prepareToolWorkspace,
   guest: {
-    description: "Coding-agent helper commands; installing this host plugin prepares small helpers automatically, while pinned npm tools require explicit setup",
+    description: "Coding-agent helper commands; installing this host plugin prepares small helpers automatically, while pinned tools require explicit setup",
     commands: [
-      { name: "dim-tools-setup", description: "Install opencode or codex explicitly; this may download pinned npm packages" },
-      { name: "dim-agent", description: "Run opencode or codex when configured, with persistent continuation support" },
+      { name: "dim-tools-setup", description: "Install opencode, codex or omp explicitly; this may download pinned packages" },
+      { name: "dim-agent", description: "Run opencode, codex or omp when configured, with persistent continuation support" },
       { name: "dim-opencode-server", description: "Run the configured OpenCode Web backend" },
       { name: "dim-agent-execution", description: "Read coding-agent task/subagent status or wait for a bounded semantic change" },
       { name: "dim-agent-task", description: "Submit explicit task content or inspect its durable request receipt without blind retries" }
@@ -37,7 +37,7 @@ export const hostPlugin: WorkspaceHostPlugin = {
     if (name !== "tools" || !workspace) throw new UserError("usage: dim tools setup|run|server WORKSPACE [TOOL] [ARGS...]");
     if (operation === "setup") {
       const tool = rest[0] ?? "opencode";
-      if (!["opencode", "codex"].includes(tool) || rest.length > 1) throw new UserError("setup accepts opencode or codex");
+      if (!["opencode", "codex", "omp"].includes(tool) || rest.length > 1) throw new UserError("setup accepts opencode, codex or omp");
       const record = await context.service.show(workspace);
       await deployToolHelpers(record, context);
       process.exitCode = await context.service.exec(workspace, ["bash", "-c", 'exec bash "$HOME/.local/share/dim-agent-tools/tool-setup.bash" "$1"', "dim-tools-setup", tool], {

@@ -48,6 +48,6 @@ export async function prepareToolWorkspace(workspace: WorkspaceRecord, context: 
 export async function inspectTools(workspace: WorkspaceRecord, context: WorkspaceHostPluginContext) {
   if (!workspace.initialized || workspace.phase !== "running") return { state: "unconfigured" as const, message: "Start the workspace to prepare helper commands" };
   const result = await context.service.exec(workspace.name, ["node", "-e", toolStatusScript, "--", "--inspect"], { workspaceId: workspace.id, signal: context.signal });
-  return result === 0 ? { state: "ready" as const, message: "At least one pinned tool is configured; use dim-agent opencode or dim-agent codex for the installed tool" }
-    : { state: "unconfigured" as const, message: "Helpers are available. Run dim-tools-setup opencode|codex in the workspace, or dim tools setup WORKSPACE TOOL on the host; no npm tools were installed automatically" };
+  return result === 0 ? { state: "ready" as const, message: "At least one pinned tool is configured; use dim-agent with the installed tool name" }
+    : { state: "unconfigured" as const, message: "Helpers are available. Run dim-tools-setup opencode|codex|omp in the workspace, or dim tools setup WORKSPACE TOOL on the host; no tools were installed automatically" };
 }

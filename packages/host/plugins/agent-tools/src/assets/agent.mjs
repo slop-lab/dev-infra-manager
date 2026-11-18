@@ -12,7 +12,7 @@ catch (error) { console.error(`dim-agent: ${error instanceof Error ? error.messa
 
 async function main() {
   const [tool, ...args] = process.argv.slice(2);
-  if (tool !== "codex" && tool !== "opencode") throw new Error("usage: dim-agent codex|opencode [--resume-on-restart | --resume] [ARGS...]");
+  if (tool !== "codex" && tool !== "opencode" && tool !== "omp") throw new Error("usage: dim-agent codex|opencode|omp [--resume-on-restart | --resume] [ARGS...]");
   const home = await realpath(homedir());
   const file = path.join(home, ".local/state/dim-tools", `${tool}.json`);
   const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -23,7 +23,7 @@ async function main() {
     /** @type {unknown} */
     const value = JSON.parse(await handle.readFile("utf8")); manifest = value;
   } finally { await handle.close(); }
-  const version = tool === "codex" ? "0.156.1" : "1.18.31";
+  const version = { codex: "0.156.1", opencode: "1.18.31", omp: "18.22.0" }[tool];
   const executable = path.join(home, ".local/bin", tool);
   if (!record(manifest) || manifest.tool !== tool || manifest.version !== version || manifest.executable !== executable) {
     throw new Error("installed tool manifest is missing or incompatible; run dim tools setup again");
@@ -32,6 +32,7 @@ async function main() {
   if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative) || !(await stat(target)).isFile()) {
     throw new Error("tool executable must remain inside its user's home");
   }
+  if (tool === "omp") process.env.PATH = `${path.dirname(executable)}:${process.env.PATH ?? ""}`;
   const register = args[0] === "--resume-on-restart";
   if (register) {
     args.shift();
@@ -83,6 +84,7 @@ async function main() {
   if (resume) args.shift();
   const continuation = "Continue the interrupted task from the saved session. Re-read workspace state before changing files.";
   const command = !resume ? args : tool === "codex" ? ["exec", "resume", "--last", ...args, continuation]
+    : tool === "omp" ? ["--continue", ...args, continuation]
     : ["run", "--continue", ...args, continuation];
   const child = spawn(executable, command, { stdio: "inherit", env: process.env });
   const stop = () => child.kill("SIGTERM");

@@ -38,7 +38,7 @@ export async function invokeToolsConsole(operation: string, input: unknown, cont
   const allowed = operation.startsWith("execution.") ? ["workspace", "workspaceId", "sessionId", ...(operation === "execution.wait" ? ["since", "timeoutSeconds"] : [])] : operation === "server.team-metadata" ? ["workspace", "workspaceId", "directory"] : operation === "tools.setup" ? ["workspace", "workspaceId", "tool"] : operation === "server.password" ? ["workspace", "workspaceId", "password"] : ["workspace", "workspaceId"];
   if (Object.keys(value).some((key) => !allowed.includes(key)) || typeof value.workspace !== "string" || typeof value.workspaceId !== "string"
     || !/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(value.workspace) || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.workspaceId)
-    || (operation === "tools.setup" && value.tool !== "opencode" && value.tool !== "codex")) throw new UserError("Invalid tools operation input");
+    || (operation === "tools.setup" && value.tool !== "opencode" && value.tool !== "codex" && value.tool !== "omp")) throw new UserError("Invalid tools operation input");
   if (operation === "server.password" && (typeof value.password !== "string" || !/^[\x20-\x7e]{12,128}$/.test(value.password))) throw new UserError("Password must contain 12–128 printable ASCII characters");
   if (operation === "server.team-metadata" && value.directory !== undefined && (typeof value.directory !== "string" || !value.directory.startsWith("/") || value.directory.length > 4096 || /[\x00-\x1f\x7f]/.test(value.directory))) throw new UserError("Invalid monitor directory");
   const workspace = await context.service.show(value.workspace);
@@ -78,7 +78,7 @@ export async function runToolsConsole(args: string[], context: WorkspaceHostPlug
   const positional = args.filter((arg) => arg !== "--json");
   if (positional.length === 1 && positional[0] === "describe") {
     const workspaces = (await context.service.list()).map(({ name, id, phase, runtimeStatus }) => ({ name, id, phase: runtimeStatus === "running" ? phase : runtimeStatus }));
-    process.stdout.write(JSON.stringify({ schemaVersion: 1, workspaces, tools: ["opencode", "codex"], operations }) + "\n");
+    process.stdout.write(JSON.stringify({ schemaVersion: 1, workspaces, tools: ["opencode", "codex", "omp"], operations }) + "\n");
     return;
   }
   const stdin = positional.length === 3 && positional[2] === "--input-stdin";

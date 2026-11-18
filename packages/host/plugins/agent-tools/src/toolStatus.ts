@@ -1,7 +1,7 @@
 /** One guest-side pinned installation check for discovery and operator status. */
 export const toolStatusScript = String.raw`
 const fs=require("node:fs"),path=require("node:path"),home=fs.realpathSync(process.env.HOME);
-const tools=Object.entries({opencode:"1.18.31",codex:"0.156.1"}).map(([name,version])=>{
+const tools=Object.entries({opencode:"1.18.31",codex:"0.156.1",omp:"18.22.0"}).map(([name,version])=>{
  let installed=false,fd;try {
   fd=fs.openSync(path.join(home,".local/state/dim-tools",name+".json"),fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
   const info=fs.fstatSync(fd);if(!info.isFile()||info.uid!==process.getuid()||(info.mode&0o777)!==0o600||info.size>16384)throw Error();

@@ -7,6 +7,10 @@ All notable changes to this project are documented here.
 Target: `0.10.0` internal development candidate. No publication or deployment
 is implied by these source changes.
 
+- Install and run Oh My Pi in persistent workspaces through agent-tools.
+  Explicit setup verifies the pinned Bun release, honors the workspace npm
+  mirror, and configures pinned Context Mode, Caveman and Serena integrations.
+
 - Recover retained workspace LLM connections through their explicitly selected
   original gateway without issuing new principals or rotating scoped credentials;
   restore the prior connection after failed transport repair without overwriting

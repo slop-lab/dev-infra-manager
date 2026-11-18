@@ -7,8 +7,9 @@ The base image contains no coding-agent package or provider credentials.
 Installing this plugin on the host automatically prepares its small helpers
 inside ready workspaces, including ordinary repositories without `.dim` files.
 Run `dim-workspace plugins` inside the workspace to discover commands and setup
-status. `dim-tools-setup opencode` or `dim-tools-setup codex` performs the explicit
-pinned tool installation there; helper preparation itself downloads no tools.
+status. Run `dim-tools-setup opencode`, `dim-tools-setup codex` or
+`dim-tools-setup omp` to install the selected pinned tool inside the workspace.
+Helper preparation itself downloads no tools.
 
 ```sh
 dim installer install plugin '@slop-lab/dim-host-plugin-agent-tools@0.10.0'
@@ -16,7 +17,27 @@ dim tools setup development opencode
 # Independently install Codex in the same persistent home:
 dim tools setup development codex
 dim tools run development codex
+dim tools setup development omp
+dim tools run development omp
 ```
+
+OMP setup installs Oh My Pi 18.22.0 with Bun 1.4.4. DIM verifies the
+Bun release archive against its pinned SHA-256 digest and selects the Linux
+x86-64 or arm64 build for the guest's libc. On glibc guests Bun installs OMP
+from npm. On Alpine and other musl guests setup verifies and installs OMP's
+standalone release executable, which contains the musl native addon. Bun
+package fetches use the workspace npm name-service endpoint when configured.
+
+OMP installs context-mode 2.2.0 through its native plugin manager and
+Caveman 4.1.0 through the commit-verified Caveman installer, scoped to OMP.
+The Caveman OMP extension supplies communication rules and skills.
+Setup registers Serena 2.1.0 in the active OMP profile's native `mcp.json`
+and preserves other MCP servers. The default file is
+`~/.omp/agent/mcp.json`. If you select a named OMP profile, run setup with
+the same `OMP_PROFILE` to register Serena for that profile.
+On Alpine, Serena's pinned psutil dependency builds against the guest's
+Python headers. Setup installs temporary guest build packages through
+Alpine's package manager and removes them after the build.
 
 Setup pins OpenCode 1.18.31, oh-my-openagent 4.19.4 and Codex 0.156.1. OpenCode
 setup additionally installs three pinned context/efficiency tools and wires them

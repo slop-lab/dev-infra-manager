@@ -21,6 +21,31 @@ export GIT_CONFIG_NOSYSTEM=1
 export NPM_CONFIG_USERCONFIG="$work_dir/outside-npm/npmrc"
 export NPM_CONFIG_CACHE="$work_dir/outside-npm/cache"
 unset XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME NODE_OPTIONS WORKSPACE_USER_SETUP_FAULT
+if [[ "${1:-}" = omp ]]; then
+  mkdir -p "$HOME/.omp/agent"
+  printf '%s\n' '{"mcpServers":{"existing":{"command":"existing","enabled":false}}}' >"$HOME/.omp/agent/mcp.json"
+  bash "$setup_script" omp
+  [[ "$("$HOME/.local/bin/dim-agent" omp --version)" = omp/18.22.0 ]]
+  "$HOME/.local/bin/dim-agent" omp --help >/dev/null
+  cp "$HOME/.omp/agent/mcp.json" "$work_dir/mcp-first.json"
+  bash "$setup_script" omp
+  cmp "$HOME/.omp/agent/mcp.json" "$work_dir/mcp-first.json"
+  node - "$HOME" <<'NODE'
+const assert = require("node:assert/strict")
+const fs = require("node:fs")
+const home = process.argv[2]
+const config = JSON.parse(fs.readFileSync(home + "/.omp/agent/mcp.json", "utf8"))
+assert.deepEqual(config.mcpServers.existing, { command: "existing", enabled: false })
+assert.deepEqual(config.mcpServers.serena, {
+  type: "stdio", command: home + "/.local/bin/serena",
+  args: ["start-mcp-server", "--context", "ide-assistant"], enabled: true,
+})
+fs.accessSync(config.mcpServers.serena.command, fs.constants.X_OK)
+assert.equal(fs.statSync(home + "/.local/state/dim-tools/omp.json").mode & 0o777, 0o600)
+NODE
+  printf 'Pinned OMP setup, native plugins, Serena registration and reinstall: PASS\n'
+  exit
+fi
 mkdir -p "$XDG_CONFIG_HOME/opencode" "$HOME/.omo" "$(dirname -- "$GIT_CONFIG_GLOBAL")" \
   "$HOME/.cache"
 
