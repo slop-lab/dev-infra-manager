@@ -12,9 +12,11 @@ environments-kvm verbose="":
 examples-vm-preflight *args:
     cd .. && node scripts/checks/examples-vm-preflight.ts {{args}}
 
-# Run the exact candidate across separate control-plane and host KVM VMs.
+# Practical acceptance, including Incus inside a disposable KVM host VM.
 examples-vm *args:
     cd .. && bash scripts/checks/examples-vm-smoke.bash {{args}}
+
+alias incus-vm-practical := examples-vm
 
 # Execute the checked-in examples' lightweight verification commands.
 examples:

@@ -210,6 +210,12 @@ browser SPICE handshake. A fake command runner does not establish these
 hardware/runtime properties. See the recorded physical test evidence before
 calling a host/image supported.
 
+From the source checkout, `just verify incus-vm-practical --preflight-only`
+checks the outer host's prerequisites. Run `just verify incus-vm-practical`
+to launch the practical acceptance environment. The runner provisions
+Incus inside a disposable KVM host VM and uses a separate control-plane VM.
+The command is also available as `just verify examples-vm`.
+
 The development acceptance run used Incus 6.0, Ubuntu 24.04 guests, Node.js 26,
 KVM and a private disposable Incus host. It exercised normal-user sudo-helper
 admission, stdin/exit status, nested Docker, retained home/checkout/Docker data,
