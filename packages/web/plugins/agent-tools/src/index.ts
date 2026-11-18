@@ -26,8 +26,9 @@ const serverStatus = selection.extend({ state: z.enum(["running", "stopped"]), p
   url: z.string().max(256).refine((value) => /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(value)),
   username: z.string().max(128), credentialsFile: z.string().max(4096), logFile: z.string().max(4096),
   externalUrls: z.array(externalUrl).max(1000).optional(), externalUrlsAvailable: z.boolean().optional() });
-const discoverySchema = z.object({ schemaVersion: z.literal(1), workspaces: z.array(z.object({ name: workspace, id: workspaceId, phase: z.string().min(1).max(64) }).strict()).max(1000), tools: z.array(tool).max(tool.options.length) }).strict();
-const controllerSchema = discoverySchema.omit({ schemaVersion: true }).extend({ id: controllerId, title: z.string().min(1).max(256), status: z.enum(["ready", "unavailable"]) });
+const discoverySchema = z.object({ schemaVersion: z.literal(1), workspaces: z.array(z.object({ name: workspace, id: workspaceId, phase: z.string().min(1).max(64) }).strict()).max(1000), tools: z.array(tool).max(tool.options.length),
+  operations: z.array(z.string().min(1).max(128)).max(128) }).strict();
+const controllerSchema = discoverySchema.omit({ schemaVersion: true, operations: true }).extend({ id: controllerId, title: z.string().min(1).max(256), status: z.enum(["ready", "unavailable"]) });
 const catalog: Operation = { name: "controllers.list", description: "Discover workspace tool controllers", access: "read",
   parseInput: (value) => z.object({}).strict().default({}).parse(value), parseOutput: (value) => z.object({ controllers: z.array(controllerSchema).max(64) }).strict().parse(value) };
 function operation(name: string, description: string, access: "read" | "operator", setup = false): Operation {

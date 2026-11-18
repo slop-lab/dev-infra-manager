@@ -92,7 +92,7 @@ async function main(): Promise<void> {
     host.workspaces.push(selected); await save(); return print(selected);
   }
   if (section !== "console") throw new Error("unsupported fixture command");
-  if (domain === "tools" && action === "describe") return print({ schemaVersion: 1, workspaces: host.workspaces.map(({ name, id, phase }) => ({ name, id, phase })), tools: ["opencode", "codex"] });
+  if (domain === "tools" && action === "describe") return print({ schemaVersion: 1, workspaces: host.workspaces.map(({ name, id, phase }) => ({ name, id, phase })), tools: ["opencode", "codex"], operations: ["tools.status", "tools.setup", "server.status"] });
   if (domain === "execution" && action === "describe") return print({ schemaVersion: 1, generationId, operations: descriptors(executionOperations) });
   if (domain === "llm-router" && action === "describe") return print({ schemaVersion: 1, selectionId: "e".repeat(64), operations: descriptors(llmOperations) });
   if (action !== "invoke" || operation === undefined) throw new Error("unsupported fixture operation");

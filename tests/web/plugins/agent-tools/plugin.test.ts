@@ -3,8 +3,8 @@ import { operations, webPlugin } from "../../../../packages/web/plugins/agent-to
 
 const workspaceId = "17094660-a627-4a17-acd2-6418c0b79967";
 const selection = { controllerId: "local", workspace: "development", workspaceId };
-const description = { schemaVersion: 1, workspaces: [{ name: "development", id: workspaceId, phase: "running" }], tools: ["opencode", "codex"] };
-const toolStatus = { workspace: "development", workspaceId, tools: [{ name: "opencode", installed: true, version: "1.18.31" }, { name: "codex", installed: false, version: "" }] };
+const description = { schemaVersion: 1, workspaces: [{ name: "development", id: workspaceId, phase: "running" }], tools: ["opencode", "codex", "omp"], operations: ["tools.status", "tools.setup", "server.start"] };
+const toolStatus = { workspace: "development", workspaceId, tools: [{ name: "opencode", installed: true, version: "1.18.31" }, { name: "codex", installed: false, version: "" }, { name: "omp", installed: true, version: "18.22.0" }] };
 const serverStatus = { workspace: "development", workspaceId, state: "running", port: 4096, directory: "/workspace/main", url: "http://127.0.0.1:4096", username: "opencode", credentialsFile: "/home/agent/.local/state/dim/opencode-web/credentials", logFile: "/home/agent/.local/state/dim/opencode-web/server.log" };
 
 it("discovers optional host tools and delegates exact workspace identities with bounded deadlines", async () => {
@@ -15,9 +15,9 @@ it("discovers optional host tools and delegates exact workspace identities with 
     if (args[2] === "describe") return description;
     return args[3]?.startsWith("tools.") ? toolStatus : serverStatus;
   } }] });
-  expect(await runtime.invoke("controllers.list", {})).toMatchObject({ controllers: [{ id: "offline", status: "unavailable", workspaces: [] }, { id: "local", status: "ready", workspaces: description.workspaces }] });
-  expect(await runtime.invoke("tools.setup", { ...selection, tool: "opencode" })).toEqual(toolStatus);
-  expect(calls.at(-1)).toEqual({ args: ["tools", "console", "invoke", "tools.setup", "--input", JSON.stringify({ workspace: "development", workspaceId, tool: "opencode" })], timeout: 180_000 });
+  expect(await runtime.invoke("controllers.list", {})).toMatchObject({ controllers: [{ id: "offline", status: "unavailable", workspaces: [] }, { id: "local", status: "ready", workspaces: description.workspaces, tools: description.tools }] });
+  expect(await runtime.invoke("tools.setup", { ...selection, tool: "omp" })).toEqual(toolStatus);
+  expect(calls.at(-1)).toEqual({ args: ["tools", "console", "invoke", "tools.setup", "--input", JSON.stringify({ workspace: "development", workspaceId, tool: "omp" })], timeout: 180_000 });
   expect(await runtime.invoke("server.start", selection)).toEqual({ ...serverStatus, externalUrls: [], externalUrlsAvailable: false }); expect(calls.at(-2)?.timeout).toBe(90_000);
   expect(await runtime.invoke("server.status", selection)).toEqual({ ...serverStatus, externalUrls: [], externalUrlsAvailable: false }); expect(calls.at(-2)?.timeout).toBe(30_000);
 });

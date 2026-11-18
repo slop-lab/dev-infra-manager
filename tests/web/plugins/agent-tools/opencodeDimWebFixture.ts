@@ -50,7 +50,7 @@ const args=process.argv.slice(2), rows=JSON.parse(fs.readFileSync(${JSON.stringi
 if(args[0]!=="--host"||!row)process.exit(2);
 fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args.slice(2))+"\\n");
 if(args[2]==="ls"){console.log(JSON.stringify([{name:"development",id:row.id,phase:"running",runtime:"container",runtimeStatus:"running",resources:{cpuCount:"1",memory:"2g",pidsLimit:"512"}}]));process.exit(0)}
-if(args[2]==="tools"&&args[4]==="describe"){console.log(JSON.stringify({schemaVersion:1,workspaces:[{name:"development",id:row.id,phase:"running"}],tools:["opencode"]}));process.exit(0)}
+if(args[2]==="tools"&&args[4]==="describe"){console.log(JSON.stringify({schemaVersion:1,workspaces:[{name:"development",id:row.id,phase:"running"}],tools:["opencode"],operations:["tools.status","server.status"]}));process.exit(0)}
 const inputIndex=args.indexOf("--input"), input=inputIndex<0?{}:JSON.parse(args[inputIndex+1]);
 if(args[2]==="external-url"){console.log(JSON.stringify({workspace:"development",workspaceId:row.id,ingresses:[{name:"fixture",description:"fixture",scheme:"https",driver:"fixture"}],routes:row.endpoint?[{id:row.id,ingress:"fixture",url:row.endpoint,approval:"approved",port:4096,containers:[],protocol:"http"}]:[]}));process.exit(0)}
 if(args[2]==="tools"&&args[4]==="invoke"){
