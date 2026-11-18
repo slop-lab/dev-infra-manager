@@ -17,6 +17,8 @@ is implied by these source changes.
   command, and graceful VM shutdown allows up to two minutes.
   The OMP launcher finds workspace language projects from source subdirectories,
   and Serena activates the current project automatically.
+  Workspace operators can run T3 Code as a per-workspace service and open it
+  from DIM Web through an approved HTTPS route with one-time browser pairing.
 
 - Recover retained workspace LLM connections through their explicitly selected
   original gateway without issuing new principals or rotating scoped credentials;

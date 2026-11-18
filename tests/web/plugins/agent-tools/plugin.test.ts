@@ -44,13 +44,46 @@ it("refreshes workspace identities without granting authority to an old browser 
 
 it("declares operator-only mutations and rejects private or arbitrary server output", () => {
   expect(webPlugin.surfaces).toEqual(["workspace"]);
-  expect(operations.filter(({ access }) => access === "operator").map(({ name }) => name)).toEqual(["tools.setup", "server.start", "server.stop", "server.credentials", "server.password"]);
+  expect(operations.filter(({ access }) => access === "operator").map(({ name }) => name)).toEqual(["tools.setup", "server.start", "server.stop", "server.credentials", "server.password", "t3.start", "t3.stop", "t3.pair"]);
   const status = operations.find(({ name }) => name === "server.status")!;
   expect(() => status.parseOutput({ ...serverStatus, password: "private" })).toThrow();
   expect(() => status.parseOutput({ ...serverStatus, url: "https://foreign.test" })).toThrow();
   expect(() => status.parseOutput({ ...serverStatus, url: "http://username:secret@127.0.0.1:4096" })).toThrow();
   for (const directory of ["/private/host", "/workspace/../private", "/workspace/main\n"]) expect(() => status.parseOutput({ ...serverStatus, directory })).toThrow();
   expect(() => status.parseInput({ ...selection, connection: "/private/operator.json" })).toThrow();
+});
+
+it("issues a T3 credential only for an approved exact-workspace HTTPS origin and checks the route again", async () => {
+  const routeId = "11111111-1111-4111-8111-111111111111";
+  const route = { id: routeId, ingress: "shared", url: "https://t3.example.test/", permalink: "https://t3-permanent.example.test/", approval: "approved", port: 3773, containers: Array<string>(), protocol: "http" };
+  let current = route, returnedId = workspaceId, afterIssue: (() => void) | undefined;
+  let issued = 0;
+  const runtime = await webPlugin.autoConnect!({ controllers: [{ id: "local", async run(args) {
+    if (args[2] === "describe") return { ...description, operations: ["t3.status", "t3.start", "t3.stop", "t3.pair"] };
+    if (args[0] === "external-url") return { workspace: "development", workspaceId: returnedId, ingresses: [], routes: [current] };
+    expect(JSON.parse(args[5]!)).toEqual({ workspace: "development", workspaceId });
+    if (args[3] === "t3.status") return { workspace: "development", workspaceId, state: "running", port: 3773 };
+    issued++;
+    afterIssue?.();
+    return { workspace: "development", workspaceId, credential: "PAIR-ABC123" };
+  } }] });
+  const invoke = (target = routeId) => runtime.invoke("t3.pair", { ...selection, routeId: target });
+  for (const change of [{ approval: "pending" }, { port: 4096 }, { permalink: "https://t3.example.test/subpath" },
+    { permalink: "http://t3.example.test/" }, { containers: ["child"] }]) {
+    current = { ...route, ...change };
+    await expect(invoke()).rejects.toThrow("approved HTTPS origin");
+  }
+  current = route;
+  returnedId = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa";
+  await expect(invoke()).rejects.toThrow("workspace identity");
+  returnedId = workspaceId;
+  await expect(invoke("aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa")).rejects.toThrow("approved HTTPS origin");
+  expect(issued).toBe(0);
+  await expect(runtime.invoke("t3.status", selection)).resolves.toMatchObject({ endpoint: { routeId, origin: "https://t3-permanent.example.test" } });
+  await expect(invoke()).resolves.toEqual({ routeId, origin: "https://t3-permanent.example.test", credential: "PAIR-ABC123" });
+  afterIssue = () => { current = { ...route, approval: "revoked" }; };
+  await expect(invoke()).rejects.toThrow("changed during pairing");
+  expect(issued).toBe(2);
 });
 
 it("sends passwords on stdin only and resolves public URLs from matching workspace routes", async () => {

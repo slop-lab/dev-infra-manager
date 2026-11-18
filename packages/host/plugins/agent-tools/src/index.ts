@@ -16,6 +16,7 @@ export const hostPlugin: WorkspaceHostPlugin = {
       { name: "dim-tools-setup", description: "Install opencode, codex or omp explicitly; this may download pinned packages" },
       { name: "dim-agent", description: "Run opencode, codex or omp when configured, with persistent continuation support" },
       { name: "dim-opencode-server", description: "Run the configured OpenCode Web backend" },
+      { name: "dim-t3-server", description: "Manage the workspace T3 Code service" },
       { name: "dim-agent-execution", description: "Read coding-agent task/subagent status or wait for a bounded semantic change" },
       { name: "dim-agent-task", description: "Submit explicit task content or inspect its durable request receipt without blind retries" }
     ],
@@ -34,7 +35,7 @@ export const hostPlugin: WorkspaceHostPlugin = {
       return;
     }
     const [name, operation, workspace, ...rest] = args;
-    if (name !== "tools" || !workspace) throw new UserError("usage: dim tools setup|run|server WORKSPACE [TOOL] [ARGS...]");
+    if (name !== "tools" || !workspace) throw new UserError("usage: dim tools setup|run|server|t3 WORKSPACE [ARGS...]");
     if (operation === "setup") {
       const tool = rest[0] ?? "opencode";
       if (!["opencode", "codex", "omp"].includes(tool) || rest.length > 1) throw new UserError("setup accepts opencode, codex or omp");
@@ -46,8 +47,9 @@ export const hostPlugin: WorkspaceHostPlugin = {
       return;
     }
     const command = operation === "server" ? ["dim-opencode-server", ...rest]
+      : operation === "t3" ? ["dim-t3-server", ...rest]
       : operation === "run" ? ["dim-agent", ...rest] : undefined;
-    if (!command) throw new UserError("tools supports setup, run and server");
+    if (!command) throw new UserError("tools supports setup, run, server and t3");
     const record = await context.service.show(workspace);
     await deployToolHelpers(record, context);
     process.exitCode = await context.service.exec(workspace, command, {

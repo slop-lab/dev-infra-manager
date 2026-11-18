@@ -1,9 +1,10 @@
 // @ts-check
 import { buildWorkspaceClientLink } from './workspace-link.js';
 /** @typedef {{name:string,id:string,phase:string}} Workspace */
-/** @typedef {{id:string,title:string,status:'ready'|'unavailable',workspaces:Workspace[],tools:Array<'opencode'|'codex'|'omp'>}} Controller */
+/** @typedef {{id:string,title:string,status:'ready'|'unavailable',workspaces:Workspace[],tools:Array<'opencode'|'codex'|'omp'>,t3?:true}} Controller */
 /** @typedef {import('@slop-lab/dim-web/plugin-api').WebPluginWorkspaceBrowserContext} Context */
 /** @typedef {{state:'running'|'stopped',port:number,url:string,directory:string,username:string,credentialsFile:string,logFile:string,externalUrls?:Array<{url:string,permalink?:string,ingress:string,approval:string}>,externalUrlsAvailable?:boolean}} Server */
+/** @typedef {{routeId:string,origin:string}} T3Endpoint */
 /** @param {HTMLElement} container @param {Context} context */
 export function mount(container, context) {
   const { element } = context.ui;
@@ -13,7 +14,7 @@ export function mount(container, context) {
   const content = element('section'), notice = element('p'); notice.setAttribute('role', 'status');
   /** @type {(()=>Promise<boolean>)|undefined} */ let refreshExisting;
   content.className = 'feature-form';
-  container.append(element('p', 'Install tools in a running workspace and manage its OpenCode server. Installation can take a few minutes.'), notice, content);
+  container.append(notice, content);
   const retryDiscovery = context.ui.button('Retry workspace tools'); retryDiscovery.hidden = true; container.prepend(retryDiscovery);
   const disposeWorkspaceChange = context.onWorkspaceChange?.(() => {
     content.inert = true; retryDiscovery.hidden = false;
@@ -36,6 +37,83 @@ export function mount(container, context) {
     const tools = element('div'), server = element('div'); tools.className = server.className = 'panel feature-form'; content.append(tools, server);
     /** @param {string} name @param {Record<string,unknown>} [input] */
     const invoke = (name, input = {}) => context.invoke(name, { ...input, controllerId: controller.id, workspace: workspace.name, workspaceId: workspace.id }, { timeoutMilliseconds: 185_000 });
+    const t3 = element('div', undefined, 'panel feature-form');
+    let t3Revision = 0;
+    if (controller.t3 && allowed.has('t3.status')) {
+      content.append(t3);
+      void refreshT3();
+    }
+    async function refreshT3() {
+      const requested = ++t3Revision;
+      t3.replaceChildren(element('h4', 'T3 Code'), element('p', 'Checking service…'));
+      try {
+        const result = await invoke('t3.status');
+        if (scoped() && requested === t3Revision) renderT3(result);
+      } catch {
+        if (!scoped() || requested !== t3Revision) return;
+        t3.replaceChildren(element('h4', 'T3 Code'), element('p', 'T3 Code status is unavailable.'));
+        const retry = context.ui.button('Retry T3 Code status');
+        retry.onclick = () => void refreshT3();
+        t3.append(retry);
+      }
+    }
+    /** @param {unknown} result */
+    function renderT3(result) {
+      const { state, endpoint, port } = /** @type {{state:'running'|'stopped',endpoint:T3Endpoint|null,port:number}} */ (result);
+      t3.replaceChildren(element('h4', 'T3 Code'), element('p', `Service ${state} on workspace port ${port}.`));
+      const feedback = element('p'); feedback.setAttribute('role', 'status'); t3.append(feedback);
+      const action = state === 'running' ? 'stop' : 'start';
+      if (allowed.has(`t3.${action}`)) {
+        const change = context.ui.button(action === 'start' ? 'Start T3 Code' : 'Stop T3 Code');
+        change.onclick = async () => {
+          change.disabled = true;
+          try { const next = await invoke(`t3.${action}`); if (scoped()) renderT3(next); }
+          catch { if (scoped()) context.ui.feedback(feedback, 'Could not change T3 Code service state. Check its current state before retrying.', 'error'); }
+        };
+        t3.append(change);
+      }
+      const refresh = context.ui.button('Refresh T3 Code status');
+      refresh.onclick = () => void refreshT3();
+      t3.append(refresh);
+      if (state !== 'running') return;
+      if (!endpoint || endpoint.origin === window.location.origin) {
+        t3.append(element('p', `T3 Code needs its own approved HTTPS route at the root of a separate origin for port ${port}.`));
+        const configure = context.ui.button('Configure T3 Code external access');
+        configure.onclick = openExternalRoutes;
+        t3.append(configure);
+        return;
+      }
+      if (!allowed.has('t3.pair')) return;
+      const sessionHint = `dim.t3.paired:${controller.id}:${selectedWorkspace.id}:${endpoint.routeId}:${endpoint.origin}`;
+      let paired = false;
+      try { paired = localStorage.getItem(sessionHint) === '1'; } catch { /* Storage is optional. */ }
+      const open = document.createElement('a');
+      open.href = endpoint.origin; open.target = '_blank'; open.rel = 'noopener noreferrer'; open.textContent = 'Open T3 Code';
+      const pair = context.ui.button(paired ? 'Pair this browser again' : 'Open T3 Code');
+      if (paired) t3.append(open);
+      t3.append(pair);
+      pair.onclick = async () => {
+        const popup = window.open('about:blank', '_blank');
+        if (!popup) { context.ui.feedback(feedback, 'Allow pop-ups for DIM Web to open T3 Code.', 'error'); return; }
+        popup.opener = null;
+        pair.disabled = true;
+        const request = t3Revision;
+        try {
+          const connection = /** @type {T3Endpoint & {credential:string}} */ (await invoke('t3.pair', { routeId: endpoint.routeId }));
+          if (!scoped() || request !== t3Revision || !pair.isConnected || popup.closed) { popup.close(); return; }
+          if (connection.routeId !== endpoint.routeId || connection.origin !== endpoint.origin) throw new Error('T3 Code route changed');
+          const url = new URL('/pair', endpoint.origin);
+          url.hash = new URLSearchParams({ token: connection.credential }).toString();
+          popup.location.replace(url.href);
+          try { localStorage.setItem(sessionHint, '1'); } catch { /* Storage is optional. */ }
+          if (!paired) { pair.before(open); paired = true; }
+          pair.textContent = 'Pair this browser again';
+        } catch {
+          popup.close();
+          if (scoped()) context.ui.feedback(feedback, 'T3 Code pairing could not complete. Refresh service and route status, then try again.', 'error');
+        } finally { pair.disabled = false; }
+      };
+    }
     /** @type {Array<{node:HTMLButtonElement,write:boolean}>} */ let actions = [];
     /** @type {HTMLButtonElement|undefined} */ let startButton;
     /** @type {HTMLButtonElement|undefined} */ let stopButton;

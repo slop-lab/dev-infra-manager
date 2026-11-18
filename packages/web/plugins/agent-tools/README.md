@@ -49,3 +49,17 @@ select-and-copy fallback when the clipboard is unavailable. Password changes use
 controller stdin rather than command arguments. Passwords require 12–128 printable
 ASCII characters, and changing one restarts a running server. The form clears the
 password after submission; passwords are never retained in browser storage.
+## T3 Code workspace access
+
+In a running workspace, open **Tools → T3 Code** and start the service. In
+**External routes**, choose an HTTPS ingress and publish the root of an origin
+for port `3773`. Complete any required route approval and refresh T3 status.
+DIM uses the route's permalink when available, so browser sessions stay tied to
+the same origin if the route also has a readable name.
+
+**Open T3 Code** issues a one-use grant valid for one minute to a signed-in
+DIM operator. The browser exchanges it at the workspace's T3 origin. Later
+clicks reopen that origin and use T3's existing browser session. Choose
+**Pair this browser again** when the T3 session is expired or revoked. Revoke a
+device under T3's **Settings → Sharing & access**. The T3 session has its own
+lifetime and can operate the workspace, including running agents and terminals.

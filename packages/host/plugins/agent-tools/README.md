@@ -418,3 +418,19 @@ exclude passwords. Updating the password restarts only the identified owned
 running server and verifies its authenticated health; setting it before launch
 preserves stopped state. Credentials remain private in the workspace home across
 stop and restart.
+
+## T3 Code
+
+`dim tools t3 WORKSPACE start` installs T3 Code 0.1.10 for Linux x64 or arm64
+and registers it with the workspace service supervisor. The service listens
+on `127.0.0.1:3773` inside the workspace and opens the workspace's working
+directory as a T3 project. Alpine workspaces keep the verified glibc runtime
+under the workspace home for T3 alone. The service and its data survive
+workspace restarts. Use `status` to inspect it and `stop` to unregister it.
+
+For browser access, configure a dedicated root HTTPS route and use **Open T3
+Code** in DIM Web. The selected-host `pair` command can also issue a one-use
+credential for manual pairing. Its response is a secret. To use Oh My Pi in
+T3, add a local ACP command in T3 provider settings with the workspace's
+`~/.local/bin/dim-agent` executable and the arguments `omp` and `acp`. OMP uses
+its workspace configuration, including any scoped DIM LLM router connection.

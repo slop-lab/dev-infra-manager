@@ -11,7 +11,7 @@ import { parseExecutionStatus } from "./execution/parse.ts";
 import { formatTaskReceipt, taskConsoleOperation } from "./taskHost.js";
 import { parseTaskReceipt } from "./execution/taskContract.ts";
 
-const operations = ["tools.status", "tools.setup", "server.start", "server.status", "server.stop", "server.credentials", "server.password", "server.team-metadata", "execution.status", "execution.wait", "task.identity", "task.submit", "task.request"];
+const operations = ["tools.status", "tools.setup", "server.start", "server.status", "server.stop", "server.credentials", "server.password", "server.team-metadata", "t3.start", "t3.status", "t3.stop", "t3.pair", "execution.status", "execution.wait", "task.identity", "task.submit", "task.request"];
 
 /** Capture only bounded machine output; guest stderr and installer logs never become Web responses. */
 async function execute(context: WorkspaceHostPluginContext, workspace: WorkspaceRecord, command: string[], json = true, input?: unknown, timeoutMilliseconds = 175_000) {
@@ -44,8 +44,19 @@ export async function invokeToolsConsole(operation: string, input: unknown, cont
   const workspace = await context.service.show(value.workspace);
   if (workspace.id !== value.workspaceId) throw new UserError("Workspace was replaced; refresh before running tools");
   if (!workspace.initialized || workspace.phase !== "running" || workspace.runtimeStatus !== "running") throw new UserError("Start the workspace before running tools");
-  if (["tools.setup", "server.start", "server.stop", "server.password"].includes(operation)) await deployToolHelpers(workspace, context);
+  if (["tools.setup", "server.start", "server.stop", "server.password", "t3.start"].includes(operation)) await deployToolHelpers(workspace, context);
   const identity = { workspace: workspace.name, workspaceId: workspace.id };
+  if (operation.startsWith("t3.")) {
+    const result = await execute(context, workspace, ["bash", "-c", 'exec bash "$HOME/.local/share/dim-agent-tools/t3-service.bash" "$1"', "dim-t3-server", operation.slice(3)]);
+    if (typeof result !== "object" || result === null || Array.isArray(result)) throw new UserError("Invalid T3 response");
+    const response = result as Record<string, unknown>;
+    if (operation === "t3.pair") {
+      if (typeof response.credential !== "string" || !/^[a-zA-Z0-9_-]{8,256}$/.test(response.credential)) throw new UserError("Invalid T3 pairing credential");
+      return { ...identity, credential: response.credential };
+    }
+    if ((response.state !== "running" && response.state !== "stopped") || response.port !== 3773) throw new UserError("Invalid T3 status");
+    return { ...identity, state: response.state, port: response.port };
+  }
   if (operation.startsWith("execution.")) {
     const { workspace: _name, workspaceId: _id, ...selection } = value;
     return { ...identity, ...await executionOperation(operation, selection, workspace, context) };
