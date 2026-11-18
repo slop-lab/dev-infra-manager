@@ -96,9 +96,9 @@ try {
       step = "send an OMP ACP message through the configured router";
       await projectButton.click();
       await client.getByRole("textbox", { name: /Message/ }).first().click();
-      await client.keyboard.insertText("Reply with the Markdown heading ## DIM T3 Example Verified. No tools.");
+      await client.keyboard.insertText("Reply exactly DIM_T3_BROWSER_OK. No tools.");
       await client.getByRole("button", { name: "Submit message", exact: true }).click();
-      await client.getByRole("heading", { name: "DIM T3 Example Verified", exact: true }).waitFor({ timeout: 90_000 });
+      await client.getByText("DIM_T3_BROWSER_OK", { exact: true }).first().waitFor({ timeout: 90_000 });
     }
     await client.close();
 

@@ -20,7 +20,7 @@ to run it after the selected-host checks.
 The browser signs in to DIM, selects the exact workspace, verifies an anonymous
 client cannot pair through DIM, clicks **Open T3 Code**, and checks that T3
 accepts the grant once and issues a Secure, HttpOnly cookie. Reopening from DIM
-uses the existing T3 session. The optional OMP step sends a Markdown prompt
+uses the existing T3 session. The optional OMP step sends a prompt
 through the workspace provider and checks its rendered result.
 
 ## Selected-host checks
