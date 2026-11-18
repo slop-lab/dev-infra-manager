@@ -128,6 +128,8 @@ dim start dev
 
 The ordinary lifecycle, Git source acquisition, remote host selection and
 streaming exec/forward commands remain shared with container workspaces.
+Guest commands find DIM and tool launchers in `~/.local/bin` after switching
+to the workspace user.
 Recreate stops and restarts the QEMU machine with its existing root disk.
 The root disk includes home, checkout, guest Docker data and the dim-owned private
 0700 `/mnt/dim-tmp` directory used by workspace tools. Missing storage

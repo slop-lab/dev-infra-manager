@@ -150,7 +150,8 @@ export class IncusMachines {
     await this.enforce(record);
     return this.runner.runStreaming("incus", this.args(["exec", this.name(record),
       "--cwd", `/workspace${record.source?.workingDirectory ? `/${record.source.workingDirectory}` : ""}`, "--env", "HOME=/home/dim", "--env", "TMPDIR=/mnt/dim-tmp", "--env", "DIM_WORKSPACE_TMPDIR=/mnt/dim-tmp",
-      "--mode", options.terminal ? "interactive" : "non-interactive", "--", "runuser", "--user", "dim", "--preserve-environment", "--", ...command]), options);
+      "--mode", options.terminal ? "interactive" : "non-interactive", "--", "runuser", "--user", "dim", "--preserve-environment", "--",
+      "/bin/sh", "-c", 'export PATH="/home/dim/.local/bin${PATH:+:$PATH}"; exec "$@"', "dim-vm-exec", ...command]), options);
   }
   private async waitForReadinessProbe(record: VmIdentity, deadline: VmStartupDeadline, probe: "agent" | "Docker"): Promise<void> {
     let lastTransportFailure: ReadinessTransportFailure | undefined;

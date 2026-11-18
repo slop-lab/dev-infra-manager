@@ -41,7 +41,8 @@ describe("workspace-scoped auxiliary VM access", () => {
     expect(await f.access.status(identity)).toMatchObject({ vmId: f.vm.id, vmName: "desktop", running: true });
     await expect(f.access.exec({ ...identity, command: ["printf", "%s", "literal;$(no-shell)"] })).resolves.toBe(0);
     expect(f.runner.calls.at(-1)).toEqual(expect.arrayContaining(["exec", expect.any(String), "--", "runuser", "--user", "dim",
-      "--preserve-environment", "--", "printf", "%s", "literal;$(no-shell)"]));
+      "--preserve-environment", "--", "/bin/sh", "-c", 'export PATH="/home/dim/.local/bin${PATH:+:$PATH}"; exec "$@"',
+      "dim-vm-exec", "printf", "%s", "literal;$(no-shell)"]));
     await expect(f.access.exec({ ...identity, grantId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", command: ["true"] })).rejects.toThrow(/denied/);
   });
 
@@ -157,7 +158,8 @@ describe("workspace-scoped auxiliary VM access", () => {
     await expect(f.access.copy({ ...identity, direction: "push", path: "artifacts/result.bin", recursive: false,
       overwrite: true })).resolves.toBe(0);
     expect(f.runner.calls.at(-1)).toEqual(expect.arrayContaining(["exec", expect.any(String), "--", "runuser", "--user", "dim",
-      "--preserve-environment", "--", "node", "--input-type=commonjs", "-e", expect.stringContaining("DIMCP1"),
+      "--preserve-environment", "--", "/bin/sh", "-c", expect.stringContaining('exec "$@"'), "dim-vm-exec",
+      "node", "--input-type=commonjs", "-e", expect.stringContaining("DIMCP1"),
       "receive", "/home/dim/artifacts/result.bin", "0", "1", "dim-workspace-copy", "helper", expect.any(String), "/home/dim"]));
     await expect(f.access.copy({ ...identity, path: "../escape", direction: "pull", recursive: false,
       overwrite: false })).rejects.toThrow(/path/);
