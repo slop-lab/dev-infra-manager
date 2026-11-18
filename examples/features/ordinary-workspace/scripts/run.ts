@@ -41,5 +41,9 @@ if (args.length === 1 && args[0] === "--help") {
       ...(process.env.DIM_SMOKE_PREFLIGHT_ONLY === "1" ? ["--preflight-only"] : [])], { stdio: "inherit" });
     child.once("error", (error) => { console.error(error.message); process.exitCode = 1; });
     await new Promise<void>((resolve) => child.once("close", (code) => { process.exitCode = code ?? 1; resolve(); }));
+    if (process.exitCode === 0 && args[0] === "--verify-vm" && process.env.DIM_T3_EXAMPLE_PROFILE !== undefined) {
+      const t3 = fileURLToPath(new URL("../../../../tests/web/plugins/agent-tools/t3WorkspaceOpen.e2e.ts", import.meta.url));
+      execFileSync(process.execPath, [t3], { stdio: "inherit" });
+    }
   } finally { if (temporary !== undefined) await rm(temporary, { recursive: true, force: true }); }
 }

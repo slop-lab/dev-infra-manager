@@ -22,6 +22,10 @@ alias incus-vm-practical := examples-vm
 examples:
     cd .. && node scripts/examples/run.ts all verify
 
+# Verify DIM login, workspace selection, and real T3 HTTPS browser pairing.
+t3-workspace:
+    cd .. && node tests/web/plugins/agent-tools/t3WorkspaceOpen.e2e.ts
+
 # Real KVM guest mechanics on the current host. This is not independent-host or human release acceptance.
 native-qemu-guest-mechanics-kvm:
     @[[ "$(uname -m)" == x86_64 ]] || { echo "native-qemu-guest-mechanics-kvm requires x86-64" >&2; exit 2; }

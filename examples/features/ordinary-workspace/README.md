@@ -1,5 +1,30 @@
 # Ordinary local and SSH-selected real-use acceptance
 
+## T3 Code browser verification
+
+Use a disposable installed host and DIM Web with the agent-tools host and Web
+plugins enabled. Start T3 Code in the selected workspace and create a root HTTPS
+route for port `3773` using the External URLs example. Use its permalink when
+one is issued. The browser must trust the ingress certificate. Configure OMP
+and its scoped LLM router in the workspace before enabling the optional OMP step.
+
+Set `DIM_CHROMIUM` to the reviewed Chromium executable and
+`DIM_T3_EXAMPLE_PROFILE` to an absolute, mode-0600 JSON file. The file has `web`,
+`username`, `password`, and `workspaces` fields. Each workspace has `host`,
+`name`, `t3Origin`, and `project` fields. Set `omp` to `true` for a workspace
+whose T3 default provider is the local OMP ACP command. Each listed workspace
+must have its own T3 HTTPS origin. Run `just verify t3-workspace` for just this
+browser journey, or set the same profile with the ordinary `verify-vm` recipe
+to run it after the selected-host checks.
+
+The browser signs in to DIM, selects the exact workspace, verifies an anonymous
+client cannot pair through DIM, clicks **Open T3 Code**, and checks that T3
+accepts the grant once and issues a Secure, HttpOnly cookie. Reopening from DIM
+uses the existing T3 session. The optional OMP step sends a Markdown prompt
+through the workspace provider and checks its rendered result.
+
+## Selected-host checks
+
 This example extends DIM's existing selected-host scenario. It requires no
 managed Project or Native Git/CI policy for ordinary repository sources.
 
