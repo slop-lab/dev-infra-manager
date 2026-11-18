@@ -11,6 +11,8 @@ is implied by these source changes.
   Explicit setup verifies the pinned Bun release, honors the workspace npm
   mirror, and configures pinned Context Mode, Caveman and Serena integrations.
   Incus VM workspaces resolve user-installed launchers in non-login commands.
+  The OMP launcher finds workspace language projects from source subdirectories,
+  and Serena activates the current project automatically.
 
 - Recover retained workspace LLM connections through their explicitly selected
   original gateway without issuing new principals or rotating scoped credentials;

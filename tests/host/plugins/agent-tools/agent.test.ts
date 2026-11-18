@@ -10,6 +10,37 @@ const execute = promisify(execFile);
 const agent = fileURLToPath(new URL("../../../../packages/host/plugins/agent-tools/src/assets/agent.mjs", import.meta.url));
 const guest = fileURLToPath(new URL("../../../../packages/host/core/src/workspace-image-assets/dim-workspace.mjs", import.meta.url));
 
+it("launches OMP in the nearest language project inside the current checkout", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "dim-omp-launch-"));
+  try {
+    const home = path.join(root, "home");
+    const bin = path.join(home, ".local/bin");
+    const state = path.join(home, ".local/state/dim-tools");
+    const executable = path.join(bin, "omp");
+    const checkout = path.join(root, "checkout");
+    const project = path.join(checkout, "packages/app");
+    const nested = path.join(project, "src/nested");
+    const outside = path.join(root, "outside");
+    for (const directory of [bin, state, nested, outside]) await mkdir(directory, { recursive: true });
+    await writeFile(path.join(checkout, ".git"), "gitdir: /example/worktree\n");
+    await writeFile(path.join(checkout, "package.json"), "{}");
+    await writeFile(path.join(project, "tsconfig.json"), "{}");
+    await copyFile(new URL("./fixtures/tool.mjs", import.meta.url), executable);
+    await chmod(executable, 0o700);
+    await writeFile(path.join(state, "omp.json"), JSON.stringify({ tool: "omp", version: "18.22.0", executable }), { mode: 0o600 });
+    const env = { ...process.env, HOME: home };
+    const run = async (cwd: string, ...args: string[]) => JSON.parse(
+      (await execute(process.execPath, [agent, "omp", ...args], { cwd, env })).stdout,
+    );
+
+    expect(await run(nested)).toMatchObject({ cwd: project, argv: [] });
+    expect(await run(nested, "launch")).toMatchObject({ cwd: project, argv: ["launch"] });
+    expect(await run(nested, "--cwd", ".")).toMatchObject({ cwd: nested, argv: ["--cwd", "."] });
+    expect(await run(nested, "acp")).toMatchObject({ cwd: nested, argv: ["acp"] });
+    expect(await run(outside)).toMatchObject({ cwd: outside, argv: [] });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 it("tool launch forwards exact arguments and registers tool-owned noninteractive continuation", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-agent-tools-")), home = path.join(root, "home"), bin = path.join(home, ".local/bin");
   try {

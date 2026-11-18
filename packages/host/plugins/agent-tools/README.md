@@ -35,6 +35,12 @@ Setup registers Serena 2.1.0 in the active OMP profile's native `mcp.json`
 and preserves other MCP servers. The default file is
 `~/.omp/agent/mcp.json`. If you select a named OMP profile, run setup with
 the same `OMP_PROFILE` to register Serena for that profile.
+Serena discovers its project from the session directory and its ancestors.
+An OMP launch without extra arguments uses the nearest language project root
+within the Git checkout, or the checkout root. This lets OMP discover
+project-local language servers when launched from a source subdirectory.
+Use `omp --cwd /path/to/project` through the DIM launcher to select the
+root explicitly when supplying additional OMP flags or prompts.
 On Alpine, Serena's pinned psutil dependency builds against the guest's
 Python headers. Setup installs temporary guest build packages through
 Alpine's package manager and removes them after the build.

@@ -38,7 +38,7 @@ const config = JSON.parse(fs.readFileSync(home + "/.omp/agent/mcp.json", "utf8")
 assert.deepEqual(config.mcpServers.existing, { command: "existing", enabled: false })
 assert.deepEqual(config.mcpServers.serena, {
   type: "stdio", command: home + "/.local/bin/serena",
-  args: ["start-mcp-server", "--context", "ide-assistant"], enabled: true,
+  args: ["start-mcp-server", "--context", "ide-assistant", "--project-from-cwd"], enabled: true,
 })
 fs.accessSync(config.mcpServers.serena.command, fs.constants.X_OK)
 assert.equal(fs.statSync(home + "/.local/state/dim-tools/omp.json").mode & 0o777, 0o600)

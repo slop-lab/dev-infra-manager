@@ -400,7 +400,7 @@ if (!object(config) || (config.mcpServers !== undefined && !object(config.mcpSer
 const serena = {
   type: "stdio",
   command,
-  args: ["start-mcp-server", "--context", "ide-assistant"],
+  args: ["start-mcp-server", "--context", "ide-assistant", "--project-from-cwd"],
   enabled: true,
 };
 config.mcpServers = { ...config.mcpServers, serena };

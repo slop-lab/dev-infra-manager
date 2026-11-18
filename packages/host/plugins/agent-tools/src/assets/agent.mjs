@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
 import { execFileSync, spawn } from "node:child_process";
-import { constants } from "node:fs";
+import { constants, existsSync } from "node:fs";
 import { mkdir, open, realpath, stat, lstat, chmod } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -86,7 +86,10 @@ async function main() {
   const command = !resume ? args : tool === "codex" ? ["exec", "resume", "--last", ...args, continuation]
     : tool === "omp" ? ["--continue", ...args, continuation]
     : ["run", "--continue", ...args, continuation];
-  const child = spawn(executable, command, { stdio: "inherit", env: process.env });
+  const cwd = tool === "omp" && (args.length === 0 || (args.length === 1 && args[0] === "launch"))
+    ? ompLaunchDirectory(process.cwd())
+    : undefined;
+  const child = spawn(executable, command, { stdio: "inherit", env: process.env, cwd });
   const stop = () => child.kill("SIGTERM");
   process.once("SIGTERM", stop); process.once("SIGINT", stop);
   try {
@@ -94,6 +97,24 @@ async function main() {
       child.once("error", reject); child.once("close", (code, signal) => resolve(code ?? (signal === "SIGINT" ? 130 : 143)));
     });
   } finally { process.off("SIGTERM", stop); process.off("SIGINT", stop); }
+}
+
+/** @param {string} cwd */
+function ompLaunchDirectory(cwd) {
+  // OMP 18.22.0 resolves LSP root markers and local server binaries from its
+  // launch directory. Keep the nearest marked package within the same checkout.
+  const markers = [
+    "tsconfig.json", "jsconfig.json", "package.json", "pyproject.toml", "pyrightconfig.json",
+    "requirements.txt", "setup.py", "Cargo.toml", "go.mod", "go.work", "pom.xml",
+    "build.gradle", "build.gradle.kts", "CMakeLists.txt", "compile_commands.json",
+    "Makefile", "Gemfile", "composer.json", ".omp/lsp.json",
+  ];
+  let project;
+  for (let directory = cwd; ; directory = path.dirname(directory)) {
+    if (project === undefined && markers.some(marker => existsSync(path.join(directory, marker)))) project = directory;
+    if (existsSync(path.join(directory, ".git"))) return project ?? directory;
+    if (directory === path.dirname(directory)) return cwd;
+  }
 }
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
