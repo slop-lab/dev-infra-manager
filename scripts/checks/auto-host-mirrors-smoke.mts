@@ -12,6 +12,7 @@ import { WorkspaceService } from "../../packages/host/core/src/workspace/service
 import { ContainerWorkspaceRuntime } from "../../packages/host/core/src/workspace/runtime.js";
 import { acquireWorkspaceSource } from "../../packages/host/core/src/workspace/source.js";
 import type { WorkspaceHostPluginContext } from "../../packages/host/core/src/workspace/hostPlugin.js";
+import { bindNameServiceForOwner } from "../../packages/host/core/src/workspace.js";
 const image = process.argv[2]; if (!image) throw new Error("usage: tsx auto-host-mirrors-smoke.mts WORKSPACE_IMAGE");
 const artifact: typeof import("../../packages/host/plugins/mirrors/src/attachment.js") = await import(new URL("../../packages/host/plugins/mirrors/dist/attachment.js", import.meta.url).href);
 const npmAdapter: typeof import("../../packages/host/plugins/cache-server/src/services/npm.js") = await import(new URL("../../packages/host/plugins/cache-server/dist/services/npm.js", import.meta.url).href);
@@ -52,7 +53,9 @@ async function startPackageCache(name: string, definition: import("../../package
 }
 async function attach(endpoints?: Record<string, string>) {
   assert(workspace);
-  const context: WorkspaceHostPluginContext = { runner, cleanupRunner: runner, stateRoot: root, store, service, signal: AbortSignal.timeout(60_000), hostGateway: (record) => runtime.hostGateway(record) };
+  const signal = AbortSignal.timeout(60_000);
+  const context: WorkspaceHostPluginContext = { runner, cleanupRunner: runner, stateRoot: root, store, service, signal, hostGateway: (record) => runtime.hostGateway(record),
+    nameService: bindNameServiceForOwner("host-mirrors", { stateRoot: root, signal, service }) };
   await artifact.attachWorkspaceMirrors(workspace, context, { endpoints: endpoints ?? {
     docker: `http://${await address(registry)}:5000/`, apt: `http://${await address(apt)}:3142/`,
     npm: `http://${await address(npm)}:4873/`, pypi: `http://${await address(pypi)}:3141/root/pypi/+simple/`
@@ -81,6 +84,24 @@ try {
   await startPackageCache(pypi, pypiAdapter.pypiService.definition(pin("pypi")), volumes[3]!);
   workspace = await service.create({ name: prefix, source: { url: source }, image, resources: { cpuCount: "2", memory: "3g", pidsLimit: "2048" } });
   await attach();
+  {
+    // opencode-ai's packument is ~20-32 MiB: the exact size that 502'd under the old 16 MiB relay
+    // rewrite buffer. Fetching it here (before any cache Internet access is removed) proves the
+    // migrated npm name-service path - stable name -> ingress -> relay (publicHost, no rewrite) ->
+    // verdaccio - streams large metadata and artifacts end to end.
+    const npmRegistryLine = (await guest(["sh", "-ceu", "sed -n 's/^registry=//p' /etc/npmrc"])).stdout.trim();
+    assert.equal(npmRegistryLine, "http://npm.cache.dim.internal:8053/", "attach() must point the guest's /etc/npmrc at the migrated npm name-service endpoint");
+    const view = await guest(["npm", "view", "opencode-ai@1.18.31", "dist.tarball", "--registry", "http://npm.cache.dim.internal:8053/"]);
+    const tarballUrl = new URL(view.stdout.trim());
+    assert.equal(tarballUrl.host, "npm.cache.dim.internal:8053", `opencode-ai tarball host must be the stable name-service endpoint (no rewrite), got '${tarballUrl.host}'`);
+    const packDir = "/tmp/opencode-ai-pack";
+    await guest(["sh", "-ceu", `rm -rf ${packDir}; mkdir -p ${packDir}`]);
+    await guest(["sh", "-ceu", `cd ${packDir} && npm pack opencode-ai@1.18.31 --registry http://npm.cache.dim.internal:8053/`]);
+    const packed = (await guest(["sh", "-ceu", `ls ${packDir}`])).stdout.trim();
+    assert.match(packed, /^opencode-ai-1\.18\.31\.tgz$/, `npm pack must produce the opencode-ai tarball, got listing '${packed}'`);
+    await guest(["sh", "-ceu", `tar --list --gzip --file ${packDir}/${packed} >/dev/null`]);
+    console.log("opencode-ai large packument + tarball install through migrated npm name-service: PASS");
+  }
   const daemon = JSON.parse((await guest(["docker", "info", "--format", "{{json .RegistryConfig}}"])).stdout) as { Mirrors: string[] };
   assert.equal(daemon.Mirrors.length, 1);
   for (const [name, base] of [["debian", "debian:bookworm-slim"], ["ubuntu", "ubuntu:24.04"]] as const) {

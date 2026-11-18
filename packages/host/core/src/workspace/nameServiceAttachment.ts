@@ -31,8 +31,13 @@ async function readPersistedTable(stateRoot: string, workspace: WorkspaceRecord)
   catch (error) { if (hasCode(error, "ENOENT")) return {}; throw error; }
 }
 
-/** Reads this module's own compiled sibling as text; shipped to the guest verbatim, never re-transpiled. */
-async function moduleSource(relative: string): Promise<string> { return readFile(new URL(relative, import.meta.url), "utf8"); }
+// Guest payloads must be the compiled, dependency-free JS siblings of this module, never raw source.
+// The published package is flattened (siblings sit beside this file), and so is the monorepo dist
+// tree; only under tsx does this module run from `src/*.ts`, whose compiled siblings live in the
+// parallel `dist/` tree, so anchor off this module's own compiled URL in that one case.
+const compiledSelf = import.meta.url.endsWith(".ts") ? import.meta.url.replace("/src/", "/dist/").replace(/\.ts$/, ".js") : import.meta.url;
+/** Reads a compiled sibling as text; shipped to the guest verbatim, never re-transpiled. */
+async function moduleSource(relative: string): Promise<string> { return readFile(new URL(relative, compiledSelf), "utf8"); }
 
 async function deliverGuestFiles(workspace: WorkspaceRecord, context: WorkspaceNameServiceContext, table: WorkspaceNameTable): Promise<void> {
   const [errorsSource, registrationSource, tableSource, resolverSource, ingressSource, mainSource] = await Promise.all([
